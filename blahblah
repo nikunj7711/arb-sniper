@@ -1,0 +1,204 @@
+import requests
+import time
+from datetime import datetime, timezone, timedelta
+
+# ==========================================
+# ⚙️ CONFIGURATION
+# ==========================================
+API_KEYS = [
+    'c5c52b9e809325a878f4bd924039e127',
+    '0c6838f456658cb5a1c7883bccdee8a2',
+    '2c494c274c8fe8d3e81b780701f6f3b0'
+]
+
+NTFY_CHANNEL = 'nikunj_arb_alerts_2026' 
+TOTAL_BANKROLL = 10000  
+MY_BOOKIES = 'pinnacle,betfair_ex_eu,stake,onexbet,marathonbet,dafabet'
+
+TARGET_SPORTS = [
+    'soccer_epl', 'soccer_uefa_champs_league', 'soccer_italy_serie_a', 
+    'soccer_spain_la_liga', 'soccer_germany_bundesliga',
+    'basketball_nba', 'basketball_euroleague', 
+    'icehockey_nhl', 'tennis_atp', 'tennis_wta', 'mma_mixed_martial_arts'
+]
+
+current_key_index = 0
+
+def get_active_api_key():
+    return API_KEYS[current_key_index]
+
+def rotate_api_key():
+    global current_key_index
+    current_key_index += 1
+    if current_key_index >= len(API_KEYS):
+        print("❌ CRITICAL ERROR: All API keys have exhausted their credits!")
+        return False
+    print(f"🔄 Quota reached! Automatically switched to API Key #{current_key_index + 1}")
+    return True
+
+def send_phone_alert(message, profit, match_name):
+    """Sends a highly detailed push notification directly to your phone using ntfy.sh"""
+    try:
+        payload = {
+            "topic": NTFY_CHANNEL,
+            "message": message,
+            "title": f"🚨 {profit:.2f}% | {match_name}",
+            "tags": ["moneybag", "chart_with_upwards_trend"],
+            "priority": 5 
+        }
+        requests.post("https://ntfy.sh/", json=payload)
+    except Exception as e:
+        print(f"Failed to send phone alert: {e}")
+
+def format_time_ist(iso_string):
+    try:
+        dt_utc = datetime.strptime(iso_string, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        dt_ist = dt_utc.astimezone(timezone(timedelta(hours=5, minutes=30)))
+        return dt_ist.strftime("%d %b %Y, %I:%M %p")
+    except:
+        return "Unknown Time"
+
+def display_bookie_name(api_key):
+    mapping = {
+        'onexbet': '1xBet / Melbet',
+        'pinnacle': 'Pinnacle (via PS3838)',
+        'betfair_ex_eu': 'Betfair Exchange (via Broker)',
+        'stake': 'Stake.com',
+        'dafabet': 'Dafabet',
+        'marathonbet': 'Marathonbet'
+    }
+    return mapping.get(api_key, api_key.title())
+
+def extract_derivative_odds(bookmakers_list, target_bookies_list):
+    totals_data, spreads_data = {}, {}
+    for bookie in bookmakers_list:
+        b_name = bookie['key']
+        if b_name not in target_bookies_list: continue
+
+        for market in bookie.get('markets', []):
+            if market['key'] == 'totals':
+                for outcome in market['outcomes']:
+                    point = str(outcome.get('point', '0'))
+                    name = outcome['name'] 
+                    price = outcome['price']
+                    if b_name == 'betfair_ex_eu': price = 1 + (price - 1) * 0.97
+                    if point not in totals_data: totals_data[point] = {}
+                    if name not in totals_data[point] or price > totals_data[point][name]['price']:
+                        totals_data[point][name] = {'price': price, 'bookie': b_name}
+
+            elif market['key'] == 'spreads':
+                for outcome in market['outcomes']:
+                    point = str(outcome.get('point', '0'))
+                    name = outcome['name'] 
+                    price = outcome['price']
+                    if b_name == 'betfair_ex_eu': price = 1 + (price - 1) * 0.97
+                    if point not in spreads_data: spreads_data[point] = {}
+                    if name not in spreads_data[point] or price > spreads_data[point][name]['price']:
+                        spreads_data[point][name] = {'price': price, 'bookie': b_name}
+    return totals_data, spreads_data
+
+def evaluate_line_arb(grouped_data, match_name, match_time, sport, market_type):
+    found_arbs = []
+    for point, outcomes in grouped_data.items():
+        if len(outcomes) == 2:
+            keys = list(outcomes.keys())
+            side_1, side_2 = outcomes[keys[0]], outcomes[keys[1]]
+            margin = (1 / side_1['price']) + (1 / side_2['price'])
+            
+            if margin < 1.0:
+                profit = (1 - margin) * 100
+                found_arbs.append({
+                    'profit': profit, 'margin': margin, 'match_name': match_name,
+                    'match_time': match_time, 'sport': sport, 'market_type': market_type,
+                    'point': point, 'side_1_name': keys[0], 'side_1_data': side_1,
+                    'side_2_name': keys[1], 'side_2_data': side_2,
+                    'stake_1': (TOTAL_BANKROLL / margin) / side_1['price'],
+                    'stake_2': (TOTAL_BANKROLL / margin) / side_2['price'],
+                    'net_profit': (TOTAL_BANKROLL / margin) - TOTAL_BANKROLL
+                })
+    return found_arbs
+
+def fetch_odds_with_retry(url, params):
+    while True:
+        params['apiKey'] = get_active_api_key()
+        res = requests.get(url, params=params)
+        if res.status_code == 401:
+            if rotate_api_key(): continue 
+            else: return None 
+        elif res.status_code == 429:
+            error_msg = res.json().get('message', '').lower()
+            if 'requests remaining' in error_msg or 'quota' in error_msg:
+                if rotate_api_key(): continue
+                else: return None
+            else:
+                time.sleep(2)
+                continue
+        elif res.status_code == 200:
+            return res.json()
+        else:
+            return None 
+
+def run_sorted_scanner():
+    my_bookies_list = MY_BOOKIES.split(',')
+    print(f"\n📡 [{datetime.now().strftime('%H:%M:%S')}] Sweeping Global Markets...")
+    all_scan_arbs = []
+
+    for sport in TARGET_SPORTS:
+        url = f'https://api.the-odds-api.com/v4/sports/{sport}/odds'
+        params = {
+            'regions': 'eu,us,uk', 
+            'bookmakers': MY_BOOKIES,
+            'markets': 'totals,spreads',
+            'oddsFormat': 'decimal'
+        }
+        
+        events = fetch_odds_with_retry(url, params)
+        if not events: continue 
+            
+        for event in events:
+            match_name = f"{event['home_team']} vs {event['away_team']}"
+            match_time = format_time_ist(event['commence_time'])
+            
+            totals_data, spreads_data = extract_derivative_odds(event.get('bookmakers', []), my_bookies_list)
+            all_scan_arbs.extend(evaluate_line_arb(totals_data, match_name, match_time, sport, "TOTALS"))
+            all_scan_arbs.extend(evaluate_line_arb(spreads_data, match_name, match_time, sport, "SPREADS"))
+            
+        time.sleep(1.5)
+            
+    if not all_scan_arbs:
+        print("✅ Sweep complete. No arbs found.")
+    else:
+        all_scan_arbs.sort(key=lambda x: x['profit'], reverse=True)
+        print(f"\n🏆 FOUND {len(all_scan_arbs)} OPPORTUNITIES:")
+        print("=" * 65)
+        
+        for idx, arb in enumerate(all_scan_arbs, 1):
+            b1 = display_bookie_name(arb['side_1_data']['bookie'])
+            b2 = display_bookie_name(arb['side_2_data']['bookie'])
+            
+            print(f"[{idx}] 🚨 {arb['profit']:.2f}% ARB: {arb['match_name']}")
+            print(f"    👉 Bet ₹{arb['stake_1']:.0f} on {arb['side_1_name'].upper()} @ {arb['side_1_data']['price']:.2f} -> [{b1}]")
+            print(f"    👉 Bet ₹{arb['stake_2']:.0f} on {arb['side_2_name'].upper()} @ {arb['side_2_data']['price']:.2f} -> [{b2}]")
+            print("-" * 65)
+            
+            if arb['profit'] >= 1.0: 
+                clean_sport_name = arb['sport'].replace('_', ' ').title()
+                msg = (
+                    f"🏆 League: {clean_sport_name}\n"
+                    f"📅 Time: {arb['match_time']} (IST)\n"
+                    f"📈 Market: {arb['market_type']} (Line: {arb['point']})\n\n"
+                    f"💰 Investment: ₹{TOTAL_BANKROLL:,}\n"
+                    f"✨ Net Profit: ₹{arb['net_profit']:.2f}\n\n"
+                    f"🔵 BET 1: ₹{arb['stake_1']:.0f}\n"
+                    f"Selection: {arb['side_1_name'].upper()} @ {arb['side_1_data']['price']:.2f}\n"
+                    f"Bookie: {b1}\n\n"
+                    f"🔴 BET 2: ₹{arb['stake_2']:.0f}\n"
+                    f"Selection: {arb['side_2_name'].upper()} @ {arb['side_2_data']['price']:.2f}\n"
+                    f"Bookie: {b2}"
+                )
+                send_phone_alert(msg, arb['profit'], arb['match_name'])
+
+if __name__ == "__main__":
+    print("🚀 GitHub Actions Cloud Engine Started...")
+    run_sorted_scanner()
+    print("🏁 Scan complete. Server shutting down until next scheduled run.")
