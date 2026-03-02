@@ -23,9 +23,6 @@ jobs:
         run: pip install requests
         
       - name: Run Sniper & Generate Dashboard
-        run: python arb_sniper.py
-
-      - name: Run Sniper & Generate Dashboard
         env:
           ODDS_API_KEYS: ${{ secrets.ODDS_API_KEYS }}
         run: python arb_sniper.py
