@@ -2,7 +2,7 @@ import requests
 import time
 from datetime import datetime, timezone, timedelta
 
-# ==========================================
+# =========================================
 # ⚙️ CONFIGURATION
 # ==========================================
 API_KEYS = [
