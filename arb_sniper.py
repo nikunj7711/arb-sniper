@@ -1,22 +1,17 @@
 import requests
 import time
+import os
 from datetime import datetime, timezone, timedelta
 
-# =========================================
+# ==========================================
 # ⚙️ CONFIGURATION
 # ==========================================
-API_KEYS = [
-    '4ef677887a0eafc8e8d8439e56f38fbe',
-    '41308dc8cb155421b36bf4e58a0fe50b',
-    'dd7355f3917f77627fa683748e94db34',
-    '5df6c4dcbe6da9ca2cdb1eeff8db6bdf',
-    'c5c52b9e809325a878f4bd924039e127',
-    '0c6838f456658cb5a1c7883bccdee8a2',
-    '2c494c274c8fe8d3e81b780701f6f3b0'
-]
+# Securely pulling keys from GitHub Secrets Vault
+api_keys_env = os.getenv('ODDS_API_KEYS', '')
+API_KEYS = api_keys_env.split(',') if api_keys_env else []
 
 NTFY_CHANNEL = 'nikunj_arb_alerts_2026' 
-TOTAL_BANKROLL = 1500  
+TOTAL_BANKROLL = 1500 
 
 MIN_EV_THRESHOLD = 1.5  
 MIN_ARB_THRESHOLD = 1.0
