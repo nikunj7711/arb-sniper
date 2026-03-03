@@ -175,40 +175,67 @@ def generate_web_dashboard(evs, arbs, current_time):
         <title>Arb Sniper Live</title>
         <style>
             body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0d1117; color: #c9d1d9; margin: 0; padding: 20px; }}
-            h1 {{ color: #58a6ff; text-align: center; font-size: 24px; }}
-            h2 {{ color: #ffffff; border-bottom: 1px solid #30363d; padding-bottom: 5px; margin-top: 30px; }}
+            h1 {{ color: #58a6ff; text-align: center; font-size: 26px; margin-bottom: 5px; }}
+            h2 {{ color: #ffffff; border-bottom: 1px solid #30363d; padding-bottom: 8px; margin-top: 35px; font-size: 20px; }}
             .time {{ text-align: center; color: #8b949e; font-size: 14px; margin-bottom: 30px; }}
-            .card {{ background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }}
-            .card.ev {{ border-left: 5px solid #238636; }}
-            .card.arb {{ border-left: 5px solid #da3633; }}
-            .edge {{ font-size: 18px; font-weight: bold; margin-bottom: 10px; }}
+            
+            .card {{ background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 18px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }}
+            .card.ev {{ border-left: 6px solid #238636; }}
+            .card.arb {{ border-left: 6px solid #da3633; }}
+            
+            .header-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }}
+            .edge {{ font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 8px; }}
             .ev-edge {{ color: #3fb950; }}
             .arb-edge {{ color: #ff7b72; }}
-            .match {{ font-size: 16px; font-weight: 600; color: #ffffff; margin-bottom: 5px; }}
-            .details {{ font-size: 14px; color: #8b949e; line-height: 1.5; }}
-            .highlight {{ color: #ffffff; font-weight: bold; }}
-            .telemetry {{ text-align: center; margin-top: 40px; font-size: 12px; color: #484f58; }}
+            .sport-badge {{ background: #21262d; padding: 4px 10px; border-radius: 12px; font-size: 12px; color: #8b949e; border: 1px solid #30363d; }}
+            
+            .match {{ font-size: 18px; font-weight: 700; color: #ffffff; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed #30363d; }}
+            
+            .action-box {{ background: #0d1117; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #21262d; }}
+            .action-line {{ font-size: 15px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }}
+            .action-line:last-child {{ margin-bottom: 0; }}
+            
+            .highlight {{ color: #ffffff; font-weight: bold; font-size: 16px; }}
+            .highlight-stake {{ color: #e3b341; font-weight: bold; font-size: 16px; }}
+            
+            .math-box {{ font-size: 13px; color: #8b949e; display: flex; justify-content: space-between; align-items: center; }}
+            .date-stamp {{ color: #484f58; font-size: 12px; }}
+            
+            .telemetry {{ text-align: center; margin-top: 50px; padding-top: 20px; border-top: 1px solid #30363d; font-size: 12px; color: #484f58; line-height: 1.6; }}
         </style>
     </head>
     <body>
-        <h1>📡 Arb Sniper Master Dashboard</h1>
-        <div class="time">Last Scan: {current_time} (IST)</div>
+        <h1>📡 Arb Sniper Terminal</h1>
+        <div class="time">Last Sweep: {current_time} (IST)</div>
     """
 
     if not evs and not arbs:
-        html += '<div class="card" style="text-align: center;">✅ The global sports market is perfectly balanced right now. No massive edges found.</div>'
+        html += '<div class="card" style="text-align: center; color: #8b949e;">✅ Market is perfectly balanced. No massive edges found.</div>'
 
     if evs:
         html += f"<h2>💎 Expected Value ({len(evs)})</h2>"
         for ev in evs:
+            clean_sport = ev['sport'].replace('_', ' ').title()
             html += f"""
             <div class="card ev">
-                <div class="edge ev-edge">📈 {ev['pct']:.2f}% EV Edge</div>
+                <div class="header-row">
+                    <div class="edge ev-edge">📈 {ev['pct']:.2f}% EV</div>
+                    <div class="sport-badge">🏆 {clean_sport}</div>
+                </div>
                 <div class="match">{ev['match']}</div>
-                <div class="details">
-                    👉 Bet: <span class="highlight">{ev['selection'].upper()} {ev['line'].split('_')[1]} @ {ev['odds']:.2f}</span> on {display_bookie(ev['bookie'])}<br>
-                    🧠 True Odds: {ev['true']:.2f} | 💰 Safe Stake: <span class="highlight">₹{ev['stake']:.0f}</span><br>
-                    📅 {ev['time']}
+                
+                <div class="action-box">
+                    <div class="action-line">
+                        💰 <span>Bet Exactly: <span class="highlight-stake">₹{ev['stake']:.0f}</span></span>
+                    </div>
+                    <div class="action-line">
+                        👉 <span><span class="highlight">{ev['selection'].upper()} {ev['line'].split('_')[1]} @ {ev['odds']:.2f}</span> on {display_bookie(ev['bookie'])}</span>
+                    </div>
+                </div>
+                
+                <div class="math-box">
+                    <span>🧠 True Odds: {ev['true']:.2f}</span>
+                    <span class="date-stamp">📅 {ev['time']}</span>
                 </div>
             </div>
             """
@@ -216,15 +243,27 @@ def generate_web_dashboard(evs, arbs, current_time):
     if arbs:
         html += f"<h2>🏆 Arbitrage ({len(arbs)})</h2>"
         for arb in arbs:
+            clean_sport = arb['sport'].replace('_', ' ').title()
             html += f"""
             <div class="card arb">
-                <div class="edge arb-edge">🚨 {arb['pct']:.2f}% ARB Edge</div>
-                <div class="match">{arb['match']}</div>
-                <div class="details">
-                    🔵 Bet <span class="highlight">₹{arb['stk1']:.0f}</span> on {arb['s1'].upper()} @ {arb['s1_data']['price']:.2f} [{display_bookie(arb['s1_data']['bookie'])}]<br>
-                    🔴 Bet <span class="highlight">₹{arb['stk2']:.0f}</span> on {arb['s2'].upper()} @ {arb['s2_data']['price']:.2f} [{display_bookie(arb['s2_data']['bookie'])}]<br>
-                    ✨ Net Profit: <span class="highlight">₹{arb['profit']:.0f}</span><br>
-                    📅 {arb['time']}
+                <div class="header-row">
+                    <div class="edge arb-edge">🚨 {arb['pct']:.2f}% ARB</div>
+                    <div class="sport-badge">🏆 {clean_sport}</div>
+                </div>
+                <div class="match">{arb['match']} <span style="color:#8b949e; font-size:14px; font-weight:normal;">({arb['line']})</span></div>
+                
+                <div class="action-box">
+                    <div class="action-line">
+                        🔵 <span>Bet <span class="highlight-stake">₹{arb['stk1']:.0f}</span> on <span class="highlight">{arb['s1'].upper()} @ {arb['s1_data']['price']:.2f}</span> [{display_bookie(arb['s1_data']['bookie'])}]</span>
+                    </div>
+                    <div class="action-line">
+                        🔴 <span>Bet <span class="highlight-stake">₹{arb['stk2']:.0f}</span> on <span class="highlight">{arb['s2'].upper()} @ {arb['s2_data']['price']:.2f}</span> [{display_bookie(arb['s2_data']['bookie'])}]</span>
+                    </div>
+                </div>
+                
+                <div class="math-box">
+                    <span style="color: #3fb950; font-weight: bold; font-size: 15px;">✨ Net Profit: ₹{arb['profit']:.0f}</span>
+                    <span class="date-stamp">📅 {arb['time']}</span>
                 </div>
             </div>
             """
@@ -232,7 +271,8 @@ def generate_web_dashboard(evs, arbs, current_time):
     credits_burned = int(requests_used_total) - scan_starting_used if scan_starting_used is not None and str(requests_used_total).isdigit() else "Unknown"
     html += f"""
         <div class="telemetry">
-            Key #{current_key_index + 1} | Monthly Quota Remaining: {requests_remaining}/500 | Scan Cost: ~{credits_burned} credits
+            <strong>SYSTEM TELEMETRY</strong><br>
+            Active Key: #{current_key_index + 1} | Monthly Quota: {requests_remaining}/500 | Scan Cost: ~{credits_burned} credits
         </div>
     </body>
     </html>
