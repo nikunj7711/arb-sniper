@@ -34,3 +34,10 @@ jobs:
           git add index.html
           git commit -m "Update live dashboard" || exit 0
           git push
+      - name: Publish Dashboard & Save State
+        run: |
+          git config --global user.name "Arb Sniper Bot"
+          git config --global user.email "bot@arbsniper.com"
+          git add index.html *.json
+          git commit -m "Update dashboard and save neural memory" || exit 0
+          git push
