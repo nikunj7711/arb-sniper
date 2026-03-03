@@ -7,111 +7,262 @@
         <title>Arb Sniper Live</title>
         <style>
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0d1117; color: #c9d1d9; margin: 0; padding: 20px; }
-            h1 { color: #58a6ff; text-align: center; font-size: 24px; }
-            h2 { color: #ffffff; border-bottom: 1px solid #30363d; padding-bottom: 5px; margin-top: 30px; }
+            h1 { color: #58a6ff; text-align: center; font-size: 26px; margin-bottom: 5px; }
+            h2 { color: #ffffff; border-bottom: 1px solid #30363d; padding-bottom: 8px; margin-top: 35px; font-size: 20px; }
             .time { text-align: center; color: #8b949e; font-size: 14px; margin-bottom: 30px; }
-            .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-            .card.ev { border-left: 5px solid #238636; }
-            .card.arb { border-left: 5px solid #da3633; }
-            .edge { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+            
+            .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 18px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+            .card.ev { border-left: 6px solid #238636; }
+            .card.arb { border-left: 6px solid #da3633; }
+            
+            .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+            .edge { font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
             .ev-edge { color: #3fb950; }
             .arb-edge { color: #ff7b72; }
-            .match { font-size: 16px; font-weight: 600; color: #ffffff; margin-bottom: 5px; }
-            .details { font-size: 14px; color: #8b949e; line-height: 1.5; }
-            .highlight { color: #ffffff; font-weight: bold; }
-            .telemetry { text-align: center; margin-top: 40px; font-size: 12px; color: #484f58; }
+            .sport-badge { background: #21262d; padding: 4px 10px; border-radius: 12px; font-size: 12px; color: #8b949e; border: 1px solid #30363d; }
+            
+            .match { font-size: 18px; font-weight: 700; color: #ffffff; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed #30363d; }
+            
+            .action-box { background: #0d1117; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #21262d; }
+            .action-line { font-size: 15px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+            .action-line:last-child { margin-bottom: 0; }
+            
+            .highlight { color: #ffffff; font-weight: bold; font-size: 16px; }
+            .highlight-stake { color: #e3b341; font-weight: bold; font-size: 16px; }
+            
+            .math-box { font-size: 13px; color: #8b949e; display: flex; justify-content: space-between; align-items: center; }
+            .date-stamp { color: #484f58; font-size: 12px; }
+            
+            .telemetry { text-align: center; margin-top: 50px; padding-top: 20px; border-top: 1px solid #30363d; font-size: 12px; color: #484f58; line-height: 1.6; }
         </style>
     </head>
     <body>
-        <h1>📡 Arb Sniper Master Dashboard</h1>
-        <div class="time">Last Scan: 08:45:35 (IST)</div>
-    <h2>💎 Expected Value (4)</h2>
+        <h1>📡 Arb Sniper Terminal</h1>
+        <div class="time">Last Sweep: 16:08:17 (IST)</div>
+    <h2>💎 Expected Value (5)</h2>
             <div class="card ev">
-                <div class="edge ev-edge">📈 10.67% EV Edge</div>
-                <div class="match">Edmonton Oilers vs Ottawa Senators</div>
-                <div class="details">
-                    👉 Bet: <span class="highlight">OVER 6.5 @ 2.05</span> on 1xBet/Melbet<br>
-                    🧠 True Odds: 1.85 | 💰 Safe Stake: <span class="highlight">₹46</span><br>
-                    📅 04 Mar 2026, 07:40 AM
+                <div class="header-row">
+                    <div class="edge ev-edge">📈 11.18% EV</div>
+                    <div class="sport-badge">🏆 Icehockey Nhl</div>
                 </div>
-            </div>
-            
-            <div class="card ev">
-                <div class="edge ev-edge">📈 10.43% EV Edge</div>
-                <div class="match">Anaheim Ducks vs Colorado Avalanche</div>
-                <div class="details">
-                    👉 Bet: <span class="highlight">OVER 6.5 @ 2.09</span> on 1xBet/Melbet<br>
-                    🧠 True Odds: 1.89 | 💰 Safe Stake: <span class="highlight">₹43</span><br>
-                    📅 04 Mar 2026, 08:40 AM
-                </div>
-            </div>
-            
-            <div class="card ev">
-                <div class="edge ev-edge">📈 10.06% EV Edge</div>
-                <div class="match">Boston Bruins vs Pittsburgh Penguins</div>
-                <div class="details">
-                    👉 Bet: <span class="highlight">OVER 6.5 @ 2.23</span> on 1xBet/Melbet<br>
-                    🧠 True Odds: 2.03 | 💰 Safe Stake: <span class="highlight">₹37</span><br>
-                    📅 04 Mar 2026, 05:40 AM
-                </div>
-            </div>
-            
-            <div class="card ev">
-                <div class="edge ev-edge">📈 9.82% EV Edge</div>
                 <div class="match">San Jose Sharks vs Montréal Canadiens</div>
-                <div class="details">
-                    👉 Bet: <span class="highlight">OVER 6.5 @ 2.12</span> on 1xBet/Melbet<br>
-                    🧠 True Odds: 1.93 | 💰 Safe Stake: <span class="highlight">₹39</span><br>
-                    📅 04 Mar 2026, 08:40 AM
+                
+                <div class="action-box">
+                    <div class="action-line">
+                        💰 <span>Bet Exactly: <span class="highlight-stake">₹45</span></span>
+                    </div>
+                    <div class="action-line">
+                        👉 <span><span class="highlight">OVER 6.5 @ 2.12</span> on 1xBet/Melbet</span>
+                    </div>
                 </div>
-            </div>
-            <h2>🏆 Arbitrage (4)</h2>
-            <div class="card arb">
-                <div class="edge arb-edge">🚨 3.60% ARB Edge</div>
-                <div class="match">Edmonton Oilers vs Ottawa Senators</div>
-                <div class="details">
-                    🔵 Bet <span class="highlight">₹759</span> on OVER @ 2.05 [1xBet/Melbet]<br>
-                    🔴 Bet <span class="highlight">₹741</span> on UNDER @ 2.10 [Pinnacle]<br>
-                    ✨ Net Profit: <span class="highlight">₹56</span><br>
-                    📅 04 Mar 2026, 07:40 AM
+                
+                <div class="math-box">
+                    <span>🧠 True Odds: 1.91</span>
+                    <span class="date-stamp">📅 04 Mar 2026, 08:40 AM</span>
                 </div>
             </div>
             
-            <div class="card arb">
-                <div class="edge arb-edge">🚨 3.37% ARB Edge</div>
+            <div class="card ev">
+                <div class="header-row">
+                    <div class="edge ev-edge">📈 10.93% EV</div>
+                    <div class="sport-badge">🏆 Icehockey Nhl</div>
+                </div>
                 <div class="match">Anaheim Ducks vs Colorado Avalanche</div>
-                <div class="details">
-                    🔵 Bet <span class="highlight">₹743</span> on OVER @ 2.09 [1xBet/Melbet]<br>
-                    🔴 Bet <span class="highlight">₹757</span> on UNDER @ 2.05 [Pinnacle]<br>
-                    ✨ Net Profit: <span class="highlight">₹52</span><br>
-                    📅 04 Mar 2026, 08:40 AM
+                
+                <div class="action-box">
+                    <div class="action-line">
+                        💰 <span>Bet Exactly: <span class="highlight-stake">₹45</span></span>
+                    </div>
+                    <div class="action-line">
+                        👉 <span><span class="highlight">OVER 6.5 @ 2.09</span> on 1xBet/Melbet</span>
+                    </div>
+                </div>
+                
+                <div class="math-box">
+                    <span>🧠 True Odds: 1.88</span>
+                    <span class="date-stamp">📅 04 Mar 2026, 08:40 AM</span>
                 </div>
             </div>
             
-            <div class="card arb">
-                <div class="edge arb-edge">🚨 3.08% ARB Edge</div>
-                <div class="match">San Jose Sharks vs Montréal Canadiens</div>
-                <div class="details">
-                    🔵 Bet <span class="highlight">₹730</span> on OVER @ 2.12 [1xBet/Melbet]<br>
-                    🔴 Bet <span class="highlight">₹770</span> on UNDER @ 2.01 [Pinnacle]<br>
-                    ✨ Net Profit: <span class="highlight">₹48</span><br>
-                    📅 04 Mar 2026, 08:40 AM
+            <div class="card ev">
+                <div class="header-row">
+                    <div class="edge ev-edge">📈 10.92% EV</div>
+                    <div class="sport-badge">🏆 Icehockey Nhl</div>
+                </div>
+                <div class="match">Edmonton Oilers vs Ottawa Senators</div>
+                
+                <div class="action-box">
+                    <div class="action-line">
+                        💰 <span>Bet Exactly: <span class="highlight-stake">₹45</span></span>
+                    </div>
+                    <div class="action-line">
+                        👉 <span><span class="highlight">OVER 6.5 @ 2.10</span> on 1xBet/Melbet</span>
+                    </div>
+                </div>
+                
+                <div class="math-box">
+                    <span>🧠 True Odds: 1.89</span>
+                    <span class="date-stamp">📅 04 Mar 2026, 07:40 AM</span>
                 </div>
             </div>
             
-            <div class="card arb">
-                <div class="edge arb-edge">🚨 2.80% ARB Edge</div>
+            <div class="card ev">
+                <div class="header-row">
+                    <div class="edge ev-edge">📈 10.39% EV</div>
+                    <div class="sport-badge">🏆 Icehockey Nhl</div>
+                </div>
                 <div class="match">Boston Bruins vs Pittsburgh Penguins</div>
-                <div class="details">
-                    🔵 Bet <span class="highlight">₹692</span> on OVER @ 2.23 [1xBet/Melbet]<br>
-                    🔴 Bet <span class="highlight">₹808</span> on UNDER @ 1.91 [Pinnacle]<br>
-                    ✨ Net Profit: <span class="highlight">₹43</span><br>
-                    📅 04 Mar 2026, 05:40 AM
+                
+                <div class="action-box">
+                    <div class="action-line">
+                        💰 <span>Bet Exactly: <span class="highlight-stake">₹37</span></span>
+                    </div>
+                    <div class="action-line">
+                        👉 <span><span class="highlight">OVER 6.5 @ 2.26</span> on 1xBet/Melbet</span>
+                    </div>
+                </div>
+                
+                <div class="math-box">
+                    <span>🧠 True Odds: 2.05</span>
+                    <span class="date-stamp">📅 04 Mar 2026, 05:40 AM</span>
+                </div>
+            </div>
+            
+            <div class="card ev">
+                <div class="header-row">
+                    <div class="edge ev-edge">📈 9.71% EV</div>
+                    <div class="sport-badge">🏆 Icehockey Nhl</div>
+                </div>
+                <div class="match">Columbus Blue Jackets vs Nashville Predators</div>
+                
+                <div class="action-box">
+                    <div class="action-line">
+                        💰 <span>Bet Exactly: <span class="highlight-stake">₹34</span></span>
+                    </div>
+                    <div class="action-line">
+                        👉 <span><span class="highlight">OVER 6.5 @ 2.27</span> on 1xBet/Melbet</span>
+                    </div>
+                </div>
+                
+                <div class="math-box">
+                    <span>🧠 True Odds: 2.07</span>
+                    <span class="date-stamp">📅 04 Mar 2026, 05:40 AM</span>
+                </div>
+            </div>
+            <h2>🏆 Arbitrage (5)</h2>
+            <div class="card arb">
+                <div class="header-row">
+                    <div class="edge arb-edge">🚨 3.84% ARB</div>
+                    <div class="sport-badge">🏆 Icehockey Nhl</div>
+                </div>
+                <div class="match">Anaheim Ducks vs Colorado Avalanche <span style="color:#8b949e; font-size:14px; font-weight:normal;">(TOTALS_6.5)</span></div>
+                
+                <div class="action-box">
+                    <div class="action-line">
+                        🔵 <span>Bet <span class="highlight-stake">₹746</span> on <span class="highlight">OVER @ 2.09</span> [1xBet/Melbet]</span>
+                    </div>
+                    <div class="action-line">
+                        🔴 <span>Bet <span class="highlight-stake">₹754</span> on <span class="highlight">UNDER @ 2.07</span> [Pinnacle]</span>
+                    </div>
+                </div>
+                
+                <div class="math-box">
+                    <span style="color: #3fb950; font-weight: bold; font-size: 15px;">✨ Net Profit: ₹60</span>
+                    <span class="date-stamp">📅 04 Mar 2026, 08:40 AM</span>
+                </div>
+            </div>
+            
+            <div class="card arb">
+                <div class="header-row">
+                    <div class="edge arb-edge">🚨 3.84% ARB</div>
+                    <div class="sport-badge">🏆 Icehockey Nhl</div>
+                </div>
+                <div class="match">Edmonton Oilers vs Ottawa Senators <span style="color:#8b949e; font-size:14px; font-weight:normal;">(TOTALS_6.5)</span></div>
+                
+                <div class="action-box">
+                    <div class="action-line">
+                        🔵 <span>Bet <span class="highlight-stake">₹743</span> on <span class="highlight">OVER @ 2.10</span> [1xBet/Melbet]</span>
+                    </div>
+                    <div class="action-line">
+                        🔴 <span>Bet <span class="highlight-stake">₹757</span> on <span class="highlight">UNDER @ 2.06</span> [Pinnacle]</span>
+                    </div>
+                </div>
+                
+                <div class="math-box">
+                    <span style="color: #3fb950; font-weight: bold; font-size: 15px;">✨ Net Profit: ₹60</span>
+                    <span class="date-stamp">📅 04 Mar 2026, 07:40 AM</span>
+                </div>
+            </div>
+            
+            <div class="card arb">
+                <div class="header-row">
+                    <div class="edge arb-edge">🚨 3.81% ARB</div>
+                    <div class="sport-badge">🏆 Icehockey Nhl</div>
+                </div>
+                <div class="match">San Jose Sharks vs Montréal Canadiens <span style="color:#8b949e; font-size:14px; font-weight:normal;">(TOTALS_6.5)</span></div>
+                
+                <div class="action-box">
+                    <div class="action-line">
+                        🔵 <span>Bet <span class="highlight-stake">₹736</span> on <span class="highlight">OVER @ 2.12</span> [1xBet/Melbet]</span>
+                    </div>
+                    <div class="action-line">
+                        🔴 <span>Bet <span class="highlight-stake">₹764</span> on <span class="highlight">UNDER @ 2.04</span> [Pinnacle]</span>
+                    </div>
+                </div>
+                
+                <div class="math-box">
+                    <span style="color: #3fb950; font-weight: bold; font-size: 15px;">✨ Net Profit: ₹59</span>
+                    <span class="date-stamp">📅 04 Mar 2026, 08:40 AM</span>
+                </div>
+            </div>
+            
+            <div class="card arb">
+                <div class="header-row">
+                    <div class="edge arb-edge">🚨 3.12% ARB</div>
+                    <div class="sport-badge">🏆 Icehockey Nhl</div>
+                </div>
+                <div class="match">Boston Bruins vs Pittsburgh Penguins <span style="color:#8b949e; font-size:14px; font-weight:normal;">(TOTALS_6.5)</span></div>
+                
+                <div class="action-box">
+                    <div class="action-line">
+                        🔵 <span>Bet <span class="highlight-stake">₹685</span> on <span class="highlight">OVER @ 2.26</span> [1xBet/Melbet]</span>
+                    </div>
+                    <div class="action-line">
+                        🔴 <span>Bet <span class="highlight-stake">₹815</span> on <span class="highlight">UNDER @ 1.90</span> [Pinnacle]</span>
+                    </div>
+                </div>
+                
+                <div class="math-box">
+                    <span style="color: #3fb950; font-weight: bold; font-size: 15px;">✨ Net Profit: ₹48</span>
+                    <span class="date-stamp">📅 04 Mar 2026, 05:40 AM</span>
+                </div>
+            </div>
+            
+            <div class="card arb">
+                <div class="header-row">
+                    <div class="edge arb-edge">🚨 2.76% ARB</div>
+                    <div class="sport-badge">🏆 Icehockey Nhl</div>
+                </div>
+                <div class="match">Columbus Blue Jackets vs Nashville Predators <span style="color:#8b949e; font-size:14px; font-weight:normal;">(TOTALS_6.5)</span></div>
+                
+                <div class="action-box">
+                    <div class="action-line">
+                        🔵 <span>Bet <span class="highlight-stake">₹680</span> on <span class="highlight">OVER @ 2.27</span> [1xBet/Melbet]</span>
+                    </div>
+                    <div class="action-line">
+                        🔴 <span>Bet <span class="highlight-stake">₹820</span> on <span class="highlight">UNDER @ 1.88</span> [Pinnacle]</span>
+                    </div>
+                </div>
+                
+                <div class="math-box">
+                    <span style="color: #3fb950; font-weight: bold; font-size: 15px;">✨ Net Profit: ₹43</span>
+                    <span class="date-stamp">📅 04 Mar 2026, 05:40 AM</span>
                 </div>
             </div>
             
         <div class="telemetry">
-            Key #1 | Monthly Quota Remaining: 444/500 | Scan Cost: ~8 credits
+            <strong>SYSTEM TELEMETRY</strong><br>
+            Active Key: #1 | Monthly Quota: 436/500 | Scan Cost: ~8 credits
         </div>
     </body>
     </html>
