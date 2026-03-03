@@ -1,196 +1,285 @@
-
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-        <meta http-equiv="Pragma" content="no-cache">
-        <meta http-equiv="Expires" content="0">
-        <title>Arb Sniper Live Dashboard</title>
-        <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0d1117; color: #c9d1d9; margin: 0; padding: 15px; max-width: 800px; margin: auto; }
-            h1 { color: #58a6ff; text-align: center; font-size: 26px; margin-bottom: 5px; }
-            .time { text-align: center; color: #8b949e; font-size: 14px; margin-bottom: 20px; font-weight: bold; }
-           
-            .btn-run { background-color: #238636; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 20px; }
-            .btn-run:active { background-color: #2ea043; }
-           
-            .tabs { display: flex; border-bottom: 1px solid #30363d; margin-bottom: 20px; }
-            .tab { flex: 1; text-align: center; padding: 12px; cursor: pointer; font-size: 16px; font-weight: bold; color: #8b949e; }
-            .tab.active { color: #ffffff; border-bottom: 3px solid #58a6ff; background-color: #161b22; }
-            .tab-content { display: none; }
-            .tab-content.active { display: block; }
-           
-            .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 20px; font-size: 15px; line-height: 1.6; }
-            .card-header { font-weight: bold; font-size: 16px; margin-bottom: 12px; border-bottom: 1px dashed #30363d; padding-bottom: 8px; }
-            .detail-block { margin-bottom: 12px; }
-            .highlight { color: #ffffff; font-weight: bold; }
-            .highlight-stake { color: #e3b341; font-weight: bold; }
-            .profit-highlight { color: #e3b341; font-weight: bold; font-size: 16px; }
-           
-            .empty-state { text-align: center; color: #8b949e; padding: 30px; font-style: italic; background-color: #161b22; border-radius: 8px; border: 1px dashed #30363d; }
-            .telemetry { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #30363d; font-size: 12px; color: #484f58; line-height: 1.6; }
-        </style>
-    </head>
-    <body>
-        <h1>📡 Arb Sniper Terminal</h1>
-        <div class="time">Last Sweep: 04 Mar 2026, 12:35:34 AM IST</div>
-       
-        <button class="btn-run" onclick="triggerScan()">🔄 Launch Cloud Scan Now</button>
-       
-        <div class="tabs">
-            <div class="tab active" id="tab-ev" onclick="switchTab('ev')">💎 EV Edges (3)</div>
-            <div class="tab" id="tab-arb" onclick="switchTab('arb')">🏆 Arbitrage (3)</div>
-        </div>
-       
-        <div id="content-ev" class="tab-content active">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Arb Sniper Live Dashboard</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0d1117; color: #c9d1d9; margin: 0; padding: 15px; max-width: 800px; margin: auto; }
+        h1 { color: #58a6ff; text-align: center; font-size: 26px; margin-bottom: 5px; }
+        .time { text-align: center; color: #8b949e; font-size: 14px; margin-bottom: 20px; font-weight: bold; }
+        .btn-run { background-color: #238636; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 10px; }
+        .btn-run:active { background-color: #2ea043; }
+        .btn-export { background-color: #1f6feb; color: white; border: none; padding: 10px 20px; font-size: 14px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 20px; }
+        .btn-export:active { background-color: #388bfd; }
+        .tabs { display: flex; border-bottom: 1px solid #30363d; margin-bottom: 20px; }
+        .tab { flex: 1; text-align: center; padding: 12px; cursor: pointer; font-size: 15px; font-weight: bold; color: #8b949e; }
+        .tab.active { color: #ffffff; border-bottom: 3px solid #58a6ff; background-color: #161b22; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 20px; font-size: 15px; line-height: 1.6; }
+        .card-header { font-weight: bold; font-size: 16px; margin-bottom: 12px; border-bottom: 1px dashed #30363d; padding-bottom: 8px; }
+        .detail-block { margin-bottom: 12px; }
+        .highlight { color: #ffffff; font-weight: bold; }
+        .highlight-stake { color: #e3b341; font-weight: bold; }
+        .profit-highlight { color: #e3b341; font-weight: bold; font-size: 16px; }
+        .empty-state { text-align: center; color: #8b949e; padding: 30px; font-style: italic; background-color: #161b22; border-radius: 8px; border: 1px dashed #30363d; }
+        .telemetry { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #30363d; font-size: 12px; color: #484f58; line-height: 1.6; }
+        .controls-bar { display: flex; align-items: center; gap: 12px; background:#161b22; border:1px solid #30363d; border-radius:8px; padding:12px 16px; margin-bottom:16px; flex-wrap:wrap; }
+        .controls-bar label { color:#8b949e; font-size:13px; }
+        .controls-bar input[type=range] { flex:1; min-width:100px; accent-color:#58a6ff; }
+        .controls-bar span { color:#58a6ff; font-weight:bold; min-width:40px; font-size:14px; }
+        .toggle-label { display:flex; align-items:center; gap:6px; font-size:13px; color:#8b949e; cursor:pointer; }
+        .toggle-label input { accent-color:#58a6ff; width:16px; height:16px; }
+    </style>
+</head>
+<body>
+    <h1> Arb Sniper Terminal</h1>
+    <div class="time">Last Sweep: 04 Mar 2026, 12:53:37 AM IST</div>
     
-            <div class="card">
-                <div class="card-header">💎 💰 📈 <span class="highlight">11.18% EV</span> | San Jose Sharks vs Montréal Canadiens</div>
-                <div class="detail-block">
-                    🏆 Icehockey Nhl<br>
-                    📅 04 Mar 2026, 08:40 AM<br>
-                    📈 <span class="highlight">TOTALS_6.5</span>
-                </div>
-                <div class="detail-block">
-                    💰 BET EXACTLY: <span class="highlight-stake">₹45</span><br>
-                    👉 <span class="highlight">OVER 6.5 @ 2.12</span> on 1xBet/Melbet
-                </div>
-                <div>
-                    🧠 True Odds: 1.91
-                </div>
-            </div>
-            
-            <div class="card">
-                <div class="card-header">💎 💰 📈 <span class="highlight">10.98% EV</span> | Edmonton Oilers vs Ottawa Senators</div>
-                <div class="detail-block">
-                    🏆 Icehockey Nhl<br>
-                    📅 04 Mar 2026, 07:40 AM<br>
-                    📈 <span class="highlight">TOTALS_6.5</span>
-                </div>
-                <div class="detail-block">
-                    💰 BET EXACTLY: <span class="highlight-stake">₹49</span><br>
-                    👉 <span class="highlight">OVER 6.5 @ 2.01</span> on 1xBet/Melbet
-                </div>
-                <div>
-                    🧠 True Odds: 1.81
-                </div>
-            </div>
-            
-            <div class="card">
-                <div class="card-header">💎 💰 📈 <span class="highlight">10.82% EV</span> | Anaheim Ducks vs Colorado Avalanche</div>
-                <div class="detail-block">
-                    🏆 Icehockey Nhl<br>
-                    📅 04 Mar 2026, 08:40 AM<br>
-                    📈 <span class="highlight">TOTALS_6.5</span>
-                </div>
-                <div class="detail-block">
-                    💰 BET EXACTLY: <span class="highlight-stake">₹47</span><br>
-                    👉 <span class="highlight">OVER 6.5 @ 2.03</span> on 1xBet/Melbet
-                </div>
-                <div>
-                    🧠 True Odds: 1.83
-                </div>
-            </div>
-            
+        <div class="card" style="margin-bottom:20px;font-size:13px;">
+            <div class="card-header"> Daily Bankroll Tracker (2026-03-04)</div>
+            Starting Bankroll: <span class="highlight">₹1500</span><br>
+            Total Stakes Recommended: <span class="highlight-stake">₹3092</span><br>
+            Theoretical ARB Profit: <span class="profit-highlight">₹122.08</span><br>
+            Theoretical EV Exposure: <span class="highlight">₹10.14</span>
         </div>
-        <div id="content-arb" class="tab-content">
-    
-            <div class="card">
-                <div class="card-header">💎 💰 🚨 <span class="highlight">4.17% ARB</span> | Edmonton Oilers vs Ottawa Senators</div>
-                <div class="detail-block">
-                    🏆 Icehockey Nhl<br>
-                    📅 04 Mar 2026, 07:40 AM<br>
-                    📈 <span class="highlight">TOTALS_6.5</span>
-                </div>
-                <div class="detail-block">
-                    🔵 <span class="highlight-stake">₹779</span> on <span class="highlight">OVER @ 2.01</span> [1xBet/Melbet]<br>
-                    🔴 <span class="highlight-stake">₹721</span> on <span class="highlight">UNDER @ 2.17</span> [Pinnacle]
-                </div>
-                <div>
-                    ✨ Profit: <span class="profit-highlight">₹65</span>
-                </div>
-            </div>
-            
-            <div class="card">
-                <div class="card-header">💎 💰 🚨 <span class="highlight">4.01% ARB</span> | Anaheim Ducks vs Colorado Avalanche</div>
-                <div class="detail-block">
-                    🏆 Icehockey Nhl<br>
-                    📅 04 Mar 2026, 08:40 AM<br>
-                    📈 <span class="highlight">TOTALS_6.5</span>
-                </div>
-                <div class="detail-block">
-                    🔵 <span class="highlight-stake">₹770</span> on <span class="highlight">OVER @ 2.03</span> [1xBet/Melbet]<br>
-                    🔴 <span class="highlight-stake">₹730</span> on <span class="highlight">UNDER @ 2.14</span> [Pinnacle]
-                </div>
-                <div>
-                    ✨ Profit: <span class="profit-highlight">₹63</span>
-                </div>
-            </div>
-            
-            <div class="card">
-                <div class="card-header">💎 💰 🚨 <span class="highlight">3.81% ARB</span> | San Jose Sharks vs Montréal Canadiens</div>
-                <div class="detail-block">
-                    🏆 Icehockey Nhl<br>
-                    📅 04 Mar 2026, 08:40 AM<br>
-                    📈 <span class="highlight">TOTALS_6.5</span>
-                </div>
-                <div class="detail-block">
-                    🔵 <span class="highlight-stake">₹736</span> on <span class="highlight">OVER @ 2.12</span> [1xBet/Melbet]<br>
-                    🔴 <span class="highlight-stake">₹764</span> on <span class="highlight">UNDER @ 2.04</span> [Pinnacle]
-                </div>
-                <div>
-                    ✨ Profit: <span class="profit-highlight">₹59</span>
-                </div>
-            </div>
-            
-        </div>
-       
-        <div class="telemetry">
-            <strong>SYSTEM TELEMETRY</strong><br>
-            Active Key: #1 | Monthly Quota: 292/500 | Scan Cost: ~8 credits
-        </div>
+        
+    <button class="btn-run" onclick="triggerScan()"> Launch Cloud Scan Now</button>
+    <button class="btn-export" onclick="exportCSV()"> Export CSV</button>
 
-        <script>
-            function switchTab(tab) {
-                document.getElementById('content-ev').classList.remove('active');
-                document.getElementById('content-arb').classList.remove('active');
-                document.getElementById('tab-ev').classList.remove('active');
-                document.getElementById('tab-arb').classList.remove('active');
-                document.getElementById('content-' + tab).classList.add('active');
-                document.getElementById('tab-' + tab).classList.add('active');
+    <div class="controls-bar">
+        <label for="kellySlider"> Kelly Fraction:</label>
+        <input type="range" id="kellySlider" min="0" max="100" value="30" oninput="updateKelly(this.value)">
+        <span id="kellyValue">30%</span>
+        &nbsp;&nbsp;
+        <label class="toggle-label">
+            <input type="checkbox" id="top5Toggle" onchange="applyTop5()">
+            Top 5 Only
+        </label>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" id="tab-ev" onclick="switchTab('ev')"> EV Edges (2)</div>
+        <div class="tab" id="tab-arb" onclick="switchTab('arb')"> Arbitrage (2)</div>
+        <div class="tab" id="tab-analytics" onclick="switchTab('analytics')"> Analytics</div>
+    </div>
+
+    <div id="content-ev" class="tab-content active">
+        <div id="ev-cards">
+            <div class="card ev-card"
+                 data-pct="11.177377892030837"
+                 data-match="San Jose Sharks vs Montréal Canadiens"
+                 data-sport="icehockey_nhl"
+                 data-line="TOTALS_6.5"
+                 data-selection="Over"
+                 data-odds="2.12"
+                 data-stake="44.90910760190965"
+                 data-bookie="onexbet">
+                <div class="card-header">  <span class="highlight">11.18% EV</span> | San Jose Sharks vs Montréal Canadiens</div>
+                <div class="detail-block">
+                     Icehockey Nhl<br>
+                     04 Mar 2026, 08:40 AM<br>
+                     <span class="highlight">TOTALS_6.5</span>
+                </div>
+                <div class="detail-block">
+                     BET EXACTLY: <span class="highlight-stake stake-display" data-base-stake="44.91">₹45</span><br>
+                     <span class="highlight">OVER 6.5 @ 2.12</span> on 1xBet/Melbet
+                </div>
+                <div>
+                     True Odds: 1.91 &nbsp;|&nbsp; Confidence: <span style="color:#e3b341;font-weight:bold;">50/100</span><br> CLV: <span class="highlight">-0.01%</span>
+                </div>
+                <table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:8px;"><thead><tr style="color:#8b949e;"><th style="text-align:left;">Book</th><th>Odds</th><th>EV%</th></tr></thead><tbody><tr><td>Pinnacle</td><td>1.850</td><td>+0.00%</td></tr><tr style="color:#58a6ff;font-weight:bold;"><td>1xBet/Melbet</td><td>2.120</td><td>+11.18%</td></tr></tbody></table>
+            </div>
+            
+            <div class="card ev-card"
+                 data-pct="10.821428571428559"
+                 data-match="Anaheim Ducks vs Colorado Avalanche"
+                 data-sport="icehockey_nhl"
+                 data-line="TOTALS_6.5"
+                 data-selection="Over"
+                 data-odds="2.03"
+                 data-stake="47.27808599167818"
+                 data-bookie="onexbet">
+                <div class="card-header">  <span class="highlight">10.82% EV</span> | Anaheim Ducks vs Colorado Avalanche</div>
+                <div class="detail-block">
+                     Icehockey Nhl<br>
+                     04 Mar 2026, 08:40 AM<br>
+                     <span class="highlight">TOTALS_6.5</span>
+                </div>
+                <div class="detail-block">
+                     BET EXACTLY: <span class="highlight-stake stake-display" data-base-stake="47.28">₹47</span><br>
+                     <span class="highlight">OVER 6.5 @ 2.03</span> on 1xBet/Melbet
+                </div>
+                <div>
+                     True Odds: 1.83 &nbsp;|&nbsp; Confidence: <span style="color:#e3b341;font-weight:bold;">48/100</span><br> CLV: <span class="highlight">-0.01%</span>
+                </div>
+                <table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:8px;"><thead><tr style="color:#8b949e;"><th style="text-align:left;">Book</th><th>Odds</th><th>EV%</th></tr></thead><tbody><tr><td>Pinnacle</td><td>1.780</td><td>+0.00%</td></tr><tr style="color:#58a6ff;font-weight:bold;"><td>1xBet/Melbet</td><td>2.030</td><td>+10.82%</td></tr></tbody></table>
+            </div>
+            </div>
+    </div>
+    <div id="content-arb" class="tab-content">
+        <div id="arb-cards">
+        <div class="card">
+            <div class="card-header">  <span class="highlight">4.01% ARB</span><span style="font-size:11px;color:#8b949e;"> (2-way)</span> | Anaheim Ducks vs Colorado Avalanche</div>
+            <div class="detail-block">
+                 Icehockey Nhl<br>
+                 04 Mar 2026, 08:40 AM<br>
+                 <span class="highlight">TOTALS_6.5</span>
+            </div>
+            <div class="detail-block">
+            <span class="highlight-stake">₹770</span> on <span class="highlight">OVER @ 2.03</span> [1xBet/Melbet]<br>
+            <span class="highlight-stake">₹730</span> on <span class="highlight">UNDER @ 2.14</span> [Pinnacle]
+        </div>
+            <div>
+                 Profit: <span class="profit-highlight">₹63</span>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">  <span class="highlight">3.81% ARB</span><span style="font-size:11px;color:#8b949e;"> (2-way)</span> | San Jose Sharks vs Montréal Canadiens</div>
+            <div class="detail-block">
+                 Icehockey Nhl<br>
+                 04 Mar 2026, 08:40 AM<br>
+                 <span class="highlight">TOTALS_6.5</span>
+            </div>
+            <div class="detail-block">
+            <span class="highlight-stake">₹736</span> on <span class="highlight">OVER @ 2.12</span> [1xBet/Melbet]<br>
+            <span class="highlight-stake">₹764</span> on <span class="highlight">UNDER @ 2.04</span> [Pinnacle]
+        </div>
+            <div>
+                 Profit: <span class="profit-highlight">₹59</span>
+            </div>
+        </div>
+        </div>
+    </div>
+    
+    <div id="content-analytics" class="tab-content">
+        <div class="card">
+            <div class="card-header"> EV Distribution (Current Scan)</div>
+            <div style="margin-bottom:12px;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                    <span style="width:60px;color:#8b949e;">0–2%</span>
+                    <div style="flex:1;background:#21262d;border-radius:4px;height:18px;overflow:hidden;">
+                        <div style="width:0%;background:#58a6ff;height:100%;border-radius:4px;"></div>
+                    </div>
+                    <span style="width:30px;text-align:right;">0</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                    <span style="width:60px;color:#8b949e;">2–5%</span>
+                    <div style="flex:1;background:#21262d;border-radius:4px;height:18px;overflow:hidden;">
+                        <div style="width:0%;background:#2ea043;height:100%;border-radius:4px;"></div>
+                    </div>
+                    <span style="width:30px;text-align:right;">0</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                    <span style="width:60px;color:#8b949e;">5–10%</span>
+                    <div style="flex:1;background:#21262d;border-radius:4px;height:18px;overflow:hidden;">
+                        <div style="width:0%;background:#e3b341;height:100%;border-radius:4px;"></div>
+                    </div>
+                    <span style="width:30px;text-align:right;">0</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="width:60px;color:#8b949e;">10%+</span>
+                    <div style="flex:1;background:#21262d;border-radius:4px;height:18px;overflow:hidden;">
+                        <div style="width:20%;background:#f85149;height:100%;border-radius:4px;"></div>
+                    </div>
+                    <span style="width:30px;text-align:right;">2</span>
+                </div>
+            </div>
+            <div style="margin-top:12px;font-size:14px;color:#8b949e;">
+                Average EV: <span class="highlight">11.00%</span> &nbsp;|&nbsp; Highest EV: <span class="highlight">11.18%</span>
+            </div>
+        </div>
+    </div>
+    
+
+    <div class="telemetry">
+        <strong>SYSTEM TELEMETRY</strong><br>
+        Active Key: #1 | Monthly Quota: 284/500 | Scan Cost: ~6 credits
+    </div>
+
+    <script>
+        const ALL_EVS = [{"pct": 11.177377892030837, "match": "San Jose Sharks vs Montr\u00e9al Canadiens", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "selection": "Over", "odds": 2.12, "true": 1.9068627450980393, "bookie": "onexbet", "stake": 44.90910760190965, "confidence": 50, "clv_pct": -0.007}, {"pct": 10.821428571428559, "match": "Anaheim Ducks vs Colorado Avalanche", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "selection": "Over", "odds": 2.03, "true": 1.8317757009345794, "bookie": "onexbet", "stake": 47.27808599167818, "confidence": 48, "clv_pct": -0.012}];
+        const ALL_ARBS = [{"pct": 4.009944293540801, "match": "Anaheim Ducks vs Colorado Avalanche", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "ways": 2, "s1": "Over", "s1_price": 2.03, "s1_bookie": "onexbet", "s2": "Under", "s2_price": 2.14, "s2_bookie": "pinnacle", "s3": "", "s3_price": 0, "s3_bookie": "", "stk1": 769.7841726618705, "stk2": 730.2158273381293, "stk3": 0, "profit": 62.6618705035969}, {"pct": 3.810580836108035, "match": "San Jose Sharks vs Montr\u00e9al Canadiens", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "ways": 2, "s1": "Over", "s1_price": 2.12, "s1_bookie": "onexbet", "s2": "Under", "s2_price": 2.04, "s2_bookie": "pinnacle", "s3": "", "s3_price": 0, "s3_bookie": "", "stk1": 735.5769230769231, "stk2": 764.423076923077, "stk3": 0, "profit": 59.42307692307713}];
+
+        function switchTab(tab) {
+            ['ev','arb','analytics'].forEach(t => {
+                document.getElementById('content-'+t).classList.remove('active');
+                document.getElementById('tab-'+t).classList.remove('active');
+            });
+            document.getElementById('content-'+tab).classList.add('active');
+            document.getElementById('tab-'+tab).classList.add('active');
+        }
+
+        function triggerScan() {
+            let pat = localStorage.getItem('gh_dispatch_token');
+            if (!pat) {
+                pat = prompt("Enter your GitHub PAT (ghp_...) to authorize this scan:\n(This is safely stored only in your local browser, never public)");
+                if (!pat) return;
+                localStorage.setItem('gh_dispatch_token', pat);
             }
-
-            function triggerScan() {
-                let pat = localStorage.getItem('gh_dispatch_token');
-                if (!pat) {
-                    pat = prompt("Enter your GitHub PAT (ghp_...) to authorize this scan:\n(This is safely stored only in your local browser, never public)");
-                    if (!pat) return;
-                    localStorage.setItem('gh_dispatch_token', pat);
+            fetch('https://api.github.com/repos/nikunj7711/arb-sniper/actions/workflows/sniper.yml/dispatches', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/vnd.github.v3+json',
+                    'Authorization': 'token ' + pat,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ ref: 'main' })
+            })
+            .then(response => {
+                if(response.ok) {
+                    alert(" Engine Fired! Scan is running. Wait 2-3 minutes, then Hard Refresh this page (Ctrl+F5 or pull down to refresh).");
+                } else {
+                    alert(" Authorization failed! Your token might be wrong or expired. Resetting token...");
+                    localStorage.removeItem('gh_dispatch_token');
                 }
+            })
+            .catch(error => console.error('Error:', error));
+        }
 
-                // Make sure to replace nikunj7711 with your exact GitHub username if it is different
-                fetch('https://api.github.com/repos/nikunj7711/arb-sniper/actions/workflows/sniper.yml/dispatches', {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/vnd.github.v3+json',
-                        'Authorization': 'token ' + pat,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ ref: 'main' })
-                })
-                .then(response => {
-                    if(response.ok) {
-                        alert("✅ Engine Fired! Scan is running. Wait 2-3 minutes, then Hard Refresh this page (Ctrl+F5 or pull down to refresh).");
-                    } else {
-                        alert("❌ Authorization failed! Your token might be wrong or expired. Resetting token...");
-                        localStorage.removeItem('gh_dispatch_token');
-                    }
-                })
-                .catch(error => console.error('Error:', error));
-            }
-        </script>
-    </body>
-    </html>
-    
+        let currentKelly = 0.30;
+        function updateKelly(val) {
+            currentKelly = val / 100;
+            document.getElementById('kellyValue').textContent = val + '%';
+            document.querySelectorAll('.stake-display').forEach(el => {
+                const baseStake = parseFloat(el.getAttribute('data-base-stake'));
+                const adjusted = baseStake * (currentKelly / 0.30);
+                el.textContent = '₹' + Math.round(adjusted);
+            });
+        }
+
+        function applyTop5() {
+            const top5 = document.getElementById('top5Toggle').checked;
+            const evCards = document.querySelectorAll('#ev-cards .ev-card');
+            evCards.forEach((card, i) => {
+                card.style.display = (top5 && i >= 5) ? 'none' : '';
+            });
+            const arbCards = document.querySelectorAll('#arb-cards .card');
+            arbCards.forEach((card, i) => {
+                card.style.display = (top5 && i >= 5) ? 'none' : '';
+            });
+        }
+
+        function exportCSV() {
+            let rows = [['Type','Match','Sport','Line','Selection','Odds','EV%/ARB%','Stake','Bookmaker']];
+            ALL_EVS.forEach(e => {
+                rows.push(['EV', e.match, e.sport, e.line, e.selection, e.odds, e.pct.toFixed(2), e.stake.toFixed(0), e.bookie]);
+            });
+            ALL_ARBS.forEach(a => {
+                rows.push(['ARB', a.match, a.sport, a.line, a.s1+'/'+a.s2, a.s1_price+'/'+a.s2_price, a.pct.toFixed(2), (a.stk1+a.stk2).toFixed(0), a.s1_bookie+'+'+a.s2_bookie]);
+            });
+            const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\n');
+            const blob = new Blob([csv], {type:'text/csv'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'arb_sniper_export.csv'; a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
