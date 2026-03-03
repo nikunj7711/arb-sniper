@@ -6,7 +6,6 @@ from datetime import datetime, timezone, timedelta
 # ==========================================
 # ⚙️ CONFIGURATION
 # ==========================================
-# Securely pulling keys from GitHub Secrets Vault
 api_keys_env = os.getenv('ODDS_API_KEYS', '')
 API_KEYS = api_keys_env.split(',') if api_keys_env else []
 
@@ -167,7 +166,6 @@ def fetch_odds_with_retry(url, params):
         else: return None 
 
 def generate_web_dashboard(evs, arbs, current_time):
-    # Sort lists so highest edges are at the top
     evs.sort(key=lambda x: x['pct'], reverse=True)
     arbs.sort(key=lambda x: x['pct'], reverse=True)
     
@@ -177,45 +175,30 @@ def generate_web_dashboard(evs, arbs, current_time):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+        <meta http-equiv="Pragma" content="no-cache">
+        <meta http-equiv="Expires" content="0">
         <title>Arb Sniper Live Dashboard</title>
         <style>
             body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0d1117; color: #c9d1d9; margin: 0; padding: 15px; max-width: 800px; margin: auto; }}
             h1 {{ color: #58a6ff; text-align: center; font-size: 26px; margin-bottom: 5px; }}
-            .time {{ text-align: center; color: #8b949e; font-size: 14px; margin-bottom: 20px; }}
+            .time {{ text-align: center; color: #8b949e; font-size: 14px; margin-bottom: 20px; font-weight: bold; }}
             
-            /* Action Button */
             .btn-run {{ background-color: #238636; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 20px; }}
             .btn-run:active {{ background-color: #2ea043; }}
             
-            /* Tabs */
             .tabs {{ display: flex; border-bottom: 1px solid #30363d; margin-bottom: 20px; }}
             .tab {{ flex: 1; text-align: center; padding: 12px; cursor: pointer; font-size: 16px; font-weight: bold; color: #8b949e; }}
             .tab.active {{ color: #ffffff; border-bottom: 3px solid #58a6ff; background-color: #161b22; }}
-            
             .tab-content {{ display: none; }}
             .tab-content.active {{ display: block; }}
             
-            /* Cards */
-            .card {{ background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 18px; margin-bottom: 20px; }}
-            .card.ev {{ border-left: 6px solid #238636; }}
-            .card.arb {{ border-left: 6px solid #da3633; }}
-            
-            .header-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }}
-            .edge {{ font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 8px; }}
-            .ev-edge {{ color: #3fb950; }}
-            .arb-edge {{ color: #ff7b72; }}
-            .sport-badge {{ background: #21262d; padding: 4px 10px; border-radius: 12px; font-size: 12px; color: #8b949e; border: 1px solid #30363d; }}
-            
-            .match {{ font-size: 18px; font-weight: 700; color: #ffffff; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed #30363d; }}
-            
-            .action-box {{ background: #0d1117; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #21262d; }}
-            .action-line {{ font-size: 15px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; line-height: 1.4; }}
-            .action-line:last-child {{ margin-bottom: 0; }}
-            
-            .highlight {{ color: #ffffff; font-weight: bold; font-size: 16px; }}
-            .highlight-stake {{ color: #e3b341; font-weight: bold; font-size: 16px; }}
-            
-            .math-box {{ font-size: 13px; color: #8b949e; display: flex; justify-content: space-between; align-items: center; }}
+            .card {{ background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 20px; font-size: 15px; line-height: 1.6; }}
+            .card-header {{ font-weight: bold; font-size: 16px; margin-bottom: 12px; border-bottom: 1px dashed #30363d; padding-bottom: 8px; }}
+            .detail-block {{ margin-bottom: 12px; }}
+            .highlight {{ color: #ffffff; font-weight: bold; }}
+            .highlight-stake {{ color: #e3b341; font-weight: bold; }}
+            .profit-highlight {{ color: #e3b341; font-weight: bold; font-size: 16px; }}
             
             .empty-state {{ text-align: center; color: #8b949e; padding: 30px; font-style: italic; background-color: #161b22; border-radius: 8px; border: 1px dashed #30363d; }}
             .telemetry {{ text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #30363d; font-size: 12px; color: #484f58; line-height: 1.6; }}
@@ -223,7 +206,7 @@ def generate_web_dashboard(evs, arbs, current_time):
     </head>
     <body>
         <h1>📡 Arb Sniper Terminal</h1>
-        <div class="time">Last Sweep: {current_time} (IST)</div>
+        <div class="time">Last Sweep: {current_time}</div>
         
         <button class="btn-run" onclick="triggerScan()">🔄 Launch Cloud Scan Now</button>
         
@@ -241,19 +224,19 @@ def generate_web_dashboard(evs, arbs, current_time):
         for ev in evs:
             clean_sport = ev['sport'].replace('_', ' ').title()
             html += f"""
-            <div class="card ev">
-                <div class="header-row">
-                    <div class="edge ev-edge">📈 {ev['pct']:.2f}% EV</div>
-                    <div class="sport-badge">🏆 {clean_sport}</div>
+            <div class="card">
+                <div class="card-header">💎 💰 📈 <span class="highlight">{ev['pct']:.2f}% EV</span> | {ev['match']}</div>
+                <div class="detail-block">
+                    🏆 {clean_sport}<br>
+                    📅 {ev['time']}<br>
+                    📈 <span class="highlight">{ev['line']}</span>
                 </div>
-                <div class="match">{ev['match']}</div>
-                <div class="action-box">
-                    <div class="action-line">💰 <span>Bet Exactly: <span class="highlight-stake">₹{ev['stake']:.0f}</span></span></div>
-                    <div class="action-line">👉 <span><span class="highlight">{ev['selection'].upper()} {ev['line'].split('_')[1]} @ {ev['odds']:.2f}</span> on {display_bookie(ev['bookie'])}</span></div>
+                <div class="detail-block">
+                    💰 BET EXACTLY: <span class="highlight-stake">₹{ev['stake']:.0f}</span><br>
+                    👉 <span class="highlight">{ev['selection'].upper()} {ev['line'].split('_')[1]} @ {ev['odds']:.2f}</span> on {display_bookie(ev['bookie'])}
                 </div>
-                <div class="math-box">
-                    <span>🧠 True Odds: {ev['true']:.2f}</span>
-                    <span>📅 {ev['time']}</span>
+                <div>
+                    🧠 True Odds: {ev['true']:.2f}
                 </div>
             </div>
             """
@@ -269,19 +252,19 @@ def generate_web_dashboard(evs, arbs, current_time):
         for arb in arbs:
             clean_sport = arb['sport'].replace('_', ' ').title()
             html += f"""
-            <div class="card arb">
-                <div class="header-row">
-                    <div class="edge arb-edge">🚨 {arb['pct']:.2f}% ARB</div>
-                    <div class="sport-badge">🏆 {clean_sport}</div>
+            <div class="card">
+                <div class="card-header">💎 💰 🚨 <span class="highlight">{arb['pct']:.2f}% ARB</span> | {arb['match']}</div>
+                <div class="detail-block">
+                    🏆 {clean_sport}<br>
+                    📅 {arb['time']}<br>
+                    📈 <span class="highlight">{arb['line']}</span>
                 </div>
-                <div class="match">{arb['match']} <span style="color:#8b949e; font-size:14px; font-weight:normal;">({arb['line']})</span></div>
-                <div class="action-box">
-                    <div class="action-line">🔵 <span>Bet <span class="highlight-stake">₹{arb['stk1']:.0f}</span> on <span class="highlight">{arb['s1'].upper()} @ {arb['s1_data']['price']:.2f}</span> [{display_bookie(arb['s1_data']['bookie'])}]</span></div>
-                    <div class="action-line">🔴 <span>Bet <span class="highlight-stake">₹{arb['stk2']:.0f}</span> on <span class="highlight">{arb['s2'].upper()} @ {arb['s2_data']['price']:.2f}</span> [{display_bookie(arb['s2_data']['bookie'])}]</span></div>
+                <div class="detail-block">
+                    🔵 <span class="highlight-stake">₹{arb['stk1']:.0f}</span> on <span class="highlight">{arb['s1'].upper()} @ {arb['s1_data']['price']:.2f}</span> [{display_bookie(arb['s1_data']['bookie'])}]<br>
+                    🔴 <span class="highlight-stake">₹{arb['stk2']:.0f}</span> on <span class="highlight">{arb['s2'].upper()} @ {arb['s2_data']['price']:.2f}</span> [{display_bookie(arb['s2_data']['bookie'])}]
                 </div>
-                <div class="math-box">
-                    <span style="color: #3fb950; font-weight: bold; font-size: 15px;">✨ Net Profit: ₹{arb['profit']:.0f}</span>
-                    <span>📅 {arb['time']}</span>
+                <div>
+                    ✨ Profit: <span class="profit-highlight">₹{arb['profit']:.0f}</span>
                 </div>
             </div>
             """
@@ -297,26 +280,24 @@ def generate_web_dashboard(evs, arbs, current_time):
         </div>
 
         <script>
-            // Tab Logic
             function switchTab(tab) {{
                 document.getElementById('content-ev').classList.remove('active');
                 document.getElementById('content-arb').classList.remove('active');
                 document.getElementById('tab-ev').classList.remove('active');
                 document.getElementById('tab-arb').classList.remove('active');
-                
                 document.getElementById('content-' + tab).classList.add('active');
                 document.getElementById('tab-' + tab).classList.add('active');
             }}
 
-            // Secure Scan Trigger
             function triggerScan() {{
                 let pat = localStorage.getItem('gh_dispatch_token');
                 if (!pat) {{
                     pat = prompt("Enter your GitHub PAT (ghp_...) to authorize this scan:\\n(This is safely stored only in your local browser, never public)");
-                    if (!pat) return; // User cancelled
+                    if (!pat) return; 
                     localStorage.setItem('gh_dispatch_token', pat);
                 }}
 
+                // Make sure to replace nikunj7711 with your exact GitHub username if it is different
                 fetch('https://api.github.com/repos/nikunj7711/arb-sniper/actions/workflows/sniper.yml/dispatches', {{
                     method: 'POST',
                     headers: {{
@@ -328,7 +309,7 @@ def generate_web_dashboard(evs, arbs, current_time):
                 }})
                 .then(response => {{
                     if(response.ok) {{
-                        alert("✅ Engine Fired! The cloud server is starting the scan. Please refresh this page in 2-3 minutes.");
+                        alert("✅ Engine Fired! Scan is running. Wait 2-3 minutes, then Hard Refresh this page (Ctrl+F5 or pull down to refresh).");
                     }} else {{
                         alert("❌ Authorization failed! Your token might be wrong or expired. Resetting token...");
                         localStorage.removeItem('gh_dispatch_token');
@@ -340,8 +321,7 @@ def generate_web_dashboard(evs, arbs, current_time):
     </body>
     </html>
     """
-    
-    with open("index.html", "w") as f:
+    with open("index.html", "w", encoding="utf-8") as f:
         f.write(html)
     print("🌐 Web Dashboard successfully updated (index.html)")
 
@@ -350,7 +330,10 @@ def run_hybrid_scanner():
     my_bookies_list = MY_BOOKIES.split(',')
     scan_starting_used = None 
     
-    current_time_str = datetime.now().strftime('%H:%M:%S')
+    # Calculate exact IST Time for the Dashboard Header
+    ist_now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+    current_time_str = ist_now.strftime('%d %b %Y, %I:%M:%S %p IST')
+    
     print(f"\n📡 [{current_time_str}] ALL-SPORTS Sweep (EV + ARB) active...")
     all_evs, all_arbs = [], []
 
@@ -374,13 +357,13 @@ def run_hybrid_scanner():
     if all_arbs:
         all_arbs.sort(key=lambda x: x['pct'], reverse=True)
         for arb in all_arbs:
-            msg = f"🏆 {arb['sport'].replace('_', ' ').title()}\n📅 {arb['time']}\n📈 {arb['line']}\n\n🔵 ₹{arb['stk1']:.0f} on {arb['s1'].upper()} @ {arb['s1_data']['price']:.2f} [{display_bookie(arb['s1_data']['bookie'])}]\n🔴 ₹{arb['stk2']:.0f} on {arb['s2'].upper()} @ {arb['s2_data']['price']:.2f} [{display_bookie(arb['s2_data']['bookie'])}]\n\n✨ Profit: ₹{arb['profit']:.0f}"
+            msg = f"💎 💰 🚨 {arb['pct']:.2f}% ARB | {arb['match']}\n🏆 {arb['sport'].replace('_', ' ').title()}\n📅 {arb['time']}\n📈 {arb['line']}\n\n🔵 ₹{arb['stk1']:.0f} on {arb['s1'].upper()} @ {arb['s1_data']['price']:.2f} [{display_bookie(arb['s1_data']['bookie'])}]\n🔴 ₹{arb['stk2']:.0f} on {arb['s2'].upper()} @ {arb['s2_data']['price']:.2f} [{display_bookie(arb['s2_data']['bookie'])}]\n\n✨ Profit: ₹{arb['profit']:.0f}"
             send_phone_alert(msg, arb['pct'], arb['match'], "ARB")
 
     if all_evs:
         all_evs.sort(key=lambda x: x['pct'], reverse=True)
         for ev in all_evs:
-            msg = f"🏆 {ev['sport'].replace('_', ' ').title()}\n📅 {ev['time']}\n\n💰 BET EXACTLY: ₹{ev['stake']:.0f}\n👉 {ev['selection'].upper()} {ev['line'].split('_')[1]} @ {ev['odds']:.2f} on {display_bookie(ev['bookie'])}\n\n🧠 True Odds: {ev['true']:.2f}"
+            msg = f"💎 💰 📈 {ev['pct']:.2f}% EV | {ev['match']}\n🏆 {ev['sport'].replace('_', ' ').title()}\n📅 {ev['time']}\n📈 {ev['line']}\n\n💰 BET EXACTLY: ₹{ev['stake']:.0f}\n👉 {ev['selection'].upper()} {ev['line'].split('_')[1]} @ {ev['odds']:.2f} on {display_bookie(ev['bookie'])}\n\n🧠 True Odds: {ev['true']:.2f}"
             send_phone_alert(msg, ev['pct'], ev['match'], "EV")
 
     # Generate the HTML Dashboard
