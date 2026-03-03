@@ -2,7 +2,7 @@ name: Arb Sniper Bot
 
 on:
   schedule:
-    - cron: '0 */8 * * *' 
+    - cron: '30 4-18 * * *' 
   workflow_dispatch: 
 
 permissions:
