@@ -1,406 +1,164 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-    <title>Arb Sniper Live Dashboard</title>
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
-    
-    <style>
-        :root {
-            --bg-main: #0f172a;
-            --bg-card: #1e293b;
-            --bg-hover: #334155;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --accent-blue: #3b82f6;
-            --accent-green: #22c55e;
-            --accent-gold: #fbbf24;
-            --accent-red: #ef4444;
-            --border-color: #334155;
-        }
 
-        body { font-family: 'Inter', -apple-system, sans-serif; background-color: var(--bg-main); color: var(--text-main); margin: 0; padding: 20px; max-width: 850px; margin: auto; }
-        h1 { color: var(--accent-blue); text-align: center; font-size: 32px; font-weight: 800; letter-spacing: -1px; margin-bottom: 5px; text-shadow: 0 0 20px rgba(59, 130, 246, 0.3); }
-        .time { text-align: center; color: var(--text-muted); font-size: 14px; margin-bottom: 25px; font-weight: 600; letter-spacing: 0.5px; }
-        
-        /* Stunning Buttons */
-        .btn-run { 
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%); 
-            color: white; border: none; padding: 14px 28px; font-size: 16px; border-radius: 8px; cursor: pointer; 
-            font-weight: 800; width: 100%; margin-bottom: 12px; transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
-            text-transform: uppercase; letter-spacing: 1px;
-            animation: pulse-glow 2s infinite;
-        }
-        .btn-run:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(16, 185, 129, 0.5); }
-        .btn-run:active { transform: translateY(1px); }
-        
-        .btn-export { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; padding: 12px 20px; font-size: 14px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; margin-bottom: 25px; transition: all 0.2s ease; }
-        .btn-export:hover { box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4); transform: translateY(-1px); }
-
-        /* Sleek Control Bar */
-        .controls-bar { display: flex; align-items: center; gap: 15px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; flex-wrap: wrap; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .controls-bar label { color: var(--text-muted); font-size: 14px; font-weight: 600; }
-        .controls-bar input[type=range] { flex: 1; min-width: 100px; accent-color: var(--accent-blue); cursor: pointer; }
-        .controls-bar span { color: var(--accent-gold); font-weight: 800; font-family: 'JetBrains Mono', monospace; font-size: 16px; min-width: 45px; text-align: right; }
-        
-        .toggle-label { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-main); cursor: pointer; font-weight: 600; padding: 6px 12px; background: var(--bg-main); border-radius: 6px; border: 1px solid var(--border-color); transition: 0.2s; }
-        .toggle-label:hover { border-color: var(--accent-blue); }
-        .toggle-label input { accent-color: var(--accent-blue); width: 18px; height: 18px; cursor: pointer; }
-
-        /* Smooth Tabs */
-        .tabs { display: flex; background: var(--bg-card); border-radius: 10px; padding: 6px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .tab { flex: 1; text-align: center; padding: 12px; cursor: pointer; font-size: 15px; font-weight: 600; color: var(--text-muted); border-radius: 6px; transition: all 0.3s ease; }
-        .tab:hover { color: var(--text-main); }
-        .tab.active { color: #fff; background: var(--bg-hover); box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
-        .tab-content { display: none; opacity: 0; transition: opacity 0.4s ease-out; }
-        .tab-content.active { display: block; opacity: 1; animation: fadeIn 0.5s ease-out forwards; }
-
-        /* Interactive Cards */
-        .card { 
-            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); 
-            border: 1px solid var(--border-color); 
-            border-radius: 12px; 
-            padding: 20px; 
-            margin-bottom: 20px; 
-            font-size: 15px; 
-            line-height: 1.6; 
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
-        }
-        .card:hover { 
-            transform: translateY(-4px) scale(1.01); 
-            box-shadow: 0 12px 24px rgba(0,0,0,0.4); 
-            border-color: #475569; 
-        }
-        
-        /* Add a subtle highlight accent line to the left of cards */
-        .card.ev-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--accent-blue); border-radius: 12px 0 0 12px; }
-        .card.arb-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--accent-gold); border-radius: 12px 0 0 12px; }
-
-        .card-header { font-weight: 800; font-size: 18px; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; display: flex; justify-content: space-between; align-items: center; letter-spacing: -0.5px; }
-        .detail-block { margin-bottom: 15px; color: #cbd5e1; }
-        
-        /* Highlight typography */
-        .highlight { color: var(--accent-blue); font-weight: 800; }
-        .highlight-edge { color: var(--text-main); background: linear-gradient(90deg, #3b82f6, #2563eb); padding: 4px 10px; border-radius: 6px; font-size: 14px; text-shadow: 0 1px 2px rgba(0,0,0,0.2); display: inline-block; }
-        .highlight-arb-edge { color: var(--bg-main); background: linear-gradient(90deg, #fbbf24, #f59e0b); padding: 4px 10px; border-radius: 6px; font-size: 14px; display: inline-block; }
-        
-        .highlight-stake { color: var(--accent-gold); font-weight: 800; font-family: 'JetBrains Mono', monospace; font-size: 16px; background: rgba(251, 191, 36, 0.1); padding: 2px 6px; border-radius: 4px; }
-        .profit-highlight { color: var(--accent-green); font-weight: 800; font-size: 18px; font-family: 'JetBrains Mono', monospace; text-shadow: 0 0 10px rgba(34, 197, 94, 0.2); }
-        
-        /* Badges */
-        .badge { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-        .conf-high { background: linear-gradient(135deg, #10b981, #059669); color: white; }
-        .conf-med { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; }
-        .conf-low { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; }
-        
-        /* Tables */
-        table.breakdown { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 12px; font-size: 13px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); }
-        table.breakdown th, table.breakdown td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border-color); }
-        table.breakdown th { background: rgba(51, 65, 85, 0.5); color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
-        table.breakdown tr:last-child td { border-bottom: none; }
-        table.breakdown tr:hover td { background: rgba(255,255,255,0.03); }
-        
-        /* Progress bars for analytics */
-        .progress-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-        .progress-label { width: 60px; color: var(--text-muted); font-weight: 600; font-size: 13px; }
-        .progress-bar-bg { flex: 1; background: #0f172a; border-radius: 8px; height: 20px; overflow: hidden; border: 1px solid var(--border-color); box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); }
-        .progress-fill { height: 100%; border-radius: 6px; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); }
-        .progress-count { width: 35px; text-align: right; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
-
-        .empty-state { text-align: center; color: var(--text-muted); padding: 40px; font-weight: 600; background: var(--bg-card); border-radius: 12px; border: 2px dashed var(--border-color); font-size: 16px; }
-        .telemetry { text-align: center; margin-top: 50px; padding-top: 25px; border-top: 1px solid var(--border-color); font-size: 13px; color: var(--text-muted); line-height: 1.8; }
-        
-        details summary { cursor: pointer; color: var(--accent-blue); margin-top: 12px; font-size: 14px; font-weight: 600; padding: 8px 0; outline: none; }
-        details summary:hover { text-decoration: underline; }
-        details summary::-webkit-details-marker { color: var(--accent-blue); }
-
-        /* Animations */
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes pulse-glow { 
-            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 
-            70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 
-            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } 
-        }
-        
-        .fade-in-up { opacity: 0; animation: fadeUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
-    </style>
-</head>
-<body>
-    <h1> Arb Sniper Terminal</h1>
-    <div class="time">Last Sweep: 04 Mar 2026, 01:26:41 AM IST</div>
-    
-    
-        <div class="card glass-effect fade-in-up" style="margin-bottom:20px;font-size:14px; animation-delay: 0.1s;">
-            <div class="card-header"> 📊 Daily Bankroll Tracker (2026-03-04)</div>
-            Starting Bankroll: <span class="highlight">₹1500</span><br>
-            Total Stakes Recommended: <span class="highlight-stake">₹6184</span><br>
-            Theoretical ARB Profit: <span class="profit-highlight">₹244.17</span><br>
-            Theoretical EV Exposure: <span class="highlight">₹20.27</span>
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+        <meta http-equiv="Pragma" content="no-cache">
+        <meta http-equiv="Expires" content="0">
+        <title>Arb Sniper Live Dashboard</title>
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0d1117; color: #c9d1d9; margin: 0; padding: 15px; max-width: 800px; margin: auto; }
+            h1 { color: #58a6ff; text-align: center; font-size: 26px; margin-bottom: 5px; }
+            .time { text-align: center; color: #8b949e; font-size: 14px; margin-bottom: 20px; font-weight: bold; }
+           
+            .btn-run { background-color: #238636; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 20px; }
+            .btn-run:active { background-color: #2ea043; }
+           
+            .tabs { display: flex; border-bottom: 1px solid #30363d; margin-bottom: 20px; }
+            .tab { flex: 1; text-align: center; padding: 12px; cursor: pointer; font-size: 16px; font-weight: bold; color: #8b949e; }
+            .tab.active { color: #ffffff; border-bottom: 3px solid #58a6ff; background-color: #161b22; }
+            .tab-content { display: none; }
+            .tab-content.active { display: block; }
+           
+            .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 20px; font-size: 15px; line-height: 1.6; }
+            .card-header { font-weight: bold; font-size: 16px; margin-bottom: 12px; border-bottom: 1px dashed #30363d; padding-bottom: 8px; }
+            .detail-block { margin-bottom: 12px; }
+            .highlight { color: #ffffff; font-weight: bold; }
+            .highlight-stake { color: #e3b341; font-weight: bold; }
+            .profit-highlight { color: #e3b341; font-weight: bold; font-size: 16px; }
+           
+            .empty-state { text-align: center; color: #8b949e; padding: 30px; font-style: italic; background-color: #161b22; border-radius: 8px; border: 1px dashed #30363d; }
+            .telemetry { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #30363d; font-size: 12px; color: #484f58; line-height: 1.6; }
+        </style>
+    </head>
+    <body>
+        <h1>📡 Arb Sniper Terminal</h1>
+        <div class="time">Last Sweep: 04 Mar 2026, 01:36:03 AM IST</div>
+       
+        <button class="btn-run" onclick="triggerScan()">🔄 Launch Cloud Scan Now</button>
+       
+        <div class="tabs">
+            <div class="tab active" id="tab-ev" onclick="switchTab('ev')">💎 EV Edges (2)</div>
+            <div class="tab" id="tab-arb" onclick="switchTab('arb')">🏆 Arbitrage (2)</div>
         </div>
-        
+       
+        <div id="content-ev" class="tab-content active">
     
-    <button class="btn-run" onclick="triggerScan()"> Launch Cloud Scan Now</button>
-    <button class="btn-export" onclick="exportCSV()"> Download CSV Report</button>
-
-    <div class="controls-bar fade-in-up" style="animation-delay: 0.2s;">
-        <label for="kellySlider"> Kelly Fraction:</label>
-        <input type="range" id="kellySlider" min="0" max="100" value="30" oninput="updateKelly(this.value)">
-        <span id="kellyValue">30%</span>
-        
-        <div style="flex-grow:1;"></div>
-        
-        <label class="toggle-label">
-            <input type="checkbox" id="top5Toggle" onchange="renderData()">
-            Top 5 Only
-        </label>
-    </div>
-
-    <div class="tabs fade-in-up" style="animation-delay: 0.3s;">
-        <div class="tab active" id="tab-ev" onclick="switchTab('ev')">💎 EV Edges (<span id="ev-count">0</span>)</div>
-        <div class="tab" id="tab-arb" onclick="switchTab('arb')">🏆 Arbitrage (<span id="arb-count">0</span>)</div>
-        <div class="tab" id="tab-analytics" onclick="switchTab('analytics')">📊 Analytics</div>
-    </div>
-
-    <div id="content-ev" class="tab-content active"></div>
-    <div id="content-arb" class="tab-content"></div>
-    
-    <div id="content-analytics" class="tab-content">
-        <div class="card fade-in-up">
-            <div class="card-header">📈 EV Distribution (Current Scan)</div>
-            <div style="margin-bottom:12px;">
-                <div class="progress-row">
-                    <span class="progress-label">0–2%</span>
-                    <div class="progress-bar-bg">
-                        <div class="progress-fill" style="width:0%;background:linear-gradient(90deg, #3b82f6, #60a5fa);"></div>
-                    </div>
-                    <span class="progress-count">0</span>
+            <div class="card">
+                <div class="card-header">💎 💰 📈 <span class="highlight">11.18% EV</span> | San Jose Sharks vs Montréal Canadiens</div>
+                <div class="detail-block">
+                    🏆 Icehockey Nhl<br>
+                    📅 04 Mar 2026, 08:40 AM<br>
+                    📈 <span class="highlight">TOTALS_6.5</span>
                 </div>
-                <div class="progress-row">
-                    <span class="progress-label">2–5%</span>
-                    <div class="progress-bar-bg">
-                        <div class="progress-fill" style="width:0%;background:linear-gradient(90deg, #10b981, #34d399);"></div>
-                    </div>
-                    <span class="progress-count">0</span>
+                <div class="detail-block">
+                    💰 BET EXACTLY: <span class="highlight-stake">₹45</span><br>
+                    👉 <span class="highlight">OVER 6.5 @ 2.12</span> on 1xBet/Melbet
                 </div>
-                <div class="progress-row">
-                    <span class="progress-label">5–10%</span>
-                    <div class="progress-bar-bg">
-                        <div class="progress-fill" style="width:0%;background:linear-gradient(90deg, #f59e0b, #fbbf24);"></div>
-                    </div>
-                    <span class="progress-count">0</span>
-                </div>
-                <div class="progress-row">
-                    <span class="progress-label">10%+</span>
-                    <div class="progress-bar-bg">
-                        <div class="progress-fill" style="width:20%;background:linear-gradient(90deg, #ef4444, #f87171);"></div>
-                    </div>
-                    <span class="progress-count">2</span>
+                <div>
+                    🧠 True Odds: 1.91
                 </div>
             </div>
-            <div style="margin-top:16px;font-size:15px;color:#cbd5e1; padding-top: 10px; border-top: 1px dashed #334155;">
-                Average EV: <span class="highlight">11.00%</span> &nbsp;|&nbsp; Highest EV: <span class="highlight">11.18%</span>
+            
+            <div class="card">
+                <div class="card-header">💎 💰 📈 <span class="highlight">10.85% EV</span> | Anaheim Ducks vs Colorado Avalanche</div>
+                <div class="detail-block">
+                    🏆 Icehockey Nhl<br>
+                    📅 04 Mar 2026, 08:40 AM<br>
+                    📈 <span class="highlight">TOTALS_6.5</span>
+                </div>
+                <div class="detail-block">
+                    💰 BET EXACTLY: <span class="highlight-stake">₹47</span><br>
+                    👉 <span class="highlight">OVER 6.5 @ 2.04</span> on 1xBet/Melbet
+                </div>
+                <div>
+                    🧠 True Odds: 1.84
+                </div>
             </div>
+            
         </div>
-    </div>
+        <div id="content-arb" class="tab-content">
     
-
-    <div class="telemetry">
-        <strong>SYSTEM TELEMETRY</strong><br>
-        Active Key: #1 | Monthly Quota: 244/500 | Scan Cost: ~8 credits
-    </div>
-
-    <script>
-        const ALL_EVS = [{"pct": 11.177377892030837, "match": "San Jose Sharks vs Montr\u00e9al Canadiens", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "selection": "Over", "odds": 2.12, "true": 1.9068627450980393, "bookie": "onexbet", "stake": 44.90910760190965, "confidence": 50, "clv_pct": -0.007, "ev_breakdown": [{"bookie": "pinnacle", "odds": 1.85, "ev_pct": 0.0, "is_best": false}, {"bookie": "onexbet", "odds": 2.12, "ev_pct": 11.18, "is_best": true}]}, {"pct": 10.821428571428559, "match": "Anaheim Ducks vs Colorado Avalanche", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "selection": "Over", "odds": 2.03, "true": 1.8317757009345794, "bookie": "onexbet", "stake": 47.27808599167818, "confidence": 48, "clv_pct": -0.012, "ev_breakdown": [{"bookie": "pinnacle", "odds": 1.78, "ev_pct": 0.0, "is_best": false}, {"bookie": "onexbet", "odds": 2.03, "ev_pct": 10.82, "is_best": true}]}];
-        const ALL_ARBS = [{"pct": 4.009944293540801, "match": "Anaheim Ducks vs Colorado Avalanche", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "ways": 2, "s1": "Over", "s1_price": 2.03, "s1_bookie": "onexbet", "s2": "Under", "s2_price": 2.14, "s2_bookie": "pinnacle", "s3": "", "s3_price": 0, "s3_bookie": "", "stk1": 769.7841726618705, "stk2": 730.2158273381293, "stk3": 0, "profit": 62.6618705035969}, {"pct": 3.810580836108035, "match": "San Jose Sharks vs Montr\u00e9al Canadiens", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "ways": 2, "s1": "Over", "s1_price": 2.12, "s1_bookie": "onexbet", "s2": "Under", "s2_price": 2.04, "s2_bookie": "pinnacle", "s3": "", "s3_price": 0, "s3_bookie": "", "stk1": 735.5769230769231, "stk2": 764.423076923077, "stk3": 0, "profit": 59.42307692307713}];
-        const bookCaps = {'betway': 300, 'stake': 500, 'onexbet': 400, 'marathonbet': 400, 'dafabet': 350, 'betfair_ex_eu': 600, 'pinnacle': 1000};
-        const totalBankroll = 1500;
-
-        function displayBookie(api_key) {
-            const mapping = {'onexbet': '1xBet/Melbet', 'pinnacle': 'Pinnacle', 'marathonbet': 'Marathonbet', 'dafabet': 'Dafabet', 'stake': 'Stake.com', 'betfair_ex_eu': 'Betfair Exchange', 'betway': 'Betway'};
-            return mapping[api_key] || (api_key.charAt(0).toUpperCase() + api_key.slice(1));
-        }
-
-        function switchTab(tab) {
-            ['ev','arb','analytics'].forEach(t => {
-                document.getElementById('content-'+t).classList.remove('active');
-                document.getElementById('tab-'+t).classList.remove('active');
-            });
-            document.getElementById('content-'+tab).classList.add('active');
-            document.getElementById('tab-'+tab).classList.add('active');
-        }
-
-        function renderData() {
-            let isTop5 = document.getElementById('top5Toggle').checked;
-            let sliderVal = parseInt(document.getElementById('kellySlider').value) / 100;
+            <div class="card">
+                <div class="card-header">💎 💰 🚨 <span class="highlight">4.03% ARB</span> | Anaheim Ducks vs Colorado Avalanche</div>
+                <div class="detail-block">
+                    🏆 Icehockey Nhl<br>
+                    📅 04 Mar 2026, 08:40 AM<br>
+                    📈 <span class="highlight">TOTALS_6.5</span>
+                </div>
+                <div class="detail-block">
+                    🔵 <span class="highlight-stake">₹766</span> on <span class="highlight">OVER @ 2.04</span> [1xBet/Melbet]<br>
+                    🔴 <span class="highlight-stake">₹734</span> on <span class="highlight">UNDER @ 2.13</span> [Pinnacle]
+                </div>
+                <div>
+                    ✨ Profit: <span class="profit-highlight">₹63</span>
+                </div>
+            </div>
             
-            let evLimit = isTop5 ? 5 : ALL_EVS.length;
-            let arbLimit = isTop5 ? 5 : ALL_ARBS.length;
+            <div class="card">
+                <div class="card-header">💎 💰 🚨 <span class="highlight">3.81% ARB</span> | San Jose Sharks vs Montréal Canadiens</div>
+                <div class="detail-block">
+                    🏆 Icehockey Nhl<br>
+                    📅 04 Mar 2026, 08:40 AM<br>
+                    📈 <span class="highlight">TOTALS_6.5</span>
+                </div>
+                <div class="detail-block">
+                    🔵 <span class="highlight-stake">₹736</span> on <span class="highlight">OVER @ 2.12</span> [1xBet/Melbet]<br>
+                    🔴 <span class="highlight-stake">₹764</span> on <span class="highlight">UNDER @ 2.04</span> [Pinnacle]
+                </div>
+                <div>
+                    ✨ Profit: <span class="profit-highlight">₹59</span>
+                </div>
+            </div>
             
-            document.getElementById('ev-count').innerText = ALL_EVS.length;
-            document.getElementById('arb-count').innerText = ALL_ARBS.length;
+        </div>
+       
+        <div class="telemetry">
+            <strong>SYSTEM TELEMETRY</strong><br>
+            Active Key: #1 | Monthly Quota: 236/500 | Scan Cost: ~8 credits
+        </div>
 
-            // --- EV RENDER ---
-            let evHtml = '';
-            for(let i=0; i<Math.min(evLimit, ALL_EVS.length); i++) {
-                let ev = ALL_EVS[i];
-                let true_prob = 1 / ev.true;
-                let b = ev.odds - 1.0;
-                
-                let raw_k = ((b * true_prob - (1-true_prob)) / b) * sliderVal;
-                let max_k = (0.05 / 0.30) * sliderVal; 
-                if (raw_k > max_k) raw_k = max_k;
-                
-                let stake = Math.max(20, totalBankroll * raw_k);
-                if (raw_k <= 0) stake = 0;
-                let cap = bookCaps[ev.bookie] || 1000;
-                stake = Math.min(stake, cap);
-
-                let confClass = ev.confidence >= 75 ? 'conf-high' : (ev.confidence >= 50 ? 'conf-med' : 'conf-low');
-
-                let bdHtml = '<table class="breakdown"><tr><th>Bookmaker</th><th>Odds</th><th>EV%</th></tr>';
-                let sortedBreakdown = Object.entries(ev.ev_breakdown || []).sort((a,b) => b[1].ev_pct - a[1].ev_pct);
-                
-                for(let row of ev.ev_breakdown || []) {
-                    let hl = row.is_best ? 'style="background:rgba(59, 130, 246, 0.15);"' : '';
-                    let bestIcon = row.is_best ? '⭐ ' : '';
-                    bdHtml += `<tr ${hl}><td>${bestIcon}${displayBookie(row.bookie)}</td><td><span class="highlight-stake" style="background:transparent;padding:0;">${row.odds.toFixed(3)}</span></td><td><strong style="color:${row.ev_pct > 0 ? 'var(--accent-green)' : 'var(--text-muted)'}">${row.ev_pct > 0 ? '+' : ''}${row.ev_pct.toFixed(2)}%</strong></td></tr>`;
-                }
-                bdHtml += '</table>';
-
-                let clvStr = ev.clv_pct !== null ? `&nbsp;|&nbsp; Historic CLV: <span class="highlight" style="color:${ev.clv_pct > 0 ? 'var(--accent-green)' : 'var(--accent-red)'}">${ev.clv_pct > 0 ? '+' : ''}${ev.clv_pct.toFixed(2)}%</span>` : '';
-                
-                let delay = 0.1 + (i * 0.05);
-
-                evHtml += `
-                <div class="card ev-card fade-in-up" style="animation-delay: ${delay}s;">
-                    <div class="card-header"> 
-                        <span><span class="highlight-edge">${ev.pct.toFixed(2)}% EV</span> &nbsp;${ev.match}</span>
-                        <span class="badge ${confClass}">Conf: ${ev.confidence.toFixed(0)}/100</span>
-                    </div>
-                    <div class="detail-block" style="display:flex; justify-content:space-between;">
-                        <div>
-                            🏆 <span style="color:#e2e8f0; font-weight:600;">${ev.sport.replace('_', ' ').toUpperCase()}</span><br>
-                            📅 ${ev.time}<br>
-                            📈 Line: <span class="highlight">${ev.line}</span>
-                        </div>
-                        <div style="text-align:right; background:rgba(0,0,0,0.2); padding:10px; border-radius:8px; border:1px solid var(--border-color);">
-                            <span style="font-size:12px; color:var(--text-muted); text-transform:uppercase;">Rec. Stake</span><br>
-                            <span class="highlight-stake stake-display" data-base-stake="${ev.stake.toFixed(2)}" style="font-size:20px;">₹${stake.toFixed(0)}</span><br>
-                            <span style="font-size:11px; color:var(--text-muted);">Cap: ₹${cap}</span>
-                        </div>
-                    </div>
-                    <div class="detail-block" style="background:rgba(59, 130, 246, 0.05); padding:12px; border-radius:8px; border-left:3px solid var(--accent-blue);">
-                        👉 Bet <span class="highlight">${ev.selection.toUpperCase()} ${ (ev.line.split('_')[1] || '').replace('0', '') } @ <span style="font-size:18px;">${ev.odds.toFixed(2)}</span></span> on <strong>${displayBookie(ev.bookie)}</strong>
-                    </div>
-                    <div style="font-size:13px; color:var(--text-muted); margin-top:15px;">
-                        🧠 True Odds: <strong>${ev.true.toFixed(3)}</strong> ${clvStr}
-                        <details><summary>🔍 View Bookmaker Odds Breakdown</summary>${bdHtml}</details>
-                    </div>
-                </div>`;
+        <script>
+            function switchTab(tab) {
+                document.getElementById('content-ev').classList.remove('active');
+                document.getElementById('content-arb').classList.remove('active');
+                document.getElementById('tab-ev').classList.remove('active');
+                document.getElementById('tab-arb').classList.remove('active');
+                document.getElementById('content-' + tab).classList.add('active');
+                document.getElementById('tab-' + tab).classList.add('active');
             }
-            document.getElementById('content-ev').innerHTML = evHtml || '<div class="empty-state">❌ No massive EV edges found right now.</div>';
 
-            // --- ARB RENDER ---
-            let arbHtml = '';
-            for(let i=0; i<Math.min(arbLimit, ALL_ARBS.length); i++) {
-                let arb = ALL_ARBS[i];
-                let is3way = arb.ways === 3;
-                
-                let stks = `
-                    <div style="margin-bottom:6px;">🔵 <span class="highlight-stake">₹${arb.stk1.toFixed(0)}</span> on <span class="highlight">${arb.s1.toUpperCase()} @ ${arb.s1_price.toFixed(2)}</span> [${displayBookie(arb.s1_bookie)}]</div>
-                    <div>🔴 <span class="highlight-stake">₹${arb.stk2.toFixed(0)}</span> on <span class="highlight">${arb.s2.toUpperCase()} @ ${arb.s2_price.toFixed(2)}</span> [${displayBookie(arb.s2_bookie)}]</div>
-                `;
-                if(is3way) {
-                    stks += `<div style="margin-top:6px;">🟢 <span class="highlight-stake">₹${arb.stk3.toFixed(0)}</span> on <span class="highlight">${arb.s3.toUpperCase()} @ ${arb.s3_price.toFixed(2)}</span> [${displayBookie(arb.s3_bookie)}]</div>`;
+            function triggerScan() {
+                let pat = localStorage.getItem('gh_dispatch_token');
+                if (!pat) {
+                    pat = prompt("Enter your GitHub PAT (ghp_...) to authorize this scan:\n(This is safely stored only in your local browser, never public)");
+                    if (!pat) return;
+                    localStorage.setItem('gh_dispatch_token', pat);
                 }
-                
-                let delay = 0.1 + (i * 0.05);
 
-                arbHtml += `
-                <div class="card arb-card fade-in-up" style="animation-delay: ${delay}s;">
-                    <div class="card-header"> 
-                        <span><span class="highlight-arb-edge">${arb.pct.toFixed(2)}% ARB</span> &nbsp;${arb.match}</span>
-                        <span class="badge" style="background:#475569; color:white;">${is3way ? '3-Way' : '2-Way'}</span>
-                    </div>
-                    <div class="detail-block">
-                        🏆 <span style="color:#e2e8f0; font-weight:600;">${arb.sport.replace('_', ' ').toUpperCase()}</span><br>
-                        📅 ${arb.time}<br>
-                        📈 Line: <span class="highlight">${arb.line}</span>
-                    </div>
-                    <div class="detail-block" style="background:rgba(251, 191, 36, 0.05); padding:12px; border-radius:8px; border-left:3px solid var(--accent-gold);">
-                        ${stks}
-                    </div>
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:15px; border-top:1px dashed var(--border-color); padding-top:12px;">
-                        <span style="color:var(--text-muted); font-size:14px; font-weight:600; text-transform:uppercase;">Guaranteed Profit</span>
-                        <span class="profit-highlight" style="font-size:22px;">+ ₹${arb.profit.toFixed(0)}</span>
-                    </div>
-                </div>`;
+                // Make sure to replace nikunj7711 with your exact GitHub username if it is different
+                fetch('https://api.github.com/repos/nikunj7711/arb-sniper/actions/workflows/sniper.yml/dispatches', {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/vnd.github.v3+json',
+                        'Authorization': 'token ' + pat,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ ref: 'main' })
+                })
+                .then(response => {
+                    if(response.ok) {
+                        alert("✅ Engine Fired! Scan is running. Wait 2-3 minutes, then Hard Refresh this page (Ctrl+F5 or pull down to refresh).");
+                    } else {
+                        alert("❌ Authorization failed! Your token might be wrong or expired. Resetting token...");
+                        localStorage.removeItem('gh_dispatch_token');
+                    }
+                })
+                .catch(error => console.error('Error:', error));
             }
-            document.getElementById('content-arb').innerHTML = arbHtml || '<div class="empty-state">❌ No Arbitrage opportunities found right now.</div>';
-        }
-
-        function updateKelly(val) {
-            document.getElementById('kellyValue').textContent = val + '%';
-            renderData(); // Re-render to update stakes across the board and trigger animations
-        }
-
-        function exportCSV() {
-            let rows = [['Type','Match','Sport','Line','Selection','Odds','EV%/ARB%','Stake','Bookmaker']];
-            ALL_EVS.forEach(e => {
-                rows.push(['EV', e.match, e.sport, e.line, e.selection, e.odds, e.pct.toFixed(2), e.stake.toFixed(0), e.bookie]);
-            });
-            ALL_ARBS.forEach(a => {
-                rows.push(['ARB', a.match, a.sport, a.line, a.s1+'/'+a.s2, a.s1_price+'/'+a.s2_price, a.pct.toFixed(2), (a.stk1+a.stk2).toFixed(0), a.s1_bookie+'+'+a.s2_bookie]);
-            });
-            const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\n');
-            const blob = new Blob([csv], {type:'text/csv'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = 'arb_sniper_export.csv'; a.click();
-            URL.revokeObjectURL(url);
-        }
-
-        function triggerScan() {
-            let pat = localStorage.getItem('gh_dispatch_token');
-            if (!pat) {
-                pat = prompt("Enter your GitHub PAT (ghp_...) to authorize this scan:\n(This is safely stored only in your local browser, never public)");
-                if (!pat) return;
-                localStorage.setItem('gh_dispatch_token', pat);
-            }
-            fetch('https://api.github.com/repos/nikunj7711/arb-sniper/actions/workflows/sniper.yml/dispatches', {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/vnd.github.v3+json',
-                    'Authorization': 'token ' + pat,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ ref: 'main' })
-            })
-            .then(response => {
-                if(response.ok) {
-                    alert("✅ Engine Fired! The cloud server is scanning 5 sports simultaneously. Wait 2-3 minutes, then Hard Refresh this page.");
-                } else {
-                    alert("❌ Authorization failed! Your token might be wrong or expired. Resetting token...");
-                    localStorage.removeItem('gh_dispatch_token');
-                }
-            })
-            .catch(error => console.error('Error:', error));
-        }
-
-        // Initialize Render on Load
-        window.onload = function() { renderData(); };
-    </script>
-</body>
-</html>
+        </script>
+    </body>
+    </html>
+    
