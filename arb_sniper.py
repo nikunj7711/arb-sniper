@@ -847,7 +847,6 @@ def generate_web_dashboard(evs, arbs, current_time, bankroll_state=None):
 
                 let clvStr = ev.clv_pct !== null ? `&nbsp;|&nbsp; Historic CLV: <span class="highlight" style="color:${{ev.clv_pct > 0 ? 'var(--accent-green)' : 'var(--accent-red)'}}">${{ev.clv_pct > 0 ? '+' : ''}}${{ev.clv_pct.toFixed(2)}}%</span>` : '';
                 
-                // Add cascade animation delay
                 let delay = 0.1 + (i * 0.05);
 
                 evHtml += `
@@ -869,7 +868,7 @@ def generate_web_dashboard(evs, arbs, current_time, bankroll_state=None):
                         </div>
                     </div>
                     <div class="detail-block" style="background:rgba(59, 130, 246, 0.05); padding:12px; border-radius:8px; border-left:3px solid var(--accent-blue);">
-                        👉 Bet <span class="highlight">${{ev.selection.toUpperCase()}} ${(ev.line.split('_')[1] || '').replace('0', '')} @ <span style="font-size:18px;">${{ev.odds.toFixed(2)}}</span></span> on <strong>${{displayBookie(ev.bookie)}}</strong>
+                        👉 Bet <span class="highlight">${{ev.selection.toUpperCase()}} ${{ (ev.line.split('_')[1] || '').replace('0', '') }} @ <span style="font-size:18px;">${{ev.odds.toFixed(2)}}</span></span> on <strong>${{displayBookie(ev.bookie)}}</strong>
                     </div>
                     <div style="font-size:13px; color:var(--text-muted); margin-top:15px;">
                         🧠 True Odds: <strong>${{ev.true.toFixed(3)}}</strong> ${{clvStr}}
