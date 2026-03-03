@@ -1,164 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>ARB SNIPER ⚡</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#07090f;--surface:#0d1117;--surface2:#141923;--border:#1e2736;--border2:#253044;--cyan:#00c8ff;--green:#00ff88;--gold:#ffd700;--red:#ff4d6d;--purple:#bf5af2;--blue:#58a6ff;--orange:#ff9500;--text:#e2e8f0;--text-muted:#64748b;--text-dim:#94a3b8;}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;position:relative;}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 10% 10%,#00c8ff08 0%,transparent 60%),radial-gradient(ellipse 60% 50% at 90% 80%,#00ff8806 0%,transparent 60%),radial-gradient(ellipse 50% 40% at 50% 50%,#bf5af208 0%,transparent 70%);pointer-events:none;z-index:0;animation:bgPulse 8s ease-in-out infinite alternate;}
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,200,255,0.012) 2px,rgba(0,200,255,0.012) 4px);pointer-events:none;z-index:0;}
+@keyframes bgPulse{0%{opacity:0.6;}100%{opacity:1;}}
+.container{max-width:820px;margin:0 auto;padding:16px 16px 60px;position:relative;z-index:1;}
 
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-        <meta http-equiv="Pragma" content="no-cache">
-        <meta http-equiv="Expires" content="0">
-        <title>Arb Sniper Live Dashboard</title>
-        <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0d1117; color: #c9d1d9; margin: 0; padding: 15px; max-width: 800px; margin: auto; }
-            h1 { color: #58a6ff; text-align: center; font-size: 26px; margin-bottom: 5px; }
-            .time { text-align: center; color: #8b949e; font-size: 14px; margin-bottom: 20px; font-weight: bold; }
-           
-            .btn-run { background-color: #238636; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 20px; }
-            .btn-run:active { background-color: #2ea043; }
-           
-            .tabs { display: flex; border-bottom: 1px solid #30363d; margin-bottom: 20px; }
-            .tab { flex: 1; text-align: center; padding: 12px; cursor: pointer; font-size: 16px; font-weight: bold; color: #8b949e; }
-            .tab.active { color: #ffffff; border-bottom: 3px solid #58a6ff; background-color: #161b22; }
-            .tab-content { display: none; }
-            .tab-content.active { display: block; }
-           
-            .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 20px; font-size: 15px; line-height: 1.6; }
-            .card-header { font-weight: bold; font-size: 16px; margin-bottom: 12px; border-bottom: 1px dashed #30363d; padding-bottom: 8px; }
-            .detail-block { margin-bottom: 12px; }
-            .highlight { color: #ffffff; font-weight: bold; }
-            .highlight-stake { color: #e3b341; font-weight: bold; }
-            .profit-highlight { color: #e3b341; font-weight: bold; font-size: 16px; }
-           
-            .empty-state { text-align: center; color: #8b949e; padding: 30px; font-style: italic; background-color: #161b22; border-radius: 8px; border: 1px dashed #30363d; }
-            .telemetry { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #30363d; font-size: 12px; color: #484f58; line-height: 1.6; }
-        </style>
-    </head>
-    <body>
-        <h1>📡 Arb Sniper Terminal</h1>
-        <div class="time">Last Sweep: 04 Mar 2026, 01:36:03 AM IST</div>
-       
-        <button class="btn-run" onclick="triggerScan()">🔄 Launch Cloud Scan Now</button>
-       
-        <div class="tabs">
-            <div class="tab active" id="tab-ev" onclick="switchTab('ev')">💎 EV Edges (2)</div>
-            <div class="tab" id="tab-arb" onclick="switchTab('arb')">🏆 Arbitrage (2)</div>
-        </div>
-       
-        <div id="content-ev" class="tab-content active">
-    
-            <div class="card">
-                <div class="card-header">💎 💰 📈 <span class="highlight">11.18% EV</span> | San Jose Sharks vs Montréal Canadiens</div>
-                <div class="detail-block">
-                    🏆 Icehockey Nhl<br>
-                    📅 04 Mar 2026, 08:40 AM<br>
-                    📈 <span class="highlight">TOTALS_6.5</span>
-                </div>
-                <div class="detail-block">
-                    💰 BET EXACTLY: <span class="highlight-stake">₹45</span><br>
-                    👉 <span class="highlight">OVER 6.5 @ 2.12</span> on 1xBet/Melbet
-                </div>
-                <div>
-                    🧠 True Odds: 1.91
-                </div>
-            </div>
-            
-            <div class="card">
-                <div class="card-header">💎 💰 📈 <span class="highlight">10.85% EV</span> | Anaheim Ducks vs Colorado Avalanche</div>
-                <div class="detail-block">
-                    🏆 Icehockey Nhl<br>
-                    📅 04 Mar 2026, 08:40 AM<br>
-                    📈 <span class="highlight">TOTALS_6.5</span>
-                </div>
-                <div class="detail-block">
-                    💰 BET EXACTLY: <span class="highlight-stake">₹47</span><br>
-                    👉 <span class="highlight">OVER 6.5 @ 2.04</span> on 1xBet/Melbet
-                </div>
-                <div>
-                    🧠 True Odds: 1.84
-                </div>
-            </div>
-            
-        </div>
-        <div id="content-arb" class="tab-content">
-    
-            <div class="card">
-                <div class="card-header">💎 💰 🚨 <span class="highlight">4.03% ARB</span> | Anaheim Ducks vs Colorado Avalanche</div>
-                <div class="detail-block">
-                    🏆 Icehockey Nhl<br>
-                    📅 04 Mar 2026, 08:40 AM<br>
-                    📈 <span class="highlight">TOTALS_6.5</span>
-                </div>
-                <div class="detail-block">
-                    🔵 <span class="highlight-stake">₹766</span> on <span class="highlight">OVER @ 2.04</span> [1xBet/Melbet]<br>
-                    🔴 <span class="highlight-stake">₹734</span> on <span class="highlight">UNDER @ 2.13</span> [Pinnacle]
-                </div>
-                <div>
-                    ✨ Profit: <span class="profit-highlight">₹63</span>
-                </div>
-            </div>
-            
-            <div class="card">
-                <div class="card-header">💎 💰 🚨 <span class="highlight">3.81% ARB</span> | San Jose Sharks vs Montréal Canadiens</div>
-                <div class="detail-block">
-                    🏆 Icehockey Nhl<br>
-                    📅 04 Mar 2026, 08:40 AM<br>
-                    📈 <span class="highlight">TOTALS_6.5</span>
-                </div>
-                <div class="detail-block">
-                    🔵 <span class="highlight-stake">₹736</span> on <span class="highlight">OVER @ 2.12</span> [1xBet/Melbet]<br>
-                    🔴 <span class="highlight-stake">₹764</span> on <span class="highlight">UNDER @ 2.04</span> [Pinnacle]
-                </div>
-                <div>
-                    ✨ Profit: <span class="profit-highlight">₹59</span>
-                </div>
-            </div>
-            
-        </div>
-       
-        <div class="telemetry">
-            <strong>SYSTEM TELEMETRY</strong><br>
-            Active Key: #1 | Monthly Quota: 236/500 | Scan Cost: ~8 credits
-        </div>
+/* HEADER */
+.header{text-align:center;padding:32px 0 20px;}
+.header-logo{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:6px;color:var(--cyan);text-transform:uppercase;opacity:0.6;margin-bottom:6px;animation:fadeDown 0.6s ease both;}
+.header-title{font-size:38px;font-weight:800;letter-spacing:-1px;background:linear-gradient(135deg,#00c8ff 0%,#00ff88 50%,#ffd700 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:fadeDown 0.6s 0.1s ease both;line-height:1.1;}
+.header-subtitle{font-family:'Space Mono',monospace;font-size:10px;color:var(--text-muted);margin-top:8px;letter-spacing:2px;animation:fadeDown 0.6s 0.2s ease both;}
+.live-dot{display:inline-block;width:7px;height:7px;background:var(--green);border-radius:50%;margin-right:6px;box-shadow:0 0 10px var(--green);animation:livePulse 1.5s ease-in-out infinite;}
+.scan-time{font-family:'Space Mono',monospace;font-size:11px;color:var(--text-muted);margin-top:6px;animation:fadeDown 0.6s 0.3s ease both;}
+@keyframes livePulse{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(1.5);opacity:0.5;}}
+@keyframes fadeDown{from{opacity:0;transform:translateY(-14px);}to{opacity:1;transform:translateY(0);}}
 
-        <script>
-            function switchTab(tab) {
-                document.getElementById('content-ev').classList.remove('active');
-                document.getElementById('content-arb').classList.remove('active');
-                document.getElementById('tab-ev').classList.remove('active');
-                document.getElementById('tab-arb').classList.remove('active');
-                document.getElementById('content-' + tab).classList.add('active');
-                document.getElementById('tab-' + tab).classList.add('active');
-            }
+/* BANKROLL */
+.bankroll-bar{display:flex;background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:14px 20px;margin-bottom:14px;gap:4px;align-items:center;animation:fadeDown 0.6s 0.4s ease both;position:relative;overflow:hidden;}
+.bankroll-bar::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan)44,transparent);}
+.bk-stat{flex:1;text-align:center;}
+.bk-label{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;}
+.bk-val{font-size:17px;font-weight:700;color:var(--text);}
+.bk-yellow{color:var(--gold);text-shadow:0 0 16px #ffd70055;}
+.bk-green{color:var(--green);text-shadow:0 0 16px #00ff8855;}
+.bk-blue{color:var(--cyan);text-shadow:0 0 16px #00c8ff55;}
+.bk-divider{width:1px;height:36px;background:var(--border2);flex-shrink:0;}
 
-            function triggerScan() {
-                let pat = localStorage.getItem('gh_dispatch_token');
-                if (!pat) {
-                    pat = prompt("Enter your GitHub PAT (ghp_...) to authorize this scan:\n(This is safely stored only in your local browser, never public)");
-                    if (!pat) return;
-                    localStorage.setItem('gh_dispatch_token', pat);
-                }
+/* BUTTONS */
+.btn-row{display:flex;gap:10px;margin-bottom:14px;animation:fadeDown 0.6s 0.5s ease both;}
+.btn-scan{flex:2;background:linear-gradient(135deg,#00c8ff18,#00ff8810);border:1px solid var(--cyan);color:var(--cyan);padding:14px 20px;font-size:15px;font-weight:700;font-family:'Outfit',sans-serif;border-radius:12px;cursor:pointer;letter-spacing:0.5px;transition:all 0.25s ease;text-shadow:0 0 12px var(--cyan);box-shadow:0 0 20px #00c8ff0e,inset 0 1px 0 #00c8ff22;position:relative;overflow:hidden;}
+.btn-scan::after{content:'';position:absolute;top:-50%;left:-60%;width:40%;height:200%;background:linear-gradient(105deg,transparent,rgba(0,200,255,0.12),transparent);transform:skewX(-20deg);transition:left 0.5s ease;}
+.btn-scan:hover::after{left:130%;}
+.btn-scan:hover{background:linear-gradient(135deg,#00c8ff28,#00ff8820);box-shadow:0 0 32px #00c8ff20,inset 0 1px 0 #00c8ff44;transform:translateY(-2px);}
+.btn-scan:active{transform:translateY(0);}
+.btn-scan:disabled{opacity:0.5;cursor:not-allowed;}
+.btn-export{flex:1;background:linear-gradient(135deg,#ffd70010,#ff950010);border:1px solid var(--gold);color:var(--gold);padding:14px 16px;font-size:14px;font-weight:700;font-family:'Outfit',sans-serif;border-radius:12px;cursor:pointer;transition:all 0.25s ease;text-shadow:0 0 12px var(--gold);}
+.btn-export:hover{background:linear-gradient(135deg,#ffd70022,#ff950022);transform:translateY(-2px);box-shadow:0 0 20px #ffd70018;}
 
-                // Make sure to replace nikunj7711 with your exact GitHub username if it is different
-                fetch('https://api.github.com/repos/nikunj7711/arb-sniper/actions/workflows/sniper.yml/dispatches', {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/vnd.github.v3+json',
-                        'Authorization': 'token ' + pat,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ ref: 'main' })
-                })
-                .then(response => {
-                    if(response.ok) {
-                        alert("✅ Engine Fired! Scan is running. Wait 2-3 minutes, then Hard Refresh this page (Ctrl+F5 or pull down to refresh).");
-                    } else {
-                        alert("❌ Authorization failed! Your token might be wrong or expired. Resetting token...");
-                        localStorage.removeItem('gh_dispatch_token');
-                    }
-                })
-                .catch(error => console.error('Error:', error));
-            }
-        </script>
-    </body>
-    </html>
-    
+/* CONTROLS */
+.controls-bar{background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:14px 20px;margin-bottom:14px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;animation:fadeDown 0.6s 0.55s ease both;}
+.ctrl-group{display:flex;align-items:center;gap:10px;flex:1;min-width:200px;}
+.ctrl-label{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:1px;color:var(--text-muted);white-space:nowrap;}
+.kelly-slider{flex:1;-webkit-appearance:none;height:4px;border-radius:2px;background:linear-gradient(90deg,var(--cyan) var(--pct,30%),var(--border2) var(--pct,30%));outline:none;cursor:pointer;}
+.kelly-slider::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--bg);border:2px solid var(--cyan);box-shadow:0 0 12px var(--cyan),0 0 24px #00c8ff44;cursor:pointer;transition:transform 0.15s ease;}
+.kelly-slider::-webkit-slider-thumb:active{transform:scale(1.3);}
+.kelly-val{font-family:'Space Mono',monospace;font-size:15px;font-weight:700;color:var(--cyan);min-width:40px;text-align:right;text-shadow:0 0 10px var(--cyan);}
+.toggle-wrap{display:flex;align-items:center;gap:10px;cursor:pointer;}
+.toggle-switch{position:relative;width:42px;height:24px;flex-shrink:0;}
+.toggle-switch input{opacity:0;width:0;height:0;position:absolute;}
+.toggle-track{position:absolute;inset:0;background:var(--border2);border-radius:12px;transition:all 0.3s ease;cursor:pointer;border:1px solid var(--border);}
+.toggle-track::after{content:'';position:absolute;left:4px;top:4px;width:14px;height:14px;background:var(--text-muted);border-radius:50%;transition:all 0.3s ease;}
+.toggle-switch input:checked+.toggle-track{background:var(--cyan);border-color:var(--cyan);box-shadow:0 0 14px #00c8ff44;}
+.toggle-switch input:checked+.toggle-track::after{transform:translateX(18px);background:white;}
+.toggle-lbl{font-size:13px;color:var(--text-dim);font-weight:600;}
+
+/* TABS */
+.tabs{display:flex;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:4px;margin-bottom:18px;gap:3px;animation:fadeDown 0.6s 0.6s ease both;}
+.tab{flex:1;text-align:center;padding:10px 6px;cursor:pointer;font-size:13px;font-weight:700;color:var(--text-muted);border-radius:10px;transition:all 0.25s ease;white-space:nowrap;}
+.tab:hover{color:var(--text-dim);background:var(--surface2);}
+.tab.active{color:#000;background:linear-gradient(135deg,#00c8ff,#0099dd);box-shadow:0 2px 14px #00c8ff44;}
+.tab.active-arb{color:#000;background:linear-gradient(135deg,#bf5af2,#8b3dbb);box-shadow:0 2px 14px #bf5af244;}
+.tab.active-analytics{color:#000;background:linear-gradient(135deg,#ffd700,#ff9500);box-shadow:0 2px 14px #ffd70044;}
+.tab-badge{display:inline-block;background:rgba(0,0,0,0.22);border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;font-weight:800;}
+.tab-content{display:none;}
+.tab-content.active{display:block;}
+
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;margin-bottom:16px;overflow:hidden;position:relative;animation:cardIn 0.45s ease both;transition:border-color 0.25s ease,transform 0.2s ease,box-shadow 0.2s ease;}
+.card:hover{border-color:var(--border2);transform:translateY(-3px);box-shadow:0 10px 40px rgba(0,0,0,0.5),0 0 0 1px var(--border2);}
+@keyframes cardIn{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:translateY(0);}}
+.card-rank-stripe{height:3px;width:100%;}
+.rank-gold{background:linear-gradient(90deg,#ffd700,#ff9500,#ffd700);background-size:200%;animation:shimmer 2s linear infinite;}
+.rank-silver{background:linear-gradient(90deg,#94a3b8,#e2e8f0,#94a3b8);background-size:200%;animation:shimmer 2.5s linear infinite;}
+.rank-bronze{background:linear-gradient(90deg,#b56b27,#e8a870,#b56b27);background-size:200%;animation:shimmer 3s linear infinite;}
+.arb-stripe{background:linear-gradient(90deg,#bf5af2,#00c8ff,#bf5af2);background-size:200%;animation:shimmer 2.5s linear infinite;}
+@keyframes shimmer{0%{background-position:-200% center;}100%{background-position:200% center;}}
+.card-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;gap:12px;}
+.card-header-left{display:flex;align-items:flex-start;gap:10px;flex:1;min-width:0;}
+.sport-icon{font-size:24px;flex-shrink:0;margin-top:1px;}
+.match-name{font-size:15px;font-weight:700;color:var(--text);line-height:1.3;overflow-wrap:break-word;}
+.match-meta{font-size:10px;color:var(--text-muted);margin-top:3px;font-family:'Space Mono',monospace;letter-spacing:0.5px;}
+.ev-badge{font-family:'Space Mono',monospace;font-size:22px;font-weight:700;flex-shrink:0;border:1px solid currentColor;border-radius:10px;padding:6px 12px;text-align:center;min-width:82px;background:rgba(0,0,0,0.3);line-height:1;}
+.arb-badge{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0;}
+.ways-tag{font-size:10px;font-weight:800;font-family:'Space Mono',monospace;padding:2px 7px;border-radius:6px;border:1px solid;letter-spacing:1px;}
+.card-body{padding:0 16px 16px;}
+.line-pill{display:inline-block;background:linear-gradient(135deg,#00c8ff10,#00ff8810);border:1px solid #00c8ff30;color:var(--cyan);font-family:'Space Mono',monospace;font-size:11px;padding:4px 11px;border-radius:20px;letter-spacing:1px;margin-bottom:12px;}
+.arb-line-pill{background:linear-gradient(135deg,#bf5af210,#00c8ff10);border-color:#bf5af230;color:var(--purple);}
+.bet-row{display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:10px;gap:8px;flex-wrap:wrap;}
+.bet-info{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.bet-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.5px;color:var(--text-muted);}
+.bet-selection{font-size:17px;font-weight:800;color:var(--text);letter-spacing:0.5px;}
+.bet-point{font-size:13px;color:var(--text-dim);font-family:'Space Mono',monospace;}
+.bet-odds{font-size:15px;font-weight:700;color:var(--gold);text-shadow:0 0 10px #ffd70066;}
+.bookie-tag{background:linear-gradient(135deg,#ffd70010,#ff950010);border:1px solid #ffd70030;color:var(--gold);font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px;white-space:nowrap;}
+.stake-row{display:flex;gap:10px;margin-bottom:10px;}
+.stake-block,.true-odds-block{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
+.stake-label{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text-muted);text-transform:uppercase;display:block;margin-bottom:3px;}
+.stake-amount{font-size:24px;font-weight:800;color:var(--gold);text-shadow:0 0 16px #ffd70055;font-family:'Space Mono',monospace;transition:all 0.25s ease;display:block;}
+.true-val{font-size:20px;font-weight:700;color:var(--text-dim);font-family:'Space Mono',monospace;display:block;}
+.conf-section{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;}
+.conf-bar-wrap{display:flex;align-items:center;gap:7px;flex:1;min-width:150px;}
+.conf-label{font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:1px;min-width:32px;}
+.conf-bar-track{flex:1;height:6px;background:var(--border2);border-radius:3px;overflow:hidden;}
+.conf-bar-fill{height:100%;border-radius:3px;animation:barFill 0.9s ease both;}
+@keyframes barFill{from{width:0!important;}}
+.conf-num{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;min-width:24px;text-align:right;}
+.clv-badge{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:8px;border:1px solid;white-space:nowrap;}
+.breakdown-wrap{margin-top:10px;border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.breakdown-table{width:100%;border-collapse:collapse;font-size:12px;}
+.breakdown-table th{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--text-muted);padding:8px 12px;text-align:left;background:var(--surface2);text-transform:uppercase;}
+.breakdown-table td{padding:7px 12px;border-top:1px solid var(--border);color:var(--text-dim);}
+.breakdown-table tr:hover td{background:var(--surface2);}
+.breakdown-best td{color:var(--cyan)!important;font-weight:700;}
+.legs-table{background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:10px;}
+.leg-row{display:grid;grid-template-columns:1fr auto auto auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);}
+.leg-row:last-child{border-bottom:none;}
+.leg-side{font-size:14px;font-weight:800;color:var(--text);letter-spacing:0.5px;}
+.leg-odds{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:var(--gold);text-shadow:0 0 8px #ffd70055;}
+.leg-stake{font-family:'Space Mono',monospace;font-size:15px;font-weight:700;color:var(--cyan);text-shadow:0 0 8px #00c8ff55;transition:all 0.25s ease;}
+.leg-book{font-size:11px;color:var(--text-muted);background:var(--surface);border:1px solid var(--border2);padding:3px 8px;border-radius:6px;white-space:nowrap;}
+.profit-row{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#00ff8810,#00c8ff08);border:1px solid #00ff8830;border-radius:10px;padding:12px 16px;}
+.profit-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.5px;color:var(--text-muted);text-transform:uppercase;}
+.profit-val{font-family:'Space Mono',monospace;font-size:26px;font-weight:700;color:var(--green);text-shadow:0 0 20px #00ff8866;}
+.empty-state{text-align:center;padding:60px 20px;background:var(--surface);border:1px dashed var(--border2);border-radius:16px;animation:cardIn 0.5s ease both;}
+.empty-icon{font-size:48px;margin-bottom:14px;opacity:0.45;animation:float 3s ease-in-out infinite;}
+@keyframes float{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
+.empty-state>div:nth-child(2){font-size:16px;font-weight:600;color:var(--text-dim);margin-bottom:6px;}
+.empty-sub{font-size:12px;color:var(--text-muted);font-family:'Space Mono',monospace;letter-spacing:1px;}
+.analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+@media(max-width:540px){.analytics-grid{grid-template-columns:1fr;}}
+.analytics-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;animation:cardIn 0.5s 0.1s ease both;}
+.an-title{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text-muted);text-transform:uppercase;margin-bottom:16px;}
+.histogram{display:flex;flex-direction:column;gap:12px;}
+.hist-row{display:flex;align-items:center;gap:8px;}
+.hist-label{font-family:'Space Mono',monospace;font-size:10px;color:var(--text-muted);width:36px;flex-shrink:0;}
+.hist-track{flex:1;height:14px;background:var(--border2);border-radius:7px;overflow:hidden;}
+.hist-bar{height:100%;border-radius:7px;animation:barFill 1s ease both;min-width:3px;}
+.hist-count{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--text-dim);width:20px;text-align:right;}
+.analytics-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.an-stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 14px;animation:cardIn 0.5s ease both;transition:all 0.2s ease;}
+.an-stat-card:hover{border-color:var(--border2);transform:translateY(-2px);}
+.an-stat-label{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;}
+.an-stat-val{font-family:'Space Mono',monospace;font-size:26px;font-weight:700;line-height:1;}
+.telemetry{margin-top:40px;padding:14px 20px;background:var(--surface);border:1px solid var(--border);border-radius:14px;font-family:'Space Mono',monospace;font-size:10px;color:var(--text-muted);letter-spacing:1px;display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;justify-content:center;position:relative;overflow:hidden;}
+.telemetry::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--border2),transparent);}
+.tele-item{white-space:nowrap;}
+.tele-val{color:var(--cyan);font-weight:700;}
+::-webkit-scrollbar{width:5px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+@media(max-width:480px){.header-title{font-size:28px;}.ev-badge{font-size:18px;min-width:70px;}.leg-row{grid-template-columns:1fr auto auto;}.leg-book{display:none;}.stake-amount{font-size:20px;}.bk-val{font-size:14px;}.bankroll-bar{padding:12px 10px;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="header-logo">Quantitative Betting Intelligence</div>
+    <div class="header-title">⚡ ARB SNIPER</div>
+    <div class="header-subtitle"><span class="live-dot"></span>LIVE MARKET SCANNER · IST</div>
+    <div class="scan-time">Last Sweep: 04 Mar 2026, 01:39:42 AM IST</div>
+  </div>
+
+  <div class="bankroll-bar">
+  <div class="bk-stat"><div class="bk-label">BANKROLL</div><div class="bk-val">₹1500</div></div>
+  <div class="bk-divider"></div>
+  <div class="bk-stat"><div class="bk-label">STAKES TODAY</div><div class="bk-val bk-yellow">₹9276</div></div>
+  <div class="bk-divider"></div>
+  <div class="bk-stat"><div class="bk-label">ARB PROFIT</div><div class="bk-val bk-green">₹367</div></div>
+  <div class="bk-divider"></div>
+  <div class="bk-stat"><div class="bk-label">EV EXPOSURE</div><div class="bk-val bk-blue">₹30</div></div>
+</div>
+
+  <div class="btn-row">
+    <button class="btn-scan" onclick="triggerScan()">⚡ Launch Cloud Scan</button>
+    <button class="btn-export" onclick="exportCSV()">⬇ Export CSV</button>
+  </div>
+
+  <div class="controls-bar">
+    <div class="ctrl-group">
+      <span class="ctrl-label">KELLY %</span>
+      <input type="range" class="kelly-slider" id="kellySlider" min="0" max="100" value="30" oninput="updateKelly(this.value)" style="--pct:30%">
+      <span class="kelly-val" id="kellyValue">30%</span>
+    </div>
+    <label class="toggle-wrap" for="top5Toggle">
+      <div class="toggle-switch">
+        <input type="checkbox" id="top5Toggle" onchange="applyTop5()">
+        <div class="toggle-track"></div>
+      </div>
+      <span class="toggle-lbl">Top 5 Only</span>
+    </label>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" id="tab-ev" onclick="switchTab('ev')">⚡ EV Edges <span class="tab-badge">2</span></div>
+    <div class="tab" id="tab-arb" onclick="switchTab('arb')">🔒 Arbitrage <span class="tab-badge">2</span></div>
+    <div class="tab" id="tab-analytics" onclick="switchTab('analytics')">📊 Analytics</div>
+  </div>
+
+  <div id="content-ev" class="tab-content active">
+    <div id="ev-cards"><div class="card ev-card" data-pct="11.177377892030837" data-stake="44.91" style="animation-delay:0.0s">
+  <div class="card-rank-stripe rank-gold"></div>
+  <div class="card-header">
+    <div class="card-header-left"><span class="sport-icon">🏒</span><div><div class="match-name">San Jose Sharks vs Montréal Canadiens</div><div class="match-meta">Icehockey Nhl · 04 Mar 2026, 08:40 AM</div></div></div>
+    <div class="ev-badge" style="color:#ff4d6d;border-color:#ff4d6d44;text-shadow:0 0 14px #ff4d6d88;">11.18%</div>
+  </div>
+  <div class="card-body">
+    <div class="line-pill">TOTALS_6.5</div>
+    <div class="bet-row">
+      <div class="bet-info"><span class="bet-label">BET ON</span><span class="bet-selection">OVER</span><span class="bet-point">@ 6.5</span><span class="bet-odds">× 2.12</span></div>
+      <div class="bookie-tag">1xBet/Melbet</div>
+    </div>
+    <div class="stake-row">
+      <div class="stake-block"><span class="stake-label">KELLY STAKE</span><span class="stake-amount stake-display" data-base-stake="44.91">₹45</span></div>
+      <div class="true-odds-block"><span class="stake-label">TRUE ODDS</span><span class="true-val">1.907</span></div>
+    </div>
+    <div class="conf-section"><span class="stake-label">CONFIDENCE</span><div class="conf-bar-wrap"><span class="conf-label" style="color:#ffd700">MED</span><div class="conf-bar-track"><div class="conf-bar-fill" style="width:50%;background:#ffd700;box-shadow:0 0 8px #ffd70088;"></div></div><span class="conf-num" style="color:#ffd700">50</span></div><span class="clv-badge" style="color:#ff4d6d;border-color:#ff4d6d88;">CLV -0.01%</span></div>
+    <div class="breakdown-wrap"><table class="breakdown-table"><thead><tr><th>Book</th><th>Odds</th><th>EV%</th></tr></thead><tbody><tr><td>Pinnacle</td><td>1.850</td><td>0.00%</td></tr><tr class="breakdown-best"><td>1xBet/Melbet</td><td>2.120</td><td>+11.18%</td></tr></tbody></table></div>
+  </div>
+</div><div class="card ev-card" data-pct="10.846938775510218" data-stake="46.93" style="animation-delay:0.07s">
+  <div class="card-rank-stripe rank-silver"></div>
+  <div class="card-header">
+    <div class="card-header-left"><span class="sport-icon">🏒</span><div><div class="match-name">Anaheim Ducks vs Colorado Avalanche</div><div class="match-meta">Icehockey Nhl · 04 Mar 2026, 08:40 AM</div></div></div>
+    <div class="ev-badge" style="color:#ff4d6d;border-color:#ff4d6d44;text-shadow:0 0 14px #ff4d6d88;">10.85%</div>
+  </div>
+  <div class="card-body">
+    <div class="line-pill">TOTALS_6.5</div>
+    <div class="bet-row">
+      <div class="bet-info"><span class="bet-label">BET ON</span><span class="bet-selection">OVER</span><span class="bet-point">@ 6.5</span><span class="bet-odds">× 2.04</span></div>
+      <div class="bookie-tag">1xBet/Melbet</div>
+    </div>
+    <div class="stake-row">
+      <div class="stake-block"><span class="stake-label">KELLY STAKE</span><span class="stake-amount stake-display" data-base-stake="46.93">₹47</span></div>
+      <div class="true-odds-block"><span class="stake-label">TRUE ODDS</span><span class="true-val">1.840</span></div>
+    </div>
+    <div class="conf-section"><span class="stake-label">CONFIDENCE</span><div class="conf-bar-wrap"><span class="conf-label" style="color:#ffd700">MED</span><div class="conf-bar-track"><div class="conf-bar-fill" style="width:48%;background:#ffd700;box-shadow:0 0 8px #ffd70088;"></div></div><span class="conf-num" style="color:#ffd700">48</span></div><span class="clv-badge" style="color:#00ff88;border-color:#00ff8888;">CLV +0.02%</span></div>
+    <div class="breakdown-wrap"><table class="breakdown-table"><thead><tr><th>Book</th><th>Odds</th><th>EV%</th></tr></thead><tbody><tr><td>Pinnacle</td><td>1.790</td><td>0.00%</td></tr><tr class="breakdown-best"><td>1xBet/Melbet</td><td>2.040</td><td>+10.85%</td></tr></tbody></table></div>
+  </div>
+</div></div>
+  </div>
+  <div id="content-arb" class="tab-content">
+    <div id="arb-cards"><div class="card arb-card" style="animation-delay:0.0s">
+  <div class="card-rank-stripe arb-stripe"></div>
+  <div class="card-header">
+    <div class="card-header-left"><span class="sport-icon">🏒</span><div><div class="match-name">Anaheim Ducks vs Colorado Avalanche</div><div class="match-meta">Icehockey Nhl · 04 Mar 2026, 08:40 AM</div></div></div>
+    <div class="arb-badge"><span style="color:#00c8ff;font-family:'Space Mono',monospace;font-size:22px;font-weight:700;">4.03%</span><span class="ways-tag" style="background:#00c8ff22;color:#00c8ff;border-color:#00c8ff44">2W</span></div>
+  </div>
+  <div class="card-body">
+    <div class="line-pill arb-line-pill">TOTALS_6.5</div>
+    <div class="legs-table"><div class="leg-row"><div class="leg-side">OVER</div><div class="leg-odds">@ 2.04</div><div class="leg-stake stake-display" data-base-stake="766.19">₹766</div><div class="leg-book">1xBet/Melbet</div></div><div class="leg-row"><div class="leg-side">UNDER</div><div class="leg-odds">@ 2.13</div><div class="leg-stake stake-display" data-base-stake="733.81">₹734</div><div class="leg-book">Pinnacle</div></div></div>
+    <div class="profit-row"><span class="profit-label">GUARANTEED PROFIT</span><span class="profit-val">₹63</span></div>
+  </div>
+</div><div class="card arb-card" style="animation-delay:0.07s">
+  <div class="card-rank-stripe arb-stripe"></div>
+  <div class="card-header">
+    <div class="card-header-left"><span class="sport-icon">🏒</span><div><div class="match-name">San Jose Sharks vs Montréal Canadiens</div><div class="match-meta">Icehockey Nhl · 04 Mar 2026, 08:40 AM</div></div></div>
+    <div class="arb-badge"><span style="color:#00c8ff;font-family:'Space Mono',monospace;font-size:22px;font-weight:700;">3.81%</span><span class="ways-tag" style="background:#00c8ff22;color:#00c8ff;border-color:#00c8ff44">2W</span></div>
+  </div>
+  <div class="card-body">
+    <div class="line-pill arb-line-pill">TOTALS_6.5</div>
+    <div class="legs-table"><div class="leg-row"><div class="leg-side">OVER</div><div class="leg-odds">@ 2.12</div><div class="leg-stake stake-display" data-base-stake="735.58">₹736</div><div class="leg-book">1xBet/Melbet</div></div><div class="leg-row"><div class="leg-side">UNDER</div><div class="leg-odds">@ 2.04</div><div class="leg-stake stake-display" data-base-stake="764.42">₹764</div><div class="leg-book">Pinnacle</div></div></div>
+    <div class="profit-row"><span class="profit-label">GUARANTEED PROFIT</span><span class="profit-val">₹59</span></div>
+  </div>
+</div></div>
+  </div>
+  <div id="content-analytics" class="tab-content">
+  <div class="analytics-grid">
+    <div class="analytics-card">
+      <div class="an-title">EV Distribution · Current Scan</div>
+      <div class="histogram">
+        <div class="hist-row"><span class="hist-label">0–2%</span><div class="hist-track"><div class="hist-bar" style="width:0%;background:linear-gradient(90deg,#58a6ff,#00c8ff);"></div></div><span class="hist-count">0</span></div>
+        <div class="hist-row"><span class="hist-label">2–5%</span><div class="hist-track"><div class="hist-bar" style="width:0%;background:linear-gradient(90deg,#00ff88,#00c8ff);"></div></div><span class="hist-count">0</span></div>
+        <div class="hist-row"><span class="hist-label">5–10%</span><div class="hist-track"><div class="hist-bar" style="width:0%;background:linear-gradient(90deg,#ffd700,#ff9500);"></div></div><span class="hist-count">0</span></div>
+        <div class="hist-row"><span class="hist-label">10%+</span><div class="hist-track"><div class="hist-bar" style="width:100%;background:linear-gradient(90deg,#ff4d6d,#ff6b35);"></div></div><span class="hist-count">2</span></div>
+      </div>
+    </div>
+    <div class="analytics-stats">
+      <div class="an-stat-card"><div class="an-stat-label">TOTAL EDGES</div><div class="an-stat-val" style="color:#00c8ff">2</div></div>
+      <div class="an-stat-card"><div class="an-stat-label">AVERAGE EV</div><div class="an-stat-val" style="color:#00ff88">11.01%</div></div>
+      <div class="an-stat-card"><div class="an-stat-label">PEAK EV</div><div class="an-stat-val" style="color:#ffd700">11.18%</div></div>
+      <div class="an-stat-card"><div class="an-stat-label">ARB OPPS</div><div class="an-stat-val" style="color:#bf5af2">2</div></div>
+    </div>
+  </div>
+</div>
+
+  <div class="telemetry">
+    <span class="tele-item">🔑 KEY <span class="tele-val">#1</span></span>
+    <span class="tele-item">📡 QUOTA <span class="tele-val">228/500</span></span>
+    <span class="tele-item">⚡ SCAN COST <span class="tele-val">~8 credits</span></span>
+    <span class="tele-item">🏦 BANKROLL <span class="tele-val">₹1500</span></span>
+  </div>
+</div>
+
+<script>
+const ALL_EVS=[{"pct": 11.177377892030837, "match": "San Jose Sharks vs Montr\u00e9al Canadiens", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "selection": "Over", "odds": 2.12, "true": 1.9068627450980393, "bookie": "onexbet", "stake": 44.90910760190965, "confidence": 50, "clv_pct": -0.007}, {"pct": 10.846938775510218, "match": "Anaheim Ducks vs Colorado Avalanche", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "selection": "Over", "odds": 2.04, "true": 1.84037558685446, "bookie": "onexbet", "stake": 46.933869701726856, "confidence": 48, "clv_pct": 0.02}];
+const ALL_ARBS=[{"pct": 4.032035349351015, "match": "Anaheim Ducks vs Colorado Avalanche", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "ways": 2, "s1": "Over", "s1_price": 2.04, "s1_bookie": "onexbet", "s2": "Under", "s2_price": 2.13, "s2_bookie": "pinnacle", "s3": "", "s3_price": 0, "s3_bookie": "", "stk1": 766.1870503597123, "stk2": 733.8129496402879, "stk3": 0, "profit": 63.02158273381315}, {"pct": 3.810580836108035, "match": "San Jose Sharks vs Montr\u00e9al Canadiens", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "ways": 2, "s1": "Over", "s1_price": 2.12, "s1_bookie": "onexbet", "s2": "Under", "s2_price": 2.04, "s2_bookie": "pinnacle", "s3": "", "s3_price": 0, "s3_bookie": "", "stk1": 735.5769230769231, "stk2": 764.423076923077, "stk3": 0, "profit": 59.42307692307713}];
+
+function switchTab(tab){
+  const tabMap={ev:'active',arb:'active-arb',analytics:'active-analytics'};
+  ['ev','arb','analytics'].forEach(t=>{
+    document.getElementById('content-'+t).classList.remove('active');
+    const el=document.getElementById('tab-'+t);
+    el.classList.remove('active','active-arb','active-analytics');
+  });
+  document.getElementById('content-'+tab).classList.add('active');
+  document.getElementById('tab-'+tab).classList.add(tabMap[tab]);
+}
+
+function triggerScan(){
+  let pat=localStorage.getItem('gh_dispatch_token');
+  if(!pat){
+    pat=prompt("Enter your GitHub PAT (ghp_...) to authorize this scan:\n(Stored only in your browser — never public)");
+    if(!pat) return;
+    localStorage.setItem('gh_dispatch_token',pat);
+  }
+  const btn=document.querySelector('.btn-scan');
+  btn.textContent='⏳ Firing engine...';
+  btn.disabled=true;
+  fetch('https://api.github.com/repos/nikunj7711/arb-sniper/actions/workflows/sniper.yml/dispatches',{
+    method:'POST',
+    headers:{'Accept':'application/vnd.github.v3+json','Authorization':'token '+pat,'Content-Type':'application/json'},
+    body:JSON.stringify({ref:'main'})
+  })
+  .then(r=>{
+    btn.textContent='⚡ Launch Cloud Scan';
+    btn.disabled=false;
+    if(r.ok){alert("✅ Engine fired! Scan running — wait 2–3 mins then Ctrl+F5 to refresh.");}
+    else{alert("❌ Auth failed. Token may be expired. Clearing stored token...");localStorage.removeItem('gh_dispatch_token');}
+  })
+  .catch(()=>{btn.textContent='⚡ Launch Cloud Scan';btn.disabled=false;});
+}
+
+let currentKelly=0.30;
+function updateKelly(val){
+  currentKelly=val/100;
+  document.getElementById('kellyValue').textContent=val+'%';
+  document.getElementById('kellySlider').style.setProperty('--pct',val+'%');
+  document.querySelectorAll('.stake-display').forEach(el=>{
+    const base=parseFloat(el.getAttribute('data-base-stake'));
+    el.textContent='₹'+Math.round(base*(currentKelly/0.30));
+  });
+}
+
+function applyTop5(){
+  const top5=document.getElementById('top5Toggle').checked;
+  document.querySelectorAll('#ev-cards .ev-card').forEach((c,i)=>{c.style.display=(top5&&i>=5)?'none':'';});
+  document.querySelectorAll('#arb-cards .arb-card').forEach((c,i)=>{c.style.display=(top5&&i>=5)?'none':'';});
+}
+
+function exportCSV(){
+  let rows=[['Type','Match','Sport','Line','Selection','Odds','EV%/ARB%','Stake','Bookmaker','Confidence','CLV%']];
+  ALL_EVS.forEach(e=>{rows.push(['EV',e.match,e.sport,e.line,e.selection,e.odds,e.pct.toFixed(2),e.stake.toFixed(0),e.bookie,e.confidence,e.clv_pct??'']);});
+  ALL_ARBS.forEach(a=>{rows.push(['ARB',a.match,a.sport,a.line,a.s1+'/'+a.s2,a.s1_price+'/'+a.s2_price,a.pct.toFixed(2),(a.stk1+a.stk2).toFixed(0),a.s1_bookie+'+'+a.s2_bookie,'','']);});
+  const csv=rows.map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='arb_sniper_export.csv';a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
