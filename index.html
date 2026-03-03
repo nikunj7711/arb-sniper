@@ -1,291 +1,285 @@
-
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-        <meta http-equiv="Pragma" content="no-cache">
-        <meta http-equiv="Expires" content="0">
-        <title>Arb Sniper Live Dashboard</title>
-        <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0d1117; color: #c9d1d9; margin: 0; padding: 15px; max-width: 800px; margin: auto; }
-            h1 { color: #58a6ff; text-align: center; font-size: 26px; margin-bottom: 5px; }
-            .time { text-align: center; color: #8b949e; font-size: 14px; margin-bottom: 20px; font-weight: bold; }
-            
-            .btn-run { background-color: #238636; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 20px; }
-            .btn-run:active { background-color: #2ea043; }
-            
-            .controls-panel { background: #161b22; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #30363d; display: flex; flex-wrap: wrap; gap: 15px; align-items: center; justify-content: space-between;}
-            .slider-container { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 250px; }
-            .btn-secondary { background: #21262d; border: 1px solid #363b42; color: #c9d1d9; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-            .btn-secondary:hover { background: #30363d; }
-            
-            .tabs { display: flex; border-bottom: 1px solid #30363d; margin-bottom: 20px; }
-            .tab { flex: 1; text-align: center; padding: 12px; cursor: pointer; font-size: 16px; font-weight: bold; color: #8b949e; }
-            .tab.active { color: #ffffff; border-bottom: 3px solid #58a6ff; background-color: #161b22; }
-            .tab-content { display: none; }
-            .tab-content.active { display: block; }
-            
-            .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 20px; font-size: 15px; line-height: 1.6; }
-            .card-header { font-weight: bold; font-size: 16px; margin-bottom: 12px; border-bottom: 1px dashed #30363d; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
-            .detail-block { margin-bottom: 12px; }
-            .highlight { color: #ffffff; font-weight: bold; }
-            .highlight-stake { color: #e3b341; font-weight: bold; }
-            .profit-highlight { color: #e3b341; font-weight: bold; font-size: 16px; }
-            
-            .badge { padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
-            .conf-high { background: #238636; color: white;}
-            .conf-med { background: #d29922; color: white;}
-            .conf-low { background: #da3633; color: white;}
-            
-            table.breakdown { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
-            table.breakdown th, table.breakdown td { border: 1px solid #30363d; padding: 5px; text-align: left; color:#c9d1d9; }
-            table.breakdown th { background: #21262d; color: #8b949e; }
-            
-            .empty-state { text-align: center; color: #8b949e; padding: 30px; font-style: italic; background-color: #161b22; border-radius: 8px; border: 1px dashed #30363d; }
-            .telemetry { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #30363d; font-size: 12px; color: #484f58; line-height: 1.6; }
-            
-            details summary { cursor: pointer; color: #58a6ff; margin-top: 8px; font-size: 13px; font-weight: bold; }
-            details summary:hover { text-decoration: underline; }
-        </style>
-    </head>
-    <body>
-        <h1> Arb Sniper Terminal</h1>
-        <div class="time">Last Sweep: 04 Mar 2026, 01:00:05 AM IST</div>
-        
-        <button class="btn-run" onclick="triggerScan()"> Launch Cloud Scan Now</button>
-        
-        <div class="controls-panel">
-            <div class="slider-container">
-                <label for="kelly-slider">Kelly Fraction: <span id="kelly-val" class="highlight">30</span>%</label>
-                <input type="range" id="kelly-slider" min="0" max="100" value="30" oninput="document.getElementById('kelly-val').innerText = this.value; renderData();" style="flex:1;">
-            </div>
-            <div>
-                <input type="checkbox" id="top5-toggle" onchange="renderData()"> <label for="top5-toggle">Top 5 Only</label>
-            </div>
-            <button class="btn-secondary" onclick="exportCSV()">Export CSV</button>
-        </div>
-        
-        <div class="tabs">
-            <div class="tab active" id="tab-ev" onclick="switchTab('ev')"> EV Edges (<span id="ev-count">0</span>)</div>
-            <div class="tab" id="tab-arb" onclick="switchTab('arb')"> Arbitrage (<span id="arb-count">0</span>)</div>
-            <div class="tab" id="tab-analytics" onclick="switchTab('analytics')"> Analytics </div>
-        </div>
-        
-        <div id="content-ev" class="tab-content active"></div>
-        <div id="content-arb" class="tab-content"></div>
-        <div id="content-analytics" class="tab-content"></div>
-        
-        <div class="telemetry">
-            <strong>SYSTEM TELEMETRY</strong><br>
-            Active Key: #1 | Monthly Quota: 260/500 | Scan Cost: ~11 credits
-        </div>
-
-        <script>
-            const evData = [{"pct": 28.567839195979893, "match": "Buffalo Sabres vs Vegas Golden Knights", "time": "04 Mar 2026, 05:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Vegas Golden Knights", "odds": 3.01, "true": 2.3411764705882354, "bookie": "onexbet", "stake": 63.95784894622363, "target_lay": 82.22922438638851, "green_profit": 18.27137544016488, "breakdown": {"onexbet": {"price": 3.01, "ev": 28.567839195979893}, "marathonbet": {"price": 2.97, "ev": 26.859296482412056}, "betway": {"price": 2.85, "ev": 21.733668341708533}}, "confidence": 5.090235229302706, "clv": null}, {"pct": 28.418136020151174, "match": "Columbus Blue Jackets vs Nashville Predators", "time": "04 Mar 2026, 05:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Nashville Predators", "odds": 2.93, "true": 2.2816091954022983, "bookie": "onexbet", "stake": 66.2599026376582, "target_lay": 85.08973189604764, "green_profit": 18.829829258389438, "breakdown": {"onexbet": {"price": 2.93, "ev": 28.418136020151174}, "marathonbet": {"price": 2.89, "ev": 26.664987405541595}, "betway": {"price": 2.75, "ev": 20.528967254408094}}, "confidence": 3.009774675251947, "clv": null}, {"pct": 28.32405063291137, "match": "Calgary Flames vs Dallas Stars", "time": "04 Mar 2026, 07:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Calgary Flames", "odds": 2.88, "true": 2.244318181818182, "bookie": "onexbet", "stake": 67.79692970643679, "target_lay": 86.99976640404726, "green_profit": 19.20283669761048, "breakdown": {"onexbet": {"price": 2.88, "ev": 28.32405063291137}, "marathonbet": {"price": 2.84, "ev": 26.5417721518987}, "betway": {"price": 2.75, "ev": 22.53164556962024}}, "confidence": 1.6526019690577272, "clv": null}, {"pct": 28.30303030303032, "match": "Minnesota Wild vs Tampa Bay Lightning", "time": "04 Mar 2026, 08:10 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Minnesota Wild", "odds": 2.92, "true": 2.275862068965517, "bookie": "onexbet", "stake": 66.33522727272731, "target_lay": 85.11010674931136, "green_profit": 18.774879476584047, "breakdown": {"onexbet": {"price": 2.92, "ev": 28.30303030303032}, "marathonbet": {"price": 2.88, "ev": 26.54545454545456}, "betway": {"price": 2.75, "ev": 20.83333333333335}}, "confidence": 3.0718140307180732, "clv": null}, {"pct": 27.77237851662404, "match": "Washington Capitals vs Utah Mammoth", "time": "04 Mar 2026, 05:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Utah Mammoth", "odds": 2.73, "true": 2.1366120218579234, "bookie": "onexbet", "stake": 72.24029093919549, "target_lay": 92.30313798033933, "green_profit": 20.06284704114384, "breakdown": {"onexbet": {"price": 2.73, "ev": 27.77237851662404}, "marathonbet": {"price": 2.69, "ev": 25.900255754475698}, "betway": {"price": 2.6, "ev": 21.687979539641944}}, "confidence": 0.0, "clv": null}, {"pct": 27.11111111111113, "match": "Winnipeg Jets vs Chicago Blackhawks", "time": "04 Mar 2026, 06:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Chicago Blackhawks", "odds": 3.12, "true": 2.454545454545454, "bookie": "onexbet", "stake": 57.54716981132081, "target_lay": 73.1488469601678, "green_profit": 15.601677148846989, "breakdown": {"onexbet": {"price": 3.12, "ev": 27.11111111111113}, "marathonbet": {"price": 3.1, "ev": 26.29629629629633}, "betway": {"price": 3.0, "ev": 22.222222222222232}}, "confidence": 13.105413105412993, "clv": null}, {"pct": 27.01278772378519, "match": "Boston Bruins vs Pittsburgh Penguins", "time": "04 Mar 2026, 05:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Pittsburgh Penguins", "odds": 2.67, "true": 2.102150537634408, "bookie": "onexbet", "stake": 72.78894895630744, "target_lay": 92.45127322424914, "green_profit": 19.6623242679417, "breakdown": {"onexbet": {"price": 2.67, "ev": 27.01278772378519}, "marathonbet": {"price": 2.63, "ev": 25.10997442455245}, "betway": {"price": 2.55, "ev": 21.30434782608699}}, "confidence": 0.0, "clv": null}, {"pct": 26.75380710659898, "match": "San Jose Sharks vs Montr\u00e9al Canadiens", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "San Jose Sharks", "odds": 2.79, "true": 2.201117318435754, "bookie": "onexbet", "stake": 67.25817429033262, "target_lay": 85.25229650338837, "green_profit": 17.994122213055746, "breakdown": {"onexbet": {"price": 2.79, "ev": 26.75380710659898}, "marathonbet": {"price": 2.75, "ev": 24.93654822335025}, "betway": {"price": 2.65, "ev": 20.39340101522842}}, "confidence": 4.108218255917635, "clv": null}, {"pct": 26.53708439897702, "match": "New Jersey Devils vs Florida Panthers", "time": "04 Mar 2026, 05:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "New Jersey Devils", "odds": 2.66, "true": 2.102150537634408, "bookie": "onexbet", "stake": 71.93787939481724, "target_lay": 91.0280951646542, "green_profit": 19.09021576983696, "breakdown": {"onexbet": {"price": 2.66, "ev": 26.53708439897702}, "marathonbet": {"price": 2.62, "ev": 24.634271099744275}, "betway": {"price": 2.5, "ev": 18.925831202046073}}, "confidence": 0.23652481587585328, "clv": null}, {"pct": 26.355498721227644, "match": "New Jersey Devils vs Florida Panthers", "time": "04 Mar 2026, 05:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Florida Panthers", "odds": 2.41, "true": 1.9073170731707316, "bookie": "onexbet", "stake": 75.0, "target_lay": 94.76662404092072, "green_profit": 19.766624040920718, "breakdown": {"onexbet": {"price": 2.41, "ev": 26.355498721227644}, "marathonbet": {"price": 2.38, "ev": 24.782608695652165}, "betway": {"price": 2.35, "ev": 23.20971867007673}}, "confidence": 0.0, "clv": null}, {"pct": 25.542199488491057, "match": "Edmonton Oilers vs Ottawa Senators", "time": "04 Mar 2026, 07:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Ottawa Senators", "odds": 2.57, "true": 2.0471204188481673, "bookie": "onexbet", "stake": 73.21012592242661, "target_lay": 91.90960233130832, "green_profit": 18.699476408881708, "breakdown": {"onexbet": {"price": 2.57, "ev": 25.542199488491057}, "marathonbet": {"price": 2.53, "ev": 23.588235294117645}, "betway": {"price": 2.5, "ev": 22.122762148337614}}, "confidence": 0.6140097724082949, "clv": null}, {"pct": 25.037037037037035, "match": "Winnipeg Jets vs Chicago Blackhawks", "time": "04 Mar 2026, 06:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Winnipeg Jets", "odds": 2.11, "true": 1.6874999999999998, "bookie": "onexbet", "stake": 75.0, "target_lay": 93.77777777777779, "green_profit": 18.777777777777786, "breakdown": {"onexbet": {"price": 2.11, "ev": 25.037037037037035}, "marathonbet": {"price": 2.08, "ev": 23.25925925925929}, "betway": {"price": 2.0, "ev": 18.518518518518533}}, "confidence": 0.0, "clv": null}, {"pct": 24.746835443037973, "match": "Calgary Flames vs Dallas Stars", "time": "04 Mar 2026, 07:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Dallas Stars", "odds": 2.25, "true": 1.8036529680365299, "bookie": "onexbet", "stake": 75.0, "target_lay": 93.56012658227847, "green_profit": 18.56012658227847, "breakdown": {"onexbet": {"price": 2.25, "ev": 24.746835443037973}, "marathonbet": {"price": 2.22, "ev": 23.083544303797467}, "betway": {"price": 2.2, "ev": 21.974683544303787}}, "confidence": 0.0, "clv": null}, {"pct": 24.511278195488707, "match": "Anaheim Ducks vs Colorado Avalanche", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Colorado Avalanche", "odds": 2.16, "true": 1.7347826086956524, "bookie": "onexbet", "stake": 75.0, "target_lay": 93.38345864661653, "green_profit": 18.383458646616532, "breakdown": {"onexbet": {"price": 2.16, "ev": 24.511278195488707}, "marathonbet": {"price": 2.13, "ev": 22.781954887218014}, "betway": {"price": 2.05, "ev": 18.170426065162882}}, "confidence": 0.0, "clv": null}, {"pct": 24.480818414322258, "match": "Washington Capitals vs Utah Mammoth", "time": "04 Mar 2026, 05:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Washington Capitals", "odds": 2.34, "true": 1.879807692307692, "bookie": "onexbet", "stake": 75.0, "target_lay": 93.3606138107417, "green_profit": 18.360613810741697, "breakdown": {"onexbet": {"price": 2.34, "ev": 24.480818414322258}, "marathonbet": {"price": 2.3, "ev": 22.352941176470598}, "betway": {"price": 2.25, "ev": 19.69309462915603}}, "confidence": 0.0, "clv": null}, {"pct": 24.25831202046036, "match": "Boston Bruins vs Pittsburgh Penguins", "time": "04 Mar 2026, 05:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Boston Bruins", "odds": 2.37, "true": 1.9073170731707316, "bookie": "onexbet", "stake": 75.0, "target_lay": 93.19373401534527, "green_profit": 18.19373401534527, "breakdown": {"onexbet": {"price": 2.37, "ev": 24.25831202046036}, "marathonbet": {"price": 2.33, "ev": 22.1611253196931}, "betway": {"price": 2.3, "ev": 20.58823529411764}}, "confidence": 0.0, "clv": null}, {"pct": 23.679197994987476, "match": "Anaheim Ducks vs Colorado Avalanche", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Anaheim Ducks", "odds": 2.92, "true": 2.36094674556213, "bookie": "onexbet", "stake": 55.4981203007519, "target_lay": 68.63963009026328, "green_profit": 13.141509789511382, "breakdown": {"onexbet": {"price": 2.92, "ev": 23.679197994987476}, "marathonbet": {"price": 2.88, "ev": 21.98496240601504}, "betway": {"price": 2.85, "ev": 20.71428571428573}}, "confidence": 18.906856181549713, "clv": null}, {"pct": 23.33333333333336, "match": "Minnesota Wild vs Tampa Bay Lightning", "time": "04 Mar 2026, 08:10 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Tampa Bay Lightning", "odds": 2.2, "true": 1.7837837837837835, "bookie": "onexbet", "stake": 75.0, "target_lay": 92.50000000000001, "green_profit": 17.500000000000014, "breakdown": {"onexbet": {"price": 2.2, "ev": 23.33333333333336}, "marathonbet": {"price": 2.17, "ev": 21.651515151515156}, "betway": {"price": 2.15, "ev": 20.53030303030303}}, "confidence": 0.0, "clv": null}, {"pct": 23.27365728900257, "match": "Edmonton Oilers vs Ottawa Senators", "time": "04 Mar 2026, 07:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Edmonton Oilers", "odds": 2.41, "true": 1.9549999999999998, "bookie": "onexbet", "stake": 74.27762964575288, "target_lay": 91.56475061189998, "green_profit": 17.2871209661471, "breakdown": {"onexbet": {"price": 2.41, "ev": 23.27365728900257}, "marathonbet": {"price": 2.38, "ev": 21.739130434782616}, "betway": {"price": 2.3, "ev": 17.647058823529417}}, "confidence": 3.4288079294499028, "clv": null}, {"pct": 22.779187817258872, "match": "San Jose Sharks vs Montr\u00e9al Canadiens", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Montr\u00e9al Canadiens", "odds": 2.25, "true": 1.832558139534884, "bookie": "onexbet", "stake": 75.0, "target_lay": 92.08439086294415, "green_profit": 17.084390862944147, "breakdown": {"onexbet": {"price": 2.25, "ev": 22.779187817258872}, "marathonbet": {"price": 2.22, "ev": 21.142131979695435}, "betway": {"price": 2.2, "ev": 20.050761421319784}}, "confidence": 0.0, "clv": null}, {"pct": 22.592964824120585, "match": "Buffalo Sabres vs Vegas Golden Knights", "time": "04 Mar 2026, 05:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Buffalo Sabres", "odds": 2.14, "true": 1.7456140350877196, "bookie": "onexbet", "stake": 75.0, "target_lay": 91.94472361809044, "green_profit": 16.944723618090435, "breakdown": {"onexbet": {"price": 2.14, "ev": 22.592964824120585}, "marathonbet": {"price": 2.11, "ev": 20.87437185929646}, "betway": {"price": 2.05, "ev": 17.4371859296482}}, "confidence": 0.0, "clv": null}, {"pct": 22.453400503778354, "match": "Columbus Blue Jackets vs Nashville Predators", "time": "04 Mar 2026, 05:40 AM", "sport": "icehockey_nhl", "line": "H2H_0", "selection": "Columbus Blue Jackets", "odds": 2.18, "true": 1.780269058295964, "bookie": "onexbet", "stake": 75.0, "target_lay": 91.84005037783376, "green_profit": 16.840050377833762, "breakdown": {"onexbet": {"price": 2.18, "ev": 22.453400503778354}, "marathonbet": {"price": 2.15, "ev": 20.768261964735537}, "betway": {"price": 2.15, "ev": 20.768261964735537}}, "confidence": 0.0, "clv": null}, {"pct": 14.748466257668724, "match": "Minnesota Timberwolves vs Memphis Grizzlies", "time": "04 Mar 2026, 06:40 AM", "sport": "basketball_nba", "line": "H2H_0", "selection": "Memphis Grizzlies", "odds": 8.35, "true": 7.2767857142857135, "bookie": "onexbet", "stake": 20, "target_lay": 22.949693251533745, "green_profit": 2.949693251533745, "breakdown": {"onexbet": {"price": 8.35, "ev": 14.748466257668724}, "marathonbet": {"price": 7.4, "ev": 1.693251533742357}, "betfair_ex_eu": {"price": 7.401999999999999, "ev": 1.7207361963190282}, "betway": {"price": 6.5, "ev": -10.674846625766865}}, "confidence": 82.33716615848057, "clv": null}, {"pct": 13.43172949501179, "match": "Atl\u00e9tico Madrid vs Tottenham Hotspur", "time": "11 Mar 2026, 01:30 AM", "sport": "soccer_uefa_champs_league", "line": "H2H_0", "selection": "Tottenham Hotspur", "odds": 6.044, "true": 5.328315125677236, "bookie": "betfair_ex_eu", "stake": 20, "target_lay": 22.686345899002358, "green_profit": 2.686345899002358, "breakdown": {"onexbet": {"price": 5.33, "ev": 0.031621146329063876}, "betfair_ex_eu": {"price": 6.044, "ev": 13.43172949501179}, "betway": {"price": 4.75, "ev": -10.853620929631692}, "marathonbet": {"price": 5.25, "ev": -1.4697915538034456}}, "confidence": 77.77675464094673, "clv": null}, {"pct": 12.833109017496636, "match": "Charlotte Hornets vs Dallas Mavericks", "time": "04 Mar 2026, 05:40 AM", "sport": "basketball_nba", "line": "H2H_0", "selection": "Dallas Mavericks", "odds": 7.29, "true": 6.460869565217392, "bookie": "onexbet", "stake": 20, "target_lay": 22.566621803499327, "green_profit": 2.566621803499327, "breakdown": {"onexbet": {"price": 7.29, "ev": 12.833109017496636}, "marathonbet": {"price": 6.0, "ev": -7.133243606998663}, "betfair_ex_eu": {"price": 6.4319999999999995, "ev": -0.44683714670257224}, "betway": {"price": 5.75, "ev": -11.002691790040387}}, "confidence": 82.39628392661643, "clv": null}, {"pct": 11.429643527204526, "match": "Sacramento Kings vs Phoenix Suns", "time": "04 Mar 2026, 09:40 AM", "sport": "basketball_nba", "line": "H2H_0", "selection": "Sacramento Kings", "odds": 4.64, "true": 4.164062499999999, "bookie": "onexbet", "stake": 20, "target_lay": 22.285928705440906, "green_profit": 2.285928705440906, "breakdown": {"onexbet": {"price": 4.64, "ev": 11.429643527204526}, "betfair_ex_eu": {"price": 4.201, "ev": 0.8870544090056498}, "marathonbet": {"price": 4.1, "ev": -1.538461538461522}, "betway": {"price": 4.0, "ev": -3.9399624765478203}}, "confidence": 75.36714757067992, "clv": null}, {"pct": 11.177377892030837, "match": "San Jose Sharks vs Montr\u00e9al Canadiens", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "selection": "Over", "odds": 2.12, "true": 1.9068627450980393, "bookie": "onexbet", "stake": 44.90910760190965, "target_lay": 49.92876826651385, "green_profit": 5.019660664604196, "breakdown": {"onexbet": {"price": 2.12, "ev": 11.177377892030837}}, "confidence": 47.27651937721296, "clv": null}, {"pct": 10.821428571428559, "match": "Anaheim Ducks vs Colorado Avalanche", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "selection": "Over", "odds": 2.03, "true": 1.8317757009345794, "bookie": "onexbet", "stake": 47.27808599167818, "target_lay": 52.394250297206206, "green_profit": 5.116164305528024, "breakdown": {"onexbet": {"price": 2.03, "ev": 10.821428571428559}}, "confidence": 46.692470091484935, "clv": null}, {"pct": 8.31548198636809, "match": "Orlando Magic vs Washington Wizards", "time": "04 Mar 2026, 05:40 AM", "sport": "basketball_nba", "line": "H2H_0", "selection": "Washington Wizards", "odds": 10.3, "true": 9.509259259259258, "bookie": "onexbet", "stake": 20, "target_lay": 21.663096397273616, "green_profit": 1.6630963972736161, "breakdown": {"onexbet": {"price": 10.3, "ev": 8.31548198636809}, "betfair_ex_eu": {"price": 9.536, "ev": 0.28120740019474955}, "marathonbet": {"price": 8.8, "ev": -7.4586173320350335}, "betway": {"price": 8.0, "ev": -15.871470301850032}}, "confidence": 91.92671651808924, "clv": null}, {"pct": 5.616056257902069, "match": "Arsenal vs Everton", "time": "14 Mar 2026, 11:00 PM", "sport": "soccer_epl", "line": "H2H_0", "selection": "Everton", "odds": 13.4, "true": 12.687464837049744, "bookie": "onexbet", "stake": 20, "target_lay": 21.123211251580415, "green_profit": 1.1232112515804147, "breakdown": {"onexbet": {"price": 13.4, "ev": 5.616056257902069}, "betfair_ex_eu": {"price": 12.64, "ev": -0.3741081268744617}, "betway": {"price": 11.0, "ev": -13.300252325602779}, "marathonbet": {"price": 13.25, "ev": 4.433786971433018}}, "confidence": 95.8089132403716, "clv": null}, {"pct": 5.129427792915542, "match": "Miami Heat vs Brooklyn Nets", "time": "04 Mar 2026, 06:10 AM", "sport": "basketball_nba", "line": "H2H_0", "selection": "Brooklyn Nets", "odds": 6.71, "true": 6.3826086956521735, "bookie": "onexbet", "stake": 20, "target_lay": 21.025885558583106, "green_profit": 1.0258855585831057, "breakdown": {"marathonbet": {"price": 6.15, "ev": -3.6444141689373155}, "onexbet": {"price": 6.71, "ev": 5.129427792915542}, "betfair_ex_eu": {"price": 6.4319999999999995, "ev": 0.7738419618528614}, "betway": {"price": 6.0, "ev": -5.994550408719334}}, "confidence": 92.35554725347907, "clv": null}, {"pct": 2.978507856794388, "match": "Brighton and Hove Albion vs Arsenal", "time": "05 Mar 2026, 01:00 AM", "sport": "soccer_epl", "line": "H2H_0", "selection": "Brighton and Hove Albion", "odds": 5.365, "true": 5.209824954407732, "bookie": "betfair_ex_eu", "stake": 20, "target_lay": 20.595701571358877, "green_profit": 0.5957015713588767, "breakdown": {"onexbet": {"price": 5.22, "ev": 0.19530494174586632}, "betfair_ex_eu": {"price": 5.365, "ev": 2.978507856794388}, "marathonbet": {"price": 5.1, "ev": -2.1080354017425362}, "betway": {"price": 4.75, "ev": -8.826111403583736}}, "confidence": 94.44826121753144, "clv": null}, {"pct": 2.889062475091264, "match": "Manchester United vs Aston Villa", "time": "15 Mar 2026, 07:30 PM", "sport": "soccer_epl", "line": "H2H_0", "selection": "Aston Villa", "odds": 4.3, "true": 4.179258607824326, "bookie": "onexbet", "stake": 20, "target_lay": 20.577812495018254, "green_profit": 0.5778124950182537, "breakdown": {"onexbet": {"price": 4.3, "ev": 2.889062475091264}, "betfair_ex_eu": {"price": 4.007, "ev": -4.121750386583567}, "marathonbet": {"price": 4.25, "ev": 1.6926780277064735}, "betway": {"price": 3.8, "ev": -9.074781998756565}}, "confidence": 93.28125005792731, "clv": null}, {"pct": 2.369111861786788, "match": "Manchester City vs Nottingham Forest", "time": "05 Mar 2026, 01:00 AM", "sport": "soccer_epl", "line": "H2H_0", "selection": "Nottingham Forest", "odds": 8.372, "true": 8.178248152922748, "bookie": "betfair_ex_eu", "stake": 20, "target_lay": 20.473822372357358, "green_profit": 0.4738223723573576, "breakdown": {"onexbet": {"price": 7.65, "ev": -6.459184693900022}, "betfair_ex_eu": {"price": 8.372, "ev": 2.369111861786788}, "marathonbet": {"price": 7.5, "ev": -8.293318327352972}, "betway": {"price": 7.0, "ev": -14.407097105529443}}, "confidence": 97.17019605615529, "clv": null}, {"pct": 2.124592487597443, "match": "Everton vs Burnley", "time": "04 Mar 2026, 01:00 AM", "sport": "soccer_epl", "line": "H2H_0", "selection": "Burnley", "odds": 6.238, "true": 6.108225108225109, "bookie": "betfair_ex_eu", "stake": 20, "target_lay": 20.42491849751949, "green_profit": 0.4249184975194886, "breakdown": {"onexbet": {"price": 5.89, "ev": -3.572643515237439}, "marathonbet": {"price": 5.9, "ev": -3.408929836995045}, "betway": {"price": 5.75, "ev": -5.86463501063077}, "betfair_ex_eu": {"price": 6.238, "ev": 2.124592487597443}}, "confidence": 96.5941127162593, "clv": null}, {"pct": 1.8191828027567913, "match": "Galatasaray vs Liverpool", "time": "10 Mar 2026, 11:15 PM", "sport": "soccer_uefa_champs_league", "line": "H2H_0", "selection": "Galatasaray", "odds": 4.395, "true": 4.316475421447797, "bookie": "betfair_ex_eu", "stake": 20, "target_lay": 20.36383656055136, "green_profit": 0.36383656055135916, "breakdown": {"onexbet": {"price": 4.32, "ev": 0.08165408598621582}, "betfair_ex_eu": {"price": 4.395, "ev": 1.8191828027567913}, "betway": {"price": 3.8, "ev": -11.965211683623245}, "marathonbet": {"price": 4.25, "ev": -1.5400393829996695}}, "confidence": 95.86078998235084, "clv": null}, {"pct": 1.793142889660282, "match": "Atalanta BC vs Bayern Munich", "time": "11 Mar 2026, 01:30 AM", "sport": "soccer_uefa_champs_league", "line": "H2H_0", "selection": "Atalanta BC", "odds": 4.71, "true": 4.627030727507306, "bookie": "onexbet", "stake": 20, "target_lay": 20.358628577932055, "green_profit": 0.3586285779320555, "breakdown": {"onexbet": {"price": 4.71, "ev": 1.793142889660282}, "betfair_ex_eu": {"price": 4.686, "ev": 1.27445171570022}, "betway": {"price": 4.2, "ev": -9.229044556990829}, "marathonbet": {"price": 4.65, "ev": 0.4964149547601604}}, "confidence": 96.1929025697234, "clv": null}, {"pct": 1.6526706231454247, "match": "Bournemouth vs Brentford", "time": "04 Mar 2026, 01:00 AM", "sport": "soccer_epl", "line": "H2H_0", "selection": "Draw", "odds": 3.7645, "true": 3.7032967032967026, "bookie": "betfair_ex_eu", "stake": 20, "target_lay": 20.330534124629082, "green_profit": 0.33053412462908227, "breakdown": {"onexbet": {"price": 3.66, "ev": -1.1691394658753462}, "marathonbet": {"price": 3.62, "ev": -2.2492581602373662}, "betway": {"price": 3.4, "ev": -8.189910979228475}, "betfair_ex_eu": {"price": 3.7645, "ev": 1.6526706231454247}}, "confidence": 95.60985357113712, "clv": null}, {"pct": 1.6163707050541154, "match": "Chelsea vs Newcastle United", "time": "14 Mar 2026, 11:00 PM", "sport": "soccer_epl", "line": "H2H_0", "selection": "Newcastle United", "odds": 4.11, "true": 4.04462388440289, "bookie": "onexbet", "stake": 20, "target_lay": 20.323274141010824, "green_profit": 0.32327414101082397, "breakdown": {"onexbet": {"price": 4.11, "ev": 1.6163707050541154}, "marathonbet": {"price": 4.05, "ev": 0.13292003782703343}, "betfair_ex_eu": {"price": 3.7159999999999997, "ev": -8.124955343070306}, "betway": {"price": 3.6, "ev": -10.99295996637596}}, "confidence": 96.06722456191213, "clv": null}, {"pct": 1.5607810961601576, "match": "Galatasaray vs Liverpool", "time": "10 Mar 2026, 11:15 PM", "sport": "soccer_uefa_champs_league", "line": "H2H_0", "selection": "Draw", "odds": 4.17, "true": 4.105915644791807, "bookie": "onexbet", "stake": 20, "target_lay": 20.312156219232033, "green_profit": 0.3121562192320333, "breakdown": {"onexbet": {"price": 4.17, "ev": 1.5607810961601576}, "betfair_ex_eu": {"price": 4.007, "ev": -2.4091007548408316}, "betway": {"price": 4.0, "ev": -2.5795864785034484}, "marathonbet": {"price": 4.1, "ev": -0.1440761404660429}}, "confidence": 96.25711967347685, "clv": null}];
-            const arbData = [{"type": "2-way", "pct": 4.009944293540801, "match": "Anaheim Ducks vs Colorado Avalanche", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "s1": "Over", "s1_data": {"price": 2.03, "bookie": "onexbet"}, "s2": "Under", "s2_data": {"price": 2.14, "bookie": "pinnacle"}, "stk1": 769.7841726618705, "stk2": 730.2158273381293, "profit": 62.6618705035969}, {"type": "2-way", "pct": 3.810580836108035, "match": "San Jose Sharks vs Montr\u00e9al Canadiens", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "s1": "Over", "s1_data": {"price": 2.12, "bookie": "onexbet"}, "s2": "Under", "s2_data": {"price": 2.04, "bookie": "pinnacle"}, "stk1": 735.5769230769231, "stk2": 764.423076923077, "profit": 59.42307692307713}];
-            const bookCaps = {"betway": 300, "stake": 500, "onexbet": 1000, "marathonbet": 500, "dafabet": 400, "betfair_ex_eu": 2000, "pinnacle": 2000};
-            const brState = {"date": "2026-03-04", "starting_bankroll": 1500, "total_stakes": 4971.295441417538, "theoretical_profit": 547.311954033992, "ev_exposure": 1971.2954414175388};
-            const totalBankroll = 1500;
-
-            function displayBookie(api_key) {
-                const mapping = {'onexbet': '1xBet/Melbet', 'pinnacle': 'Pinnacle', 'marathonbet': 'Marathonbet', 'dafabet': 'Dafabet', 'stake': 'Stake.com', 'betfair_ex_eu': 'Betfair Exchange', 'betway': 'Betway'};
-                return mapping[api_key] || (api_key.charAt(0).toUpperCase() + api_key.slice(1));
-            }
-
-            function switchTab(tab) {
-                document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-                document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-                document.getElementById('content-' + tab).classList.add('active');
-                document.getElementById('tab-' + tab).classList.add('active');
-            }
-
-            function renderData() {
-                let isTop5 = document.getElementById('top5-toggle').checked;
-                let sliderVal = parseInt(document.getElementById('kelly-slider').value) / 100;
-                
-                let evLimit = isTop5 ? 5 : evData.length;
-                let arbLimit = isTop5 ? 5 : arbData.length;
-                
-                document.getElementById('ev-count').innerText = evData.length;
-                document.getElementById('arb-count').innerText = arbData.length;
-
-                // --- EV RENDER ---
-                let evHtml = '';
-                for(let i=0; i<Math.min(evLimit, evData.length); i++) {
-                    let ev = evData[i];
-                    let true_prob = 1 / ev.true;
-                    let b = ev.odds - 1.0;
-                    
-                    let raw_k = ((b * true_prob - (1-true_prob)) / b) * sliderVal;
-                    let max_k = (0.05 / 0.30) * sliderVal; // Proportional upper limit check
-                    if (raw_k > max_k) raw_k = max_k;
-                    
-                    let stake = Math.max(20, totalBankroll * raw_k);
-                    if (raw_k <= 0) stake = 0;
-                    let cap = bookCaps[ev.bookie] || 1000;
-                    stake = Math.min(stake, cap);
-
-                    let confClass = ev.confidence >= 75 ? 'conf-high' : (ev.confidence >= 50 ? 'conf-med' : 'conf-low');
-
-                    let bdHtml = '<table class="breakdown"><tr><th>Bookmaker</th><th>Odds</th><th>EV%</th></tr>';
-                    let sortedBreakdown = Object.entries(ev.breakdown).sort((a,b) => b[1].ev - a[1].ev);
-                    for(let [bk, bd] of sortedBreakdown) {
-                        let hl = bk === ev.bookie ? 'style="background:#2ea04333;"' : '';
-                        bdHtml += `<tr ${hl}><td>${displayBookie(bk)}</td><td>${bd.price.toFixed(2)}</td><td>${bd.ev.toFixed(2)}%</td></tr>`;
-                    }
-                    bdHtml += '</table>';
-
-                    let clvStr = ev.clv !== null ? `<br>Historical CLV: <span class="highlight">${ev.clv.toFixed(2)}%</span>` : '';
-
-                    evHtml += `
-                    <div class="card">
-                        <div class="card-header"> 
-                            <span><span class="highlight">${ev.pct.toFixed(2)}% EV</span> | ${ev.match}</span>
-                            <span class="badge ${confClass}">Conf: ${ev.confidence.toFixed(0)}</span>
-                        </div>
-                        <div class="detail-block">
-                            ${ev.sport.replace('_', ' ').toUpperCase()}<br>
-                            ${ev.time}<br>
-                            <span class="highlight">${ev.line}</span>${clvStr}
-                        </div>
-                        <div class="detail-block">
-                            BET EXACTLY: <span class="highlight-stake">₹${stake.toFixed(0)}</span> (Cap: ₹${cap})<br>
-                            <span class="highlight">${ev.selection.toUpperCase()} ${(ev.line.split('_')[1] || '').replace('0', '')} @ ${ev.odds.toFixed(2)}</span> on ${displayBookie(ev.bookie)}
-                        </div>
-                        <div>
-                            True Odds: ${ev.true.toFixed(2)}
-                            <details><summary>View Odds Breakdown</summary>${bdHtml}</details>
-                        </div>
-                    </div>`;
-                }
-                document.getElementById('content-ev').innerHTML = evHtml || '<div class="empty-state"> No massive EV edges found right now.</div>';
-
-                // --- ARB RENDER ---
-                let arbHtml = '';
-                for(let i=0; i<Math.min(arbLimit, arbData.length); i++) {
-                    let arb = arbData[i];
-                    let is3way = arb.type === '3-way';
-                    
-                    let stks = `
-                        <span class="highlight-stake">₹${arb.stk1.toFixed(0)}</span> on <span class="highlight">${arb.s1.toUpperCase()} @ ${arb.s1_data.price.toFixed(2)}</span> [${displayBookie(arb.s1_data.bookie)}]<br>
-                        <span class="highlight-stake">₹${arb.stk2.toFixed(0)}</span> on <span class="highlight">${arb.s2.toUpperCase()} @ ${arb.s2_data.price.toFixed(2)}</span> [${displayBookie(arb.s2_data.bookie)}]
-                    `;
-                    if(is3way) {
-                        stks += `<br><span class="highlight-stake">₹${arb.stk3.toFixed(0)}</span> on <span class="highlight">${arb.s3.toUpperCase()} @ ${arb.s3_data.price.toFixed(2)}</span> [${displayBookie(arb.s3_data.bookie)}]`;
-                    }
-                    
-                    arbHtml += `
-                    <div class="card">
-                        <div class="card-header"> 
-                            <span><span class="highlight">${arb.pct.toFixed(2)}% ARB</span> | ${arb.match}</span>
-                            <span class="badge" style="background:#484f58;">${is3way ? '3-Way' : '2-Way'}</span>
-                        </div>
-                        <div class="detail-block">
-                            ${arb.sport.replace('_', ' ').toUpperCase()}<br>
-                            ${arb.time}<br>
-                            <span class="highlight">${arb.line}</span>
-                        </div>
-                        <div class="detail-block">${stks}</div>
-                        <div>Profit: <span class="profit-highlight">₹${arb.profit.toFixed(0)}</span></div>
-                    </div>`;
-                }
-                document.getElementById('content-arb').innerHTML = arbHtml || '<div class="empty-state"> No Arbitrage opportunities found right now.</div>';
-
-                // --- ANALYTICS RENDER ---
-                let buckets = {'0-2%':0, '2-5%':0, '5-10%':0, '10%+':0};
-                let sumEv = 0, maxEv = 0;
-                evData.forEach(ev => {
-                    sumEv += ev.pct;
-                    if(ev.pct > maxEv) maxEv = ev.pct;
-                    if(ev.pct < 2) buckets['0-2%']++;
-                    else if(ev.pct < 5) buckets['2-5%']++;
-                    else if(ev.pct < 10) buckets['5-10%']++;
-                    else buckets['10%+']++;
-                });
-                let avgEv = evData.length ? (sumEv / evData.length).toFixed(2) : 0;
-
-                let anaHtml = `
-                <div class="card">
-                    <div class="card-header">Daily Bankroll Tracking</div>
-                    <table class="breakdown" style="border:none;">
-                        <tr><td style="border:none;">Tracking Date:</td><td style="border:none;"><span class="highlight">${brState.date || 'N/A'}</span></td></tr>
-                        <tr><td style="border:none;">Starting Bankroll:</td><td style="border:none;"><span class="highlight">₹${brState.starting_bankroll || 0}</span></td></tr>
-                        <tr><td style="border:none;">Total Stakes Rec:</td><td style="border:none;"><span class="highlight-stake">₹${(brState.total_stakes || 0).toFixed(0)}</span></td></tr>
-                        <tr><td style="border:none;">EV Exposure:</td><td style="border:none;"><span class="highlight">₹${(brState.ev_exposure || 0).toFixed(0)}</span></td></tr>
-                        <tr><td style="border:none;">Theoretical Arb Profit:</td><td style="border:none;"><span class="profit-highlight">₹${(brState.theoretical_profit || 0).toFixed(0)}</span></td></tr>
-                    </table>
-                </div>
-                <div class="card">
-                    <div class="card-header">Current Scan EV Distribution</div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom: 10px;">
-                        <div>Average EV: <span class="highlight">${avgEv}%</span></div>
-                        <div>Highest EV: <span class="highlight">${maxEv.toFixed(2)}%</span></div>
-                    </div>
-                    <table class="breakdown">
-                        <tr><th>Bucket Bracket</th><th>Edge Count</th></tr>
-                        <tr><td>0.0% - 2.0%</td><td>${buckets['0-2%']}</td></tr>
-                        <tr><td>2.0% - 5.0%</td><td>${buckets['2-5%']}</td></tr>
-                        <tr><td>5.0% - 10.0%</td><td>${buckets['5-10%']}</td></tr>
-                        <tr><td>10.0%+</td><td>${buckets['10%+']}</td></tr>
-                    </table>
-                </div>`;
-                document.getElementById('content-analytics').innerHTML = anaHtml;
-            }
-
-            function exportCSV() {
-                let csv = "Type,Match,Sport,Time,Line,Selection,Odds,Bookmaker,EV/ARB %,Stake,Profit
-";
-                evData.forEach(ev => {
-                    csv += `EV,"${ev.match}","${ev.sport}","${ev.time}","${ev.line}","${ev.selection}",${ev.odds},"${ev.bookie}",${ev.pct},${ev.stake},${ev.green_profit}
-`;
-                });
-                arbData.forEach(arb => {
-                    let totalStk = arb.stk1 + arb.stk2 + (arb.stk3 || 0);
-                    csv += `ARB,"${arb.match}","${arb.sport}","${arb.time}","${arb.line}","Multiple",0,"Multiple",${arb.pct},${totalStk},${arb.profit}
-`;
-                });
-                let encodedUri = encodeURI("data:text/csv;charset=utf-8," + csv);
-                let link = document.createElement("a");
-                link.setAttribute("href", encodedUri);
-                link.setAttribute("download", "arb_sniper_scan.csv");
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            }
-
-            function triggerScan() {
-                let pat = localStorage.getItem('gh_dispatch_token');
-                if (!pat) {
-                    pat = prompt("Enter your GitHub PAT (ghp_...) to authorize this scan:\n(This is safely stored only in your local browser, never public)");
-                    if (!pat) return;
-                    localStorage.setItem('gh_dispatch_token', pat);
-                }
-                
-                // Assuming nikunj7711 based on original script, user can modify if needed
-                fetch('https://api.github.com/repos/nikunj7711/arb-sniper/actions/workflows/sniper.yml/dispatches', {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/vnd.github.v3+json',
-                        'Authorization': 'token ' + pat,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ ref: 'main' })
-                })
-                .then(response => {
-                    if(response.ok) {
-                        alert(" Engine Fired! Scan is running. Wait 2-3 minutes, then Hard Refresh this page.");
-                    } else {
-                        alert(" Authorization failed! Your token might be wrong or expired. Resetting token...");
-                        localStorage.removeItem('gh_dispatch_token');
-                    }
-                })
-                .catch(error => console.error('Error:', error));
-            }
-
-            window.onload = function() { renderData(); };
-        </script>
-    </body>
-    </html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Arb Sniper Live Dashboard</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0d1117; color: #c9d1d9; margin: 0; padding: 15px; max-width: 800px; margin: auto; }
+        h1 { color: #58a6ff; text-align: center; font-size: 26px; margin-bottom: 5px; }
+        .time { text-align: center; color: #8b949e; font-size: 14px; margin-bottom: 20px; font-weight: bold; }
+        .btn-run { background-color: #238636; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 10px; }
+        .btn-run:active { background-color: #2ea043; }
+        .btn-export { background-color: #1f6feb; color: white; border: none; padding: 10px 20px; font-size: 14px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 20px; }
+        .btn-export:active { background-color: #388bfd; }
+        .tabs { display: flex; border-bottom: 1px solid #30363d; margin-bottom: 20px; }
+        .tab { flex: 1; text-align: center; padding: 12px; cursor: pointer; font-size: 15px; font-weight: bold; color: #8b949e; }
+        .tab.active { color: #ffffff; border-bottom: 3px solid #58a6ff; background-color: #161b22; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 20px; font-size: 15px; line-height: 1.6; }
+        .card-header { font-weight: bold; font-size: 16px; margin-bottom: 12px; border-bottom: 1px dashed #30363d; padding-bottom: 8px; }
+        .detail-block { margin-bottom: 12px; }
+        .highlight { color: #ffffff; font-weight: bold; }
+        .highlight-stake { color: #e3b341; font-weight: bold; }
+        .profit-highlight { color: #e3b341; font-weight: bold; font-size: 16px; }
+        .empty-state { text-align: center; color: #8b949e; padding: 30px; font-style: italic; background-color: #161b22; border-radius: 8px; border: 1px dashed #30363d; }
+        .telemetry { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #30363d; font-size: 12px; color: #484f58; line-height: 1.6; }
+        .controls-bar { display: flex; align-items: center; gap: 12px; background:#161b22; border:1px solid #30363d; border-radius:8px; padding:12px 16px; margin-bottom:16px; flex-wrap:wrap; }
+        .controls-bar label { color:#8b949e; font-size:13px; }
+        .controls-bar input[type=range] { flex:1; min-width:100px; accent-color:#58a6ff; }
+        .controls-bar span { color:#58a6ff; font-weight:bold; min-width:40px; font-size:14px; }
+        .toggle-label { display:flex; align-items:center; gap:6px; font-size:13px; color:#8b949e; cursor:pointer; }
+        .toggle-label input { accent-color:#58a6ff; width:16px; height:16px; }
+    </style>
+</head>
+<body>
+    <h1> Arb Sniper Terminal</h1>
+    <div class="time">Last Sweep: 04 Mar 2026, 01:10:46 AM IST</div>
     
+        <div class="card" style="margin-bottom:20px;font-size:13px;">
+            <div class="card-header"> Daily Bankroll Tracker (2026-03-04)</div>
+            Starting Bankroll: <span class="highlight">₹1500</span><br>
+            Total Stakes Recommended: <span class="highlight-stake">₹3092</span><br>
+            Theoretical ARB Profit: <span class="profit-highlight">₹122.08</span><br>
+            Theoretical EV Exposure: <span class="highlight">₹10.14</span>
+        </div>
+        
+    <button class="btn-run" onclick="triggerScan()"> Launch Cloud Scan Now</button>
+    <button class="btn-export" onclick="exportCSV()"> Export CSV</button>
+
+    <div class="controls-bar">
+        <label for="kellySlider"> Kelly Fraction:</label>
+        <input type="range" id="kellySlider" min="0" max="100" value="30" oninput="updateKelly(this.value)">
+        <span id="kellyValue">30%</span>
+        &nbsp;&nbsp;
+        <label class="toggle-label">
+            <input type="checkbox" id="top5Toggle" onchange="applyTop5()">
+            Top 5 Only
+        </label>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" id="tab-ev" onclick="switchTab('ev')"> EV Edges (2)</div>
+        <div class="tab" id="tab-arb" onclick="switchTab('arb')"> Arbitrage (2)</div>
+        <div class="tab" id="tab-analytics" onclick="switchTab('analytics')"> Analytics</div>
+    </div>
+
+    <div id="content-ev" class="tab-content active">
+        <div id="ev-cards">
+            <div class="card ev-card"
+                 data-pct="11.177377892030837"
+                 data-match="San Jose Sharks vs Montréal Canadiens"
+                 data-sport="icehockey_nhl"
+                 data-line="TOTALS_6.5"
+                 data-selection="Over"
+                 data-odds="2.12"
+                 data-stake="44.90910760190965"
+                 data-bookie="onexbet">
+                <div class="card-header">  <span class="highlight">11.18% EV</span> | San Jose Sharks vs Montréal Canadiens</div>
+                <div class="detail-block">
+                     Icehockey Nhl<br>
+                     04 Mar 2026, 08:40 AM<br>
+                     <span class="highlight">TOTALS_6.5</span>
+                </div>
+                <div class="detail-block">
+                     BET EXACTLY: <span class="highlight-stake stake-display" data-base-stake="44.91">₹45</span><br>
+                     <span class="highlight">OVER 6.5 @ 2.12</span> on 1xBet/Melbet
+                </div>
+                <div>
+                     True Odds: 1.91 &nbsp;|&nbsp; Confidence: <span style="color:#e3b341;font-weight:bold;">50/100</span><br> CLV: <span class="highlight">-0.01%</span>
+                </div>
+                <table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:8px;"><thead><tr style="color:#8b949e;"><th style="text-align:left;">Book</th><th>Odds</th><th>EV%</th></tr></thead><tbody><tr><td>Pinnacle</td><td>1.850</td><td>+0.00%</td></tr><tr style="color:#58a6ff;font-weight:bold;"><td>1xBet/Melbet</td><td>2.120</td><td>+11.18%</td></tr></tbody></table>
+            </div>
+            
+            <div class="card ev-card"
+                 data-pct="10.821428571428559"
+                 data-match="Anaheim Ducks vs Colorado Avalanche"
+                 data-sport="icehockey_nhl"
+                 data-line="TOTALS_6.5"
+                 data-selection="Over"
+                 data-odds="2.03"
+                 data-stake="47.27808599167818"
+                 data-bookie="onexbet">
+                <div class="card-header">  <span class="highlight">10.82% EV</span> | Anaheim Ducks vs Colorado Avalanche</div>
+                <div class="detail-block">
+                     Icehockey Nhl<br>
+                     04 Mar 2026, 08:40 AM<br>
+                     <span class="highlight">TOTALS_6.5</span>
+                </div>
+                <div class="detail-block">
+                     BET EXACTLY: <span class="highlight-stake stake-display" data-base-stake="47.28">₹47</span><br>
+                     <span class="highlight">OVER 6.5 @ 2.03</span> on 1xBet/Melbet
+                </div>
+                <div>
+                     True Odds: 1.83 &nbsp;|&nbsp; Confidence: <span style="color:#e3b341;font-weight:bold;">48/100</span><br> CLV: <span class="highlight">-0.01%</span>
+                </div>
+                <table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:8px;"><thead><tr style="color:#8b949e;"><th style="text-align:left;">Book</th><th>Odds</th><th>EV%</th></tr></thead><tbody><tr><td>Pinnacle</td><td>1.780</td><td>+0.00%</td></tr><tr style="color:#58a6ff;font-weight:bold;"><td>1xBet/Melbet</td><td>2.030</td><td>+10.82%</td></tr></tbody></table>
+            </div>
+            </div>
+    </div>
+    <div id="content-arb" class="tab-content">
+        <div id="arb-cards">
+        <div class="card">
+            <div class="card-header">  <span class="highlight">4.01% ARB</span><span style="font-size:11px;color:#8b949e;"> (2-way)</span> | Anaheim Ducks vs Colorado Avalanche</div>
+            <div class="detail-block">
+                 Icehockey Nhl<br>
+                 04 Mar 2026, 08:40 AM<br>
+                 <span class="highlight">TOTALS_6.5</span>
+            </div>
+            <div class="detail-block">
+            <span class="highlight-stake">₹770</span> on <span class="highlight">OVER @ 2.03</span> [1xBet/Melbet]<br>
+            <span class="highlight-stake">₹730</span> on <span class="highlight">UNDER @ 2.14</span> [Pinnacle]
+        </div>
+            <div>
+                 Profit: <span class="profit-highlight">₹63</span>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">  <span class="highlight">3.81% ARB</span><span style="font-size:11px;color:#8b949e;"> (2-way)</span> | San Jose Sharks vs Montréal Canadiens</div>
+            <div class="detail-block">
+                 Icehockey Nhl<br>
+                 04 Mar 2026, 08:40 AM<br>
+                 <span class="highlight">TOTALS_6.5</span>
+            </div>
+            <div class="detail-block">
+            <span class="highlight-stake">₹736</span> on <span class="highlight">OVER @ 2.12</span> [1xBet/Melbet]<br>
+            <span class="highlight-stake">₹764</span> on <span class="highlight">UNDER @ 2.04</span> [Pinnacle]
+        </div>
+            <div>
+                 Profit: <span class="profit-highlight">₹59</span>
+            </div>
+        </div>
+        </div>
+    </div>
+    
+    <div id="content-analytics" class="tab-content">
+        <div class="card">
+            <div class="card-header"> EV Distribution (Current Scan)</div>
+            <div style="margin-bottom:12px;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                    <span style="width:60px;color:#8b949e;">0–2%</span>
+                    <div style="flex:1;background:#21262d;border-radius:4px;height:18px;overflow:hidden;">
+                        <div style="width:0%;background:#58a6ff;height:100%;border-radius:4px;"></div>
+                    </div>
+                    <span style="width:30px;text-align:right;">0</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                    <span style="width:60px;color:#8b949e;">2–5%</span>
+                    <div style="flex:1;background:#21262d;border-radius:4px;height:18px;overflow:hidden;">
+                        <div style="width:0%;background:#2ea043;height:100%;border-radius:4px;"></div>
+                    </div>
+                    <span style="width:30px;text-align:right;">0</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                    <span style="width:60px;color:#8b949e;">5–10%</span>
+                    <div style="flex:1;background:#21262d;border-radius:4px;height:18px;overflow:hidden;">
+                        <div style="width:0%;background:#e3b341;height:100%;border-radius:4px;"></div>
+                    </div>
+                    <span style="width:30px;text-align:right;">0</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="width:60px;color:#8b949e;">10%+</span>
+                    <div style="flex:1;background:#21262d;border-radius:4px;height:18px;overflow:hidden;">
+                        <div style="width:20%;background:#f85149;height:100%;border-radius:4px;"></div>
+                    </div>
+                    <span style="width:30px;text-align:right;">2</span>
+                </div>
+            </div>
+            <div style="margin-top:12px;font-size:14px;color:#8b949e;">
+                Average EV: <span class="highlight">11.00%</span> &nbsp;|&nbsp; Highest EV: <span class="highlight">11.18%</span>
+            </div>
+        </div>
+    </div>
+    
+
+    <div class="telemetry">
+        <strong>SYSTEM TELEMETRY</strong><br>
+        Active Key: #1 | Monthly Quota: 252/500 | Scan Cost: ~8 credits
+    </div>
+
+    <script>
+        const ALL_EVS = [{"pct": 11.177377892030837, "match": "San Jose Sharks vs Montr\u00e9al Canadiens", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "selection": "Over", "odds": 2.12, "true": 1.9068627450980393, "bookie": "onexbet", "stake": 44.90910760190965, "confidence": 50, "clv_pct": -0.007}, {"pct": 10.821428571428559, "match": "Anaheim Ducks vs Colorado Avalanche", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "selection": "Over", "odds": 2.03, "true": 1.8317757009345794, "bookie": "onexbet", "stake": 47.27808599167818, "confidence": 48, "clv_pct": -0.012}];
+        const ALL_ARBS = [{"pct": 4.009944293540801, "match": "Anaheim Ducks vs Colorado Avalanche", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "ways": 2, "s1": "Over", "s1_price": 2.03, "s1_bookie": "onexbet", "s2": "Under", "s2_price": 2.14, "s2_bookie": "pinnacle", "s3": "", "s3_price": 0, "s3_bookie": "", "stk1": 769.7841726618705, "stk2": 730.2158273381293, "stk3": 0, "profit": 62.6618705035969}, {"pct": 3.810580836108035, "match": "San Jose Sharks vs Montr\u00e9al Canadiens", "time": "04 Mar 2026, 08:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "ways": 2, "s1": "Over", "s1_price": 2.12, "s1_bookie": "onexbet", "s2": "Under", "s2_price": 2.04, "s2_bookie": "pinnacle", "s3": "", "s3_price": 0, "s3_bookie": "", "stk1": 735.5769230769231, "stk2": 764.423076923077, "stk3": 0, "profit": 59.42307692307713}];
+
+        function switchTab(tab) {
+            ['ev','arb','analytics'].forEach(t => {
+                document.getElementById('content-'+t).classList.remove('active');
+                document.getElementById('tab-'+t).classList.remove('active');
+            });
+            document.getElementById('content-'+tab).classList.add('active');
+            document.getElementById('tab-'+tab).classList.add('active');
+        }
+
+        function triggerScan() {
+            let pat = localStorage.getItem('gh_dispatch_token');
+            if (!pat) {
+                pat = prompt("Enter your GitHub PAT (ghp_...) to authorize this scan:\n(This is safely stored only in your local browser, never public)");
+                if (!pat) return;
+                localStorage.setItem('gh_dispatch_token', pat);
+            }
+            fetch('https://api.github.com/repos/nikunj7711/arb-sniper/actions/workflows/sniper.yml/dispatches', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/vnd.github.v3+json',
+                    'Authorization': 'token ' + pat,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ ref: 'main' })
+            })
+            .then(response => {
+                if(response.ok) {
+                    alert(" Engine Fired! Scan is running. Wait 2-3 minutes, then Hard Refresh this page (Ctrl+F5 or pull down to refresh).");
+                } else {
+                    alert(" Authorization failed! Your token might be wrong or expired. Resetting token...");
+                    localStorage.removeItem('gh_dispatch_token');
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        let currentKelly = 0.30;
+        function updateKelly(val) {
+            currentKelly = val / 100;
+            document.getElementById('kellyValue').textContent = val + '%';
+            document.querySelectorAll('.stake-display').forEach(el => {
+                const baseStake = parseFloat(el.getAttribute('data-base-stake'));
+                const adjusted = baseStake * (currentKelly / 0.30);
+                el.textContent = '₹' + Math.round(adjusted);
+            });
+        }
+
+        function applyTop5() {
+            const top5 = document.getElementById('top5Toggle').checked;
+            const evCards = document.querySelectorAll('#ev-cards .ev-card');
+            evCards.forEach((card, i) => {
+                card.style.display = (top5 && i >= 5) ? 'none' : '';
+            });
+            const arbCards = document.querySelectorAll('#arb-cards .card');
+            arbCards.forEach((card, i) => {
+                card.style.display = (top5 && i >= 5) ? 'none' : '';
+            });
+        }
+
+        function exportCSV() {
+            let rows = [['Type','Match','Sport','Line','Selection','Odds','EV%/ARB%','Stake','Bookmaker']];
+            ALL_EVS.forEach(e => {
+                rows.push(['EV', e.match, e.sport, e.line, e.selection, e.odds, e.pct.toFixed(2), e.stake.toFixed(0), e.bookie]);
+            });
+            ALL_ARBS.forEach(a => {
+                rows.push(['ARB', a.match, a.sport, a.line, a.s1+'/'+a.s2, a.s1_price+'/'+a.s2_price, a.pct.toFixed(2), (a.stk1+a.stk2).toFixed(0), a.s1_bookie+'+'+a.s2_bookie]);
+            });
+            const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\n');
+            const blob = new Blob([csv], {type:'text/csv'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'arb_sniper_export.csv'; a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
