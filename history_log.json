@@ -1,0 +1,56 @@
+[
+  {
+    "type": "EV",
+    "timestamp": "2026-03-04 01:10:50 IST",
+    "match": "Anaheim Ducks vs Colorado Avalanche",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet",
+    "odds": 2.03,
+    "true_odds": 1.832,
+    "selection": "Over",
+    "ev_pct": 10.821,
+    "stake": 47.28,
+    "clv_pct": -0.012
+  },
+  {
+    "type": "EV",
+    "timestamp": "2026-03-04 01:10:50 IST",
+    "match": "San Jose Sharks vs Montr\u00e9al Canadiens",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet",
+    "odds": 2.12,
+    "true_odds": 1.907,
+    "selection": "Over",
+    "ev_pct": 11.177,
+    "stake": 44.91,
+    "clv_pct": -0.007
+  },
+  {
+    "type": "ARB",
+    "timestamp": "2026-03-04 01:10:50 IST",
+    "match": "Anaheim Ducks vs Colorado Avalanche",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet+pinnacle",
+    "odds": 2.03,
+    "selection": "Over",
+    "arb_pct": 4.01,
+    "stake": 1500.0,
+    "clv_pct": -0.012
+  },
+  {
+    "type": "ARB",
+    "timestamp": "2026-03-04 01:10:50 IST",
+    "match": "San Jose Sharks vs Montr\u00e9al Canadiens",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet+pinnacle",
+    "odds": 2.12,
+    "selection": "Over",
+    "arb_pct": 3.811,
+    "stake": 1500.0,
+    "clv_pct": -0.007
+  }
+]
