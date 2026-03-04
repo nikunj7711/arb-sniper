@@ -79,5 +79,46 @@
     "arb_pct": 4.032,
     "stake": 1500.0,
     "clv_pct": 0.02
+  },
+  {
+    "type": "EV",
+    "timestamp": "2026-03-04 12:42:40 IST",
+    "match": "Memphis Grizzlies vs Portland Trail Blazers",
+    "sport": "basketball_nba",
+    "line": "TOTALS_237.5",
+    "bookmaker": "onexbet",
+    "odds": 1.96,
+    "true_odds": 1.92,
+    "selection": "Under",
+    "ev_pct": 2.062,
+    "stake": 20,
+    "clv_pct": 0.021
+  },
+  {
+    "type": "EV",
+    "timestamp": "2026-03-04 12:42:40 IST",
+    "match": "Anaheim Ducks vs New York Islanders",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet",
+    "odds": 2.15,
+    "true_odds": 1.955,
+    "selection": "Over",
+    "ev_pct": 10.0,
+    "stake": 39.13,
+    "clv_pct": -0.023
+  },
+  {
+    "type": "ARB",
+    "timestamp": "2026-03-04 12:42:40 IST",
+    "match": "Anaheim Ducks vs New York Islanders",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet+pinnacle",
+    "odds": 2.15,
+    "selection": "Over",
+    "arb_pct": 2.983,
+    "stake": 1500.0,
+    "clv_pct": -0.023
   }
 ]
