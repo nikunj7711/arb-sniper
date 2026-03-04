@@ -201,5 +201,73 @@
     "arb_pct": 3.052,
     "stake": 1500.0,
     "clv_pct": 0.0
+  },
+  {
+    "type": "EV",
+    "timestamp": "2026-03-05 00:42:45 IST",
+    "match": "New York Knicks vs Oklahoma City Thunder",
+    "sport": "basketball_nba",
+    "line": "TOTALS_222.5",
+    "bookmaker": "onexbet",
+    "odds": 1.96,
+    "true_odds": 1.925,
+    "selection": "Under",
+    "ev_pct": 1.798,
+    "stake": 20,
+    "clv_pct": 0.019
+  },
+  {
+    "type": "EV",
+    "timestamp": "2026-03-05 00:42:45 IST",
+    "match": "Anaheim Ducks vs New York Islanders",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet",
+    "odds": 2.12,
+    "true_odds": 1.94,
+    "selection": "Over",
+    "ev_pct": 9.278,
+    "stake": 37.28,
+    "clv_pct": 0.0
+  },
+  {
+    "type": "EV",
+    "timestamp": "2026-03-05 00:42:45 IST",
+    "match": "Vancouver Canucks vs Carolina Hurricanes",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet",
+    "odds": 2.27,
+    "true_odds": 2.103,
+    "selection": "Over",
+    "ev_pct": 7.956,
+    "stake": 28.19,
+    "clv_pct": -0.014
+  },
+  {
+    "type": "ARB",
+    "timestamp": "2026-03-05 00:42:45 IST",
+    "match": "Anaheim Ducks vs New York Islanders",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet+pinnacle",
+    "odds": 2.12,
+    "selection": "Over",
+    "arb_pct": 2.83,
+    "stake": 1500.0,
+    "clv_pct": 0.0
+  },
+  {
+    "type": "ARB",
+    "timestamp": "2026-03-05 00:42:45 IST",
+    "match": "Vancouver Canucks vs Carolina Hurricanes",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet+pinnacle",
+    "odds": 2.27,
+    "selection": "Over",
+    "arb_pct": 1.893,
+    "stake": 1500.0,
+    "clv_pct": -0.014
   }
 ]
