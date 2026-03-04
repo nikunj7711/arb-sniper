@@ -174,5 +174,32 @@
     "arb_pct": 1.698,
     "stake": 1500.0,
     "clv_pct": 0.005
+  },
+  {
+    "type": "EV",
+    "timestamp": "2026-03-04 23:34:23 IST",
+    "match": "Anaheim Ducks vs New York Islanders",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet",
+    "odds": 2.13,
+    "true_odds": 1.945,
+    "selection": "Over",
+    "ev_pct": 9.512,
+    "stake": 37.88,
+    "clv_pct": 0.0
+  },
+  {
+    "type": "ARB",
+    "timestamp": "2026-03-04 23:34:23 IST",
+    "match": "Anaheim Ducks vs New York Islanders",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet+pinnacle",
+    "odds": 2.13,
+    "selection": "Over",
+    "arb_pct": 3.052,
+    "stake": 1500.0,
+    "clv_pct": 0.0
   }
 ]
