@@ -1,7 +1,7 @@
 {
   "date": "2026-03-04",
   "starting_bankroll": 1500,
-  "total_stakes": 26229.523717062704,
-  "theoretical_arb_profit": 900.0986750574082,
-  "theoretical_ev_exposure": 74.43307421798045
+  "total_stakes": 29295.44569475631,
+  "theoretical_arb_profit": 976.1922432368224,
+  "theoretical_ev_exposure": 80.41483869925749
 }

@@ -147,5 +147,32 @@
     "arb_pct": 2.897,
     "stake": 1500.0,
     "clv_pct": 0.025
+  },
+  {
+    "type": "EV",
+    "timestamp": "2026-03-04 22:39:44 IST",
+    "match": "Vancouver Canucks vs Carolina Hurricanes",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet",
+    "odds": 2.26,
+    "true_odds": 2.108,
+    "selection": "Over",
+    "ev_pct": 7.205,
+    "stake": 25.73,
+    "clv_pct": 0.005
+  },
+  {
+    "type": "ARB",
+    "timestamp": "2026-03-04 22:39:44 IST",
+    "match": "Vancouver Canucks vs Carolina Hurricanes",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet+pinnacle",
+    "odds": 2.26,
+    "selection": "Over",
+    "arb_pct": 1.698,
+    "stake": 1500.0,
+    "clv_pct": 0.005
   }
 ]
