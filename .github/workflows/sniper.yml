@@ -11,7 +11,6 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v3
 
@@ -20,18 +19,15 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
-        run: pip install requests
-
       - name: Run Sniper & Generate Dashboard
         env:
           ODDS_API_KEYS: ${{ secrets.ODDS_API_KEYS }}
         run: python arb_sniper.py
 
-      - name: Publish Dashboard & Save State
+      - name: Publish Dashboard
         run: |
           git config --global user.name "Arb Sniper Bot"
           git config --global user.email "bot@arbsniper.com"
-          git add index.html bankroll_state.json history_log.json alert_cache.json || true
-          git commit -m "Update dashboard and save state [$(date '+%Y-%m-%d %H:%M IST')]" || exit 0
+          git add index.html
+          git commit -m "Update dashboard [$(date '+%Y-%m-%d %H:%M IST')]" || exit 0
           git push
