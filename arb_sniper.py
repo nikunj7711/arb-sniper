@@ -783,7 +783,7 @@ def generate_web_dashboard(evs, arbs, current_time, bankroll_state=None):
     </div>
     <div class="analytics-card">
       <div class="an-title">🔒 ARB by Sport</div>
-      {sport_rows_html([(s, {{"count": c, "total_pct": 0, "max_pct": 0}}) for s, c in top_arb_sports], 'linear-gradient(90deg,#bf5af2,#00c8ff)')}
+      {sport_rows_html([(s, dict(count=c, total_pct=0, max_pct=0)) for s, c in top_arb_sports], 'linear-gradient(90deg,#bf5af2,#00c8ff)')}
     </div>
   </div>
 
