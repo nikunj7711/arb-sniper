@@ -1,1042 +1,991 @@
-# Writes the complete index.html SPA
-import os, json
+import requests
+import time
+import os
+import json
+from datetime import datetime, timezone, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# ── KEY INJECTION ──
-# Reads comma-separated keys from GitHub Secret ODDS_API_KEYS
-# Injects them directly into the JS so the browser never prompts for input
-_raw_keys = os.getenv('ODDS_API_KEYS', '')
-_keys_list = [k.strip() for k in _raw_keys.split(',') if k.strip()]
-# Serialise as a JS array literal, e.g. ["key1","key2"]
-INJECTED_KEYS_JS = json.dumps(_keys_list)
+# ==========================================
+#  CONFIGURATION
+# ==========================================
+api_keys_env = os.getenv('ODDS_API_KEYS', '')
+API_KEYS = api_keys_env.split(',') if api_keys_env else []
 
-HTML = """<!DOCTYPE html>
+NTFY_CHANNEL = 'nikunj_arb_alerts_2026'
+TOTAL_BANKROLL = 1500
+
+MIN_EV_THRESHOLD = 1.5
+MIN_ARB_THRESHOLD = 1.0
+
+MY_BOOKIES = 'pinnacle,onexbet,marathonbet,dafabet,stake,betfair_ex_eu,betway'
+
+TARGET_SPORTS = [
+    'soccer_epl', 'soccer_uefa_champs_league',
+    'basketball_nba', 'icehockey_nhl',
+    'tennis_atp', 'tennis_wta'
+]
+
+# ==========================================
+#  FEATURE 12: PER-BOOK BANKROLL CAPS
+# ==========================================
+BOOK_CAPS = {
+    'betway': 300,
+    'stake': 500,
+    'onexbet': 400,
+    'marathonbet': 400,
+    'dafabet': 350,
+    'betfair_ex_eu': 600,
+    'pinnacle': 1000,
+}
+
+current_key_index = 0
+requests_remaining = "Unknown"
+requests_used_total = "Unknown"
+scan_starting_used = None
+
+# ==========================================
+#  FEATURE 5: ALERT CACHE (DUPLICATE SUPPRESSION)
+# ==========================================
+ALERT_CACHE_FILE = 'alert_cache.json'
+ALERT_CACHE_EXPIRY_HOURS = 6
+
+def load_alert_cache():
+    try:
+        with open(ALERT_CACHE_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_alert_cache(cache):
+    try:
+        with open(ALERT_CACHE_FILE, 'w') as f:
+            json.dump(cache, f)
+    except:
+        pass
+
+def is_duplicate_alert(cache, match, line, selection, odds):
+    key = f"{match}|{line}|{selection}|{odds:.2f}"
+    if key in cache:
+        ts = cache[key]
+        try:
+            cached_time = datetime.fromisoformat(ts)
+            if datetime.now(timezone.utc) - cached_time < timedelta(hours=ALERT_CACHE_EXPIRY_HOURS):
+                return True
+        except:
+            pass
+    return False
+
+def mark_alert_sent(cache, match, line, selection, odds):
+    key = f"{match}|{line}|{selection}|{odds:.2f}"
+    cache[key] = datetime.now(timezone.utc).isoformat()
+
+def prune_alert_cache(cache):
+    now = datetime.now(timezone.utc)
+    return {
+        k: v for k, v in cache.items()
+        if (now - datetime.fromisoformat(v)) < timedelta(hours=ALERT_CACHE_EXPIRY_HOURS)
+    }
+
+# ==========================================
+#  FEATURE 1: SMART DAILY BANKROLL TRACKING
+# ==========================================
+BANKROLL_STATE_FILE = 'bankroll_state.json'
+
+def load_bankroll_state():
+    try:
+        with open(BANKROLL_STATE_FILE, 'r') as f:
+            state = json.load(f)
+        ist_today = (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).strftime('%Y-%m-%d')
+        if state.get('date') != ist_today:
+            state = {'date': ist_today, 'starting_bankroll': TOTAL_BANKROLL, 'total_stakes': 0.0, 'theoretical_arb_profit': 0.0, 'theoretical_ev_exposure': 0.0}
+            save_bankroll_state(state)
+        return state
+    except:
+        ist_today = (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).strftime('%Y-%m-%d')
+        state = {'date': ist_today, 'starting_bankroll': TOTAL_BANKROLL, 'total_stakes': 0.0, 'theoretical_arb_profit': 0.0, 'theoretical_ev_exposure': 0.0}
+        save_bankroll_state(state)
+        return state
+
+def save_bankroll_state(state):
+    try:
+        with open(BANKROLL_STATE_FILE, 'w') as f:
+            json.dump(state, f, indent=2)
+    except:
+        pass
+
+def update_bankroll_state(all_evs, all_arbs):
+    state = load_bankroll_state()
+    for ev in all_evs:
+        state['total_stakes'] += ev.get('stake', 0)
+        state['theoretical_ev_exposure'] += ev.get('stake', 0) * (ev['pct'] / 100)
+    for arb in all_arbs:
+        state['total_stakes'] += arb.get('stk1', 0) + arb.get('stk2', 0)
+        state['theoretical_arb_profit'] += arb.get('profit', 0)
+    save_bankroll_state(state)
+    return state
+
+# ==========================================
+#  FEATURE 2: HISTORICAL EDGE LOGGING
+# ==========================================
+HISTORY_LOG_FILE = 'history_log.json'
+
+def load_history_log():
+    try:
+        with open(HISTORY_LOG_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return []
+
+def save_history_log(log):
+    try:
+        with open(HISTORY_LOG_FILE, 'w') as f:
+            json.dump(log, f, indent=2)
+    except:
+        pass
+
+def append_to_history(evs, arbs):
+    log = load_history_log()
+    ist_now_str = (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).strftime('%Y-%m-%d %H:%M:%S IST')
+    scan_keys = set()
+    for entry in log:
+        scan_keys.add(f"{entry.get('match')}|{entry.get('line')}|{entry.get('selection','')}|{entry.get('odds',0):.2f}|{entry.get('type')}")
+    new_entries = []
+    for ev in evs:
+        key = f"{ev['match']}|{ev['line']}|{ev['selection']}|{ev['odds']:.2f}|EV"
+        if key not in scan_keys:
+            entry = {
+                'type': 'EV', 'timestamp': ist_now_str, 'match': ev['match'],
+                'sport': ev['sport'], 'line': ev['line'], 'bookmaker': ev['bookie'],
+                'odds': round(ev['odds'], 3), 'true_odds': round(ev['true'], 3),
+                'selection': ev['selection'], 'ev_pct': round(ev['pct'], 3),
+                'stake': round(ev['stake'], 2), 'clv_pct': None,
+            }
+            new_entries.append(entry)
+            scan_keys.add(key)
+    for arb in arbs:
+        key = f"{arb['match']}|{arb['line']}|{arb['s1']}|{arb['s1_data']['price']:.2f}|ARB"
+        if key not in scan_keys:
+            entry = {
+                'type': 'ARB', 'timestamp': ist_now_str, 'match': arb['match'],
+                'sport': arb['sport'], 'line': arb['line'],
+                'bookmaker': f"{arb['s1_data']['bookie']}+{arb['s2_data']['bookie']}",
+                'odds': round(arb['s1_data']['price'], 3), 'selection': arb['s1'],
+                'arb_pct': round(arb['pct'], 3),
+                'stake': round(arb['stk1'] + arb['stk2'], 2), 'clv_pct': None,
+            }
+            new_entries.append(entry)
+            scan_keys.add(key)
+    log.extend(new_entries)
+    save_history_log(log)
+    return log
+
+# ==========================================
+#  FEATURE 6: CLV TRACKING MODEL
+# ==========================================
+def compute_clv(all_evs, history_log):
+    prev_by_key = {}
+    for entry in history_log:
+        if entry.get('type') == 'EV' and entry.get('true_odds'):
+            k = f"{entry['match']}|{entry['line']}|{entry.get('selection','')}"
+            prev_by_key[k] = entry
+    updated = False
+    for ev in all_evs:
+        k = f"{ev['match']}|{ev['line']}|{ev['selection']}"
+        if k in prev_by_key:
+            prev = prev_by_key[k]
+            prev_true = prev.get('true_odds')
+            if prev_true and prev_true > 1.0:
+                curr_true = ev['true']
+                clv_pct = ((curr_true / prev_true) - 1) * 100
+                ev['clv_pct'] = round(clv_pct, 3)
+                for entry in history_log:
+                    if (entry.get('match') == prev['match'] and
+                            entry.get('line') == prev['line'] and
+                            entry.get('selection', '') == prev.get('selection', '') and
+                            entry.get('clv_pct') is None):
+                        entry['clv_pct'] = round(clv_pct, 3)
+                        updated = True
+        else:
+            ev['clv_pct'] = None
+    if updated:
+        save_history_log(history_log)
+    return all_evs
+
+# ==========================================
+#  CORE UTILITIES
+# ==========================================
+def get_active_api_key():
+    return API_KEYS[current_key_index]
+
+def rotate_api_key():
+    global current_key_index, scan_starting_used
+    current_key_index += 1
+    if current_key_index >= len(API_KEYS):
+        print(" CRITICAL ERROR: All API keys exhausted!")
+        return False
+    print(f" Quota reached! Switched to API Key #{current_key_index + 1}")
+    scan_starting_used = None
+    return True
+
+def send_phone_alert(message, percent, match_name, alert_type):
+    try:
+        emoji = "🔒" if alert_type == "ARB" else "⚡"
+        payload = {
+            "topic": NTFY_CHANNEL, "message": message,
+            "title": f"{emoji} {percent:.2f}% {alert_type} | {match_name}",
+            "tags": ["gem", "moneybag"], "priority": 5
+        }
+        requests.post("https://ntfy.sh/", json=payload)
+    except:
+        pass
+
+def format_time_ist(iso_string):
+    try:
+        dt_utc = datetime.strptime(iso_string, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        return dt_utc.astimezone(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p")
+    except:
+        return "Unknown Time"
+
+def display_bookie(api_key):
+    mapping = {
+        'onexbet': '1xBet/Melbet', 'pinnacle': 'Pinnacle', 'marathonbet': 'Marathonbet',
+        'dafabet': 'Dafabet', 'stake': 'Stake.com', 'betfair_ex_eu': 'Betfair Exchange', 'betway': 'Betway'
+    }
+    return mapping.get(api_key, api_key.title())
+
+def remove_vig(odds1, odds2):
+    imp1, imp2 = 1 / odds1, 1 / odds2
+    margin = imp1 + imp2
+    return (1 / (imp1 / margin)), (1 / (imp2 / margin))
+
+def calculate_kelly(soft_odds, true_odds, bankroll, kelly_fraction=0.30, bookie=None):
+    b = soft_odds - 1.0
+    p = 1.0 / true_odds
+    q = 1.0 - p
+    safe_kelly = ((b * p - q) / b) * kelly_fraction
+    if safe_kelly <= 0:
+        return 0
+    if safe_kelly > 0.05:
+        safe_kelly = 0.05
+    stake = max(20, bankroll * safe_kelly)
+    if bookie and bookie in BOOK_CAPS:
+        stake = min(stake, BOOK_CAPS[bookie])
+    return stake
+
+def calculate_green_up(back_stake, back_odds, lay_odds):
+    target_lay_stake = (back_stake * back_odds) / lay_odds
+    guaranteed_profit = target_lay_stake - back_stake
+    return target_lay_stake, guaranteed_profit
+
+# ==========================================
+#  FEATURE 11: CONFIDENCE SCORE
+# ==========================================
+def compute_confidence(soft_odds, true_odds):
+    soft_imp = 1 / soft_odds
+    true_imp = 1 / true_odds
+    diff = abs(soft_imp - true_imp)
+    score = max(0, min(100, int((diff / true_imp) * 500)))
+    return score
+
+# ==========================================
+#  DATA EXTRACTION
+# ==========================================
+def extract_hybrid_data(bookmakers_list, target_bookies):
+    ev_lines = {}
+    arb_lines = {}
+    for bookie in bookmakers_list:
+        b_name = bookie['key']
+        if b_name not in target_bookies:
+            continue
+        for market in bookie.get('markets', []):
+            if market['key'] in ['totals', 'spreads']:
+                m_type = market['key'].upper()
+                for outcome in market['outcomes']:
+                    point = str(outcome.get('point', '0'))
+                    name = outcome['name']
+                    price = outcome['price']
+                    if b_name == 'betfair_ex_eu':
+                        price = 1 + (price - 1) * 0.97
+                    line_key = f"{m_type}_{point}"
+                    if line_key not in ev_lines:
+                        ev_lines[line_key] = {'pinnacle': {}, 'best_soft': {}, 'all_soft': {}}
+                    if b_name == 'pinnacle':
+                        ev_lines[line_key]['pinnacle'][name] = price
+                    elif b_name != 'pinnacle':
+                        if name not in ev_lines[line_key]['best_soft'] or price > ev_lines[line_key]['best_soft'][name]['price']:
+                            ev_lines[line_key]['best_soft'][name] = {'price': price, 'bookie': b_name}
+                        if name not in ev_lines[line_key]['all_soft']:
+                            ev_lines[line_key]['all_soft'][name] = {}
+                        ev_lines[line_key]['all_soft'][name][b_name] = price
+                    if line_key not in arb_lines:
+                        arb_lines[line_key] = {}
+                    if name not in arb_lines[line_key] or price > arb_lines[line_key][name]['price']:
+                        arb_lines[line_key][name] = {'price': price, 'bookie': b_name}
+    return ev_lines, arb_lines
+
+# ==========================================
+#  FEATURE 8: BOOKMAKER EV BREAKDOWN
+# ==========================================
+def build_ev_breakdown(line_data, side, true_odds):
+    pinny_odds = line_data['pinnacle'].get(side, None)
+    rows = []
+    if pinny_odds:
+        rows.append({'bookie': 'pinnacle', 'odds': round(pinny_odds, 3), 'ev_pct': 0.0, 'is_best': False})
+    all_soft = line_data.get('all_soft', {}).get(side, {})
+    best_ev = -999
+    best_bookie = None
+    for bk, odds in all_soft.items():
+        ev_pct = ((odds / true_odds) - 1) * 100
+        rows.append({'bookie': bk, 'odds': round(odds, 3), 'ev_pct': round(ev_pct, 2), 'is_best': False})
+        if ev_pct > best_ev:
+            best_ev = ev_pct
+            best_bookie = bk
+    for row in rows:
+        if row['bookie'] == best_bookie:
+            row['is_best'] = True
+    return rows
+
+# ==========================================
+#  MARKET EVALUATION
+# ==========================================
+def evaluate_markets(ev_lines, arb_lines, match_name, match_time, sport):
+    found_evs, found_arbs = [], []
+    for line_key, data in ev_lines.items():
+        pinny, softs = data['pinnacle'], data['best_soft']
+        if len(pinny) == 2:
+            s1, s2 = list(pinny.keys())[0], list(pinny.keys())[1]
+            t_odds1, t_odds2 = remove_vig(pinny[s1], pinny[s2])
+            for side, true_odds in [(s1, t_odds1), (s2, t_odds2)]:
+                if side in softs and softs[side]['price'] > true_odds:
+                    ev_pct = ((softs[side]['price'] / true_odds) - 1) * 100
+                    if ev_pct >= MIN_EV_THRESHOLD:
+                        stake = calculate_kelly(softs[side]['price'], true_odds, TOTAL_BANKROLL, bookie=softs[side]['bookie'])
+                        t_lay, g_profit = calculate_green_up(stake, softs[side]['price'], true_odds)
+                        confidence = compute_confidence(softs[side]['price'], true_odds)
+                        ev_breakdown = build_ev_breakdown(data, side, true_odds)
+                        found_evs.append({
+                            'pct': ev_pct, 'match': match_name, 'time': match_time, 'sport': sport,
+                            'line': line_key, 'selection': side, 'odds': softs[side]['price'],
+                            'true': true_odds, 'bookie': softs[side]['bookie'],
+                            'stake': stake, 'target_lay': t_lay, 'green_profit': g_profit,
+                            'confidence': confidence, 'ev_breakdown': ev_breakdown, 'clv_pct': None,
+                        })
+    for line_key, outcomes in arb_lines.items():
+        keys = list(outcomes.keys())
+        if len(keys) == 2:
+            k1, k2 = keys[0], keys[1]
+            margin = (1 / outcomes[k1]['price']) + (1 / outcomes[k2]['price'])
+            if margin < 1.0:
+                arb_pct = (1 - margin) * 100
+                if arb_pct >= MIN_ARB_THRESHOLD:
+                    found_arbs.append({
+                        'pct': arb_pct, 'match': match_name, 'time': match_time, 'sport': sport,
+                        'line': line_key, 'ways': 2,
+                        's1': k1, 's1_data': outcomes[k1], 's2': k2, 's2_data': outcomes[k2],
+                        'stk1': (TOTAL_BANKROLL / margin) / outcomes[k1]['price'],
+                        'stk2': (TOTAL_BANKROLL / margin) / outcomes[k2]['price'],
+                        'profit': (TOTAL_BANKROLL / margin) - TOTAL_BANKROLL
+                    })
+        elif len(keys) == 3:
+            k1, k2, k3 = keys[0], keys[1], keys[2]
+            margin = (1 / outcomes[k1]['price']) + (1 / outcomes[k2]['price']) + (1 / outcomes[k3]['price'])
+            if margin < 1.0:
+                arb_pct = (1 - margin) * 100
+                if arb_pct >= MIN_ARB_THRESHOLD:
+                    found_arbs.append({
+                        'pct': arb_pct, 'match': match_name, 'time': match_time, 'sport': sport,
+                        'line': line_key, 'ways': 3,
+                        's1': k1, 's1_data': outcomes[k1], 's2': k2, 's2_data': outcomes[k2],
+                        's3': k3, 's3_data': outcomes[k3],
+                        'stk1': (TOTAL_BANKROLL / margin) / outcomes[k1]['price'],
+                        'stk2': (TOTAL_BANKROLL / margin) / outcomes[k2]['price'],
+                        'stk3': (TOTAL_BANKROLL / margin) / outcomes[k3]['price'],
+                        'profit': (TOTAL_BANKROLL / margin) - TOTAL_BANKROLL
+                    })
+    return found_evs, found_arbs
+
+# ==========================================
+#  API FETCHING
+# ==========================================
+def fetch_odds_with_retry(url, params):
+    global requests_remaining, requests_used_total, scan_starting_used
+    while True:
+        if not API_KEYS:
+            return None
+        params['apiKey'] = get_active_api_key()
+        res = requests.get(url, params=params)
+        if 'x-requests-remaining' in res.headers:
+            requests_remaining = res.headers['x-requests-remaining']
+        if 'x-requests-used' in res.headers:
+            requests_used_total = res.headers['x-requests-used']
+            if scan_starting_used is None:
+                scan_starting_used = int(requests_used_total) - 2
+        if res.status_code == 401:
+            if rotate_api_key(): continue
+            else: return None
+        elif res.status_code == 429:
+            if 'quota' in res.json().get('message', '').lower():
+                if rotate_api_key(): continue
+                else: return None
+            else:
+                time.sleep(2); continue
+        elif res.status_code == 200:
+            return res.json()
+        else:
+            return None
+
+# ==========================================
+#  FEATURE 7: PARALLEL SPORT FETCHING
+# ==========================================
+def fetch_sport_events(sport):
+    url = f'https://api.the-odds-api.com/v4/sports/{sport}/odds'
+    params = {'regions': 'eu', 'bookmakers': MY_BOOKIES, 'markets': 'totals,spreads', 'oddsFormat': 'decimal'}
+    events = fetch_odds_with_retry(url, params)
+    time.sleep(1.5)
+    return sport, events
+
+def fetch_all_sports_parallel(sports):
+    results = {}
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {executor.submit(fetch_sport_events, sport): sport for sport in sports}
+        for future in as_completed(futures):
+            sport, events = future.result()
+            results[sport] = events
+    return results
+
+# ==========================================
+#  FEATURE 3: EV DISTRIBUTION ANALYTICS
+# ==========================================
+def compute_ev_analytics(all_evs):
+    buckets = {'0-2%': 0, '2-5%': 0, '5-10%': 0, '10%+': 0}
+    for ev in all_evs:
+        p = ev['pct']
+        if p < 2: buckets['0-2%'] += 1
+        elif p < 5: buckets['2-5%'] += 1
+        elif p < 10: buckets['5-10%'] += 1
+        else: buckets['10%+'] += 1
+    avg_ev = (sum(e['pct'] for e in all_evs) / len(all_evs)) if all_evs else 0
+    max_ev = max((e['pct'] for e in all_evs), default=0)
+    return buckets, round(avg_ev, 3), round(max_ev, 3)
+
+# ==========================================
+#  DASHBOARD GENERATION
+# ==========================================
+def generate_web_dashboard(evs, arbs, current_time, bankroll_state=None):
+    evs.sort(key=lambda x: x['pct'], reverse=True)
+    arbs.sort(key=lambda x: x['pct'], reverse=True)
+    buckets, avg_ev, max_ev = compute_ev_analytics(evs)
+
+    def ev_breakdown_html(breakdown):
+        if not breakdown:
+            return ''
+        rows = ''
+        for row in breakdown:
+            best_cls = ' class="breakdown-best"' if row['is_best'] else ''
+            sign = '+' if row['ev_pct'] > 0 else ''
+            rows += f'<tr{best_cls}><td>{display_bookie(row["bookie"])}</td><td>{row["odds"]:.3f}</td><td>{sign}{row["ev_pct"]:.2f}%</td></tr>'
+        return f'<div class="breakdown-wrap"><table class="breakdown-table"><thead><tr><th>Book</th><th>Odds</th><th>EV%</th></tr></thead><tbody>{rows}</tbody></table></div>'
+
+    def sport_icon(sport):
+        icons = {'soccer': '⚽', 'basketball': '🏀', 'icehockey': '🏒', 'tennis': '🎾', 'baseball': '⚾', 'football': '🏈'}
+        for k, v in icons.items():
+            if k in sport: return v
+        return '🎯'
+
+    def conf_bar(score):
+        color = '#00ff88' if score >= 70 else ('#ffd700' if score >= 40 else '#ff4d6d')
+        label = 'HIGH' if score >= 70 else ('MED' if score >= 40 else 'LOW')
+        return f'<div class="conf-bar-wrap"><span class="conf-label" style="color:{color}">{label}</span><div class="conf-bar-track"><div class="conf-bar-fill" style="width:{score}%;background:{color};box-shadow:0 0 8px {color}88;"></div></div><span class="conf-num" style="color:{color}">{score}</span></div>'
+
+    evs_json = json.dumps([{
+        'pct': e['pct'], 'match': e['match'], 'time': e['time'], 'sport': e['sport'],
+        'line': e['line'], 'selection': e['selection'], 'odds': e['odds'], 'true': e['true'],
+        'bookie': e['bookie'], 'stake': e['stake'], 'confidence': e.get('confidence', 0),
+        'clv_pct': e.get('clv_pct')
+    } for e in evs])
+
+    arbs_json = json.dumps([{
+        'pct': a['pct'], 'match': a['match'], 'time': a['time'], 'sport': a['sport'],
+        'line': a['line'], 'ways': a.get('ways', 2),
+        's1': a['s1'], 's1_price': a['s1_data']['price'], 's1_bookie': a['s1_data']['bookie'],
+        's2': a['s2'], 's2_price': a['s2_data']['price'], 's2_bookie': a['s2_data']['bookie'],
+        's3': a.get('s3', ''), 's3_price': a.get('s3_data', {}).get('price', 0), 's3_bookie': a.get('s3_data', {}).get('bookie', ''),
+        'stk1': a['stk1'], 'stk2': a['stk2'], 'stk3': a.get('stk3', 0), 'profit': a['profit']
+    } for a in arbs])
+
+    # Build EV cards
+    ev_cards_inner = ''
+    if not evs:
+        ev_cards_inner = '<div class="empty-state"><div class="empty-icon">📡</div><div>Radar scanning... No EV edges detected.</div><div class="empty-sub">Markets are efficient right now.</div></div>'
+    else:
+        for i, ev in enumerate(evs):
+            icon = sport_icon(ev['sport'])
+            clean_sport = ev['sport'].replace('_', ' ').title()
+            rank_class = 'rank-gold' if i == 0 else ('rank-silver' if i == 1 else ('rank-bronze' if i == 2 else ''))
+            ev_color = '#ff4d6d' if ev['pct'] >= 10 else ('#ffd700' if ev['pct'] >= 5 else '#00ff88')
+            clv_html = ''
+            if ev.get('clv_pct') is not None:
+                clv_c = '#00ff88' if ev['clv_pct'] >= 0 else '#ff4d6d'
+                clv_html = f'<span class="clv-badge" style="color:{clv_c};border-color:{clv_c}88;">CLV {ev["clv_pct"]:+.2f}%</span>'
+            bd_html = ev_breakdown_html(ev.get('ev_breakdown', []))
+            ev_cards_inner += f'''<div class="card ev-card" data-pct="{ev['pct']}" data-stake="{ev['stake']:.2f}" style="animation-delay:{i*0.07}s">
+  <div class="card-rank-stripe {rank_class}"></div>
+  <div class="card-header">
+    <div class="card-header-left"><span class="sport-icon">{icon}</span><div><div class="match-name">{ev['match']}</div><div class="match-meta">{clean_sport} · {ev['time']}</div></div></div>
+    <div class="ev-badge" style="color:{ev_color};border-color:{ev_color}44;text-shadow:0 0 14px {ev_color}88;">{ev['pct']:.2f}%</div>
+  </div>
+  <div class="card-body">
+    <div class="line-pill">{ev['line']}</div>
+    <div class="bet-row">
+      <div class="bet-info"><span class="bet-label">BET ON</span><span class="bet-selection">{ev['selection'].upper()}</span><span class="bet-point">@ {ev['line'].split('_')[1]}</span><span class="bet-odds">× {ev['odds']:.2f}</span></div>
+      <div class="bookie-tag">{display_bookie(ev['bookie'])}</div>
+    </div>
+    <div class="stake-row">
+      <div class="stake-block"><span class="stake-label">KELLY STAKE</span><span class="stake-amount stake-display" data-base-stake="{ev['stake']:.2f}">₹{ev['stake']:.0f}</span></div>
+      <div class="true-odds-block"><span class="stake-label">TRUE ODDS</span><span class="true-val">{ev['true']:.3f}</span></div>
+    </div>
+    <div class="conf-section"><span class="stake-label">CONFIDENCE</span>{conf_bar(ev.get('confidence', 0))}{clv_html}</div>
+    {bd_html}
+  </div>
+</div>'''
+
+    # Build ARB cards
+    arb_cards_inner = ''
+    if not arbs:
+        arb_cards_inner = '<div class="empty-state"><div class="empty-icon">🔒</div><div>No arbitrage windows open.</div><div class="empty-sub">Books are aligned.</div></div>'
+    else:
+        for i, arb in enumerate(arbs):
+            icon = sport_icon(arb['sport'])
+            clean_sport = arb['sport'].replace('_', ' ').title()
+            ways = arb.get('ways', 2)
+            ways_color = '#00c8ff' if ways == 2 else '#bf5af2'
+            legs_html = f'''<div class="leg-row"><div class="leg-side">{arb['s1'].upper()}</div><div class="leg-odds">@ {arb['s1_data']['price']:.2f}</div><div class="leg-stake stake-display" data-base-stake="{arb['stk1']:.2f}">₹{arb['stk1']:.0f}</div><div class="leg-book">{display_bookie(arb['s1_data']['bookie'])}</div></div><div class="leg-row"><div class="leg-side">{arb['s2'].upper()}</div><div class="leg-odds">@ {arb['s2_data']['price']:.2f}</div><div class="leg-stake stake-display" data-base-stake="{arb['stk2']:.2f}">₹{arb['stk2']:.0f}</div><div class="leg-book">{display_bookie(arb['s2_data']['bookie'])}</div></div>'''
+            if ways == 3 and 's3' in arb:
+                legs_html += f'<div class="leg-row"><div class="leg-side">{arb["s3"].upper()}</div><div class="leg-odds">@ {arb["s3_data"]["price"]:.2f}</div><div class="leg-stake stake-display" data-base-stake="{arb.get("stk3",0):.2f}">₹{arb.get("stk3",0):.0f}</div><div class="leg-book">{display_bookie(arb["s3_data"]["bookie"])}</div></div>'
+            arb_cards_inner += f'''<div class="card arb-card" style="animation-delay:{i*0.07}s">
+  <div class="card-rank-stripe arb-stripe"></div>
+  <div class="card-header">
+    <div class="card-header-left"><span class="sport-icon">{icon}</span><div><div class="match-name">{arb['match']}</div><div class="match-meta">{clean_sport} · {arb['time']}</div></div></div>
+    <div class="arb-badge"><span style="color:{ways_color};font-family:\'Space Mono\',monospace;font-size:22px;font-weight:700;">{arb['pct']:.2f}%</span><span class="ways-tag" style="background:{ways_color}22;color:{ways_color};border-color:{ways_color}44">{ways}W</span></div>
+  </div>
+  <div class="card-body">
+    <div class="line-pill arb-line-pill">{arb['line']}</div>
+    <div class="legs-table">{legs_html}</div>
+    <div class="profit-row"><span class="profit-label">GUARANTEED PROFIT</span><span class="profit-val">₹{arb['profit']:.0f}</span></div>
+  </div>
+</div>'''
+
+    bk = bankroll_state or {}
+    bankroll_html = f'''<div class="bankroll-bar">
+  <div class="bk-stat"><div class="bk-label">BANKROLL</div><div class="bk-val">₹{bk.get('starting_bankroll', TOTAL_BANKROLL):.0f}</div></div>
+  <div class="bk-divider"></div>
+  <div class="bk-stat"><div class="bk-label">STAKES TODAY</div><div class="bk-val bk-yellow">₹{bk.get('total_stakes', 0):.0f}</div></div>
+  <div class="bk-divider"></div>
+  <div class="bk-stat"><div class="bk-label">ARB PROFIT</div><div class="bk-val bk-green">₹{bk.get('theoretical_arb_profit', 0):.0f}</div></div>
+  <div class="bk-divider"></div>
+  <div class="bk-stat"><div class="bk-label">EV EXPOSURE</div><div class="bk-val bk-blue">₹{bk.get('theoretical_ev_exposure', 0):.0f}</div></div>
+</div>'''
+
+    b02 = buckets['0-2%']; b25 = buckets['2-5%']; b510 = buckets['5-10%']; b10p = buckets['10%+']
+    max_b = max(b02, b25, b510, b10p, 1)
+
+    analytics_html = f'''<div id="content-analytics" class="tab-content">
+  <div class="analytics-grid">
+    <div class="analytics-card">
+      <div class="an-title">EV Distribution · Current Scan</div>
+      <div class="histogram">
+        <div class="hist-row"><span class="hist-label">0–2%</span><div class="hist-track"><div class="hist-bar" style="width:{b02/max_b*100:.0f}%;background:linear-gradient(90deg,#58a6ff,#00c8ff);"></div></div><span class="hist-count">{b02}</span></div>
+        <div class="hist-row"><span class="hist-label">2–5%</span><div class="hist-track"><div class="hist-bar" style="width:{b25/max_b*100:.0f}%;background:linear-gradient(90deg,#00ff88,#00c8ff);"></div></div><span class="hist-count">{b25}</span></div>
+        <div class="hist-row"><span class="hist-label">5–10%</span><div class="hist-track"><div class="hist-bar" style="width:{b510/max_b*100:.0f}%;background:linear-gradient(90deg,#ffd700,#ff9500);"></div></div><span class="hist-count">{b510}</span></div>
+        <div class="hist-row"><span class="hist-label">10%+</span><div class="hist-track"><div class="hist-bar" style="width:{b10p/max_b*100:.0f}%;background:linear-gradient(90deg,#ff4d6d,#ff6b35);"></div></div><span class="hist-count">{b10p}</span></div>
+      </div>
+    </div>
+    <div class="analytics-stats">
+      <div class="an-stat-card"><div class="an-stat-label">TOTAL EDGES</div><div class="an-stat-val" style="color:#00c8ff">{len(evs)}</div></div>
+      <div class="an-stat-card"><div class="an-stat-label">AVERAGE EV</div><div class="an-stat-val" style="color:#00ff88">{avg_ev:.2f}%</div></div>
+      <div class="an-stat-card"><div class="an-stat-label">PEAK EV</div><div class="an-stat-val" style="color:#ffd700">{max_ev:.2f}%</div></div>
+      <div class="an-stat-card"><div class="an-stat-label">ARB OPPS</div><div class="an-stat-val" style="color:#bf5af2">{len(arbs)}</div></div>
+    </div>
+  </div>
+</div>'''
+
+    credits_burned = int(requests_used_total) - scan_starting_used if scan_starting_used is not None and str(requests_used_total).isdigit() else "?"
+
+    html = f'''<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>ARB SNIPER ⚡</title>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700;800&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 <style>
-/* ═══════════ DESIGN SYSTEM ═══════════ */
-:root{
-  --bg:#03050b;--bg2:#060a12;--surf:#0a0f18;--surf2:#0f1520;--surf3:#151d28;
-  --b1:#182030;--b2:#1e2a3a;--b3:#283848;
-  --cyan:#00d8ff;--cyan2:#00aacc;
-  --green:#00ff90;--green2:#00cc72;
-  --gold:#ffd000;--gold2:#cc9f00;
-  --red:#ff3352;--red2:#cc1f3d;
-  --purple:#c47eff;--purple2:#8b2cf5;
-  --orange:#ff8c00;--blue:#4fa3ff;
-  --text:#dce8f5;--text2:#8aa0bc;--text3:#4a6480;
-}
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{font-size:14px;scroll-behavior:smooth}
-body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+:root{{--bg:#07090f;--surface:#0d1117;--surface2:#141923;--border:#1e2736;--border2:#253044;--cyan:#00c8ff;--green:#00ff88;--gold:#ffd700;--red:#ff4d6d;--purple:#bf5af2;--blue:#58a6ff;--orange:#ff9500;--text:#e2e8f0;--text-muted:#64748b;--text-dim:#94a3b8;}}
+*{{box-sizing:border-box;margin:0;padding:0;}}
+html{{scroll-behavior:smooth;}}
+body{{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;position:relative;}}
+body::before{{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 10% 10%,#00c8ff08 0%,transparent 60%),radial-gradient(ellipse 60% 50% at 90% 80%,#00ff8806 0%,transparent 60%),radial-gradient(ellipse 50% 40% at 50% 50%,#bf5af208 0%,transparent 70%);pointer-events:none;z-index:0;animation:bgPulse 8s ease-in-out infinite alternate;}}
+body::after{{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,200,255,0.012) 2px,rgba(0,200,255,0.012) 4px);pointer-events:none;z-index:0;}}
+@keyframes bgPulse{{0%{{opacity:0.6;}}100%{{opacity:1;}}}}
+.container{{max-width:820px;margin:0 auto;padding:16px 16px 60px;position:relative;z-index:1;}}
 
-/* grid + ambient */
-body::before{content:'';position:fixed;inset:0;z-index:0;
-  background-image:linear-gradient(rgba(0,216,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(0,216,255,.018) 1px,transparent 1px);
-  background-size:36px 36px;pointer-events:none}
-body::after{content:'';position:fixed;inset:0;z-index:0;
-  background:radial-gradient(ellipse 65% 50% at 12% 18%,#00d8ff09,transparent 55%),
-             radial-gradient(ellipse 50% 55% at 88% 78%,#00ff9007,transparent 55%),
-             radial-gradient(ellipse 40% 40% at 50% 48%,#c47eff06,transparent 65%);
-  pointer-events:none;animation:amb 14s ease-in-out infinite alternate}
-@keyframes amb{0%{opacity:.5}100%{opacity:1}}
+/* HEADER */
+.header{{text-align:center;padding:32px 0 20px;}}
+.header-logo{{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:6px;color:var(--cyan);text-transform:uppercase;opacity:0.6;margin-bottom:6px;animation:fadeDown 0.6s ease both;}}
+.header-title{{font-size:38px;font-weight:800;letter-spacing:-1px;background:linear-gradient(135deg,#00c8ff 0%,#00ff88 50%,#ffd700 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:fadeDown 0.6s 0.1s ease both;line-height:1.1;}}
+.header-subtitle{{font-family:'Space Mono',monospace;font-size:10px;color:var(--text-muted);margin-top:8px;letter-spacing:2px;animation:fadeDown 0.6s 0.2s ease both;}}
+.live-dot{{display:inline-block;width:7px;height:7px;background:var(--green);border-radius:50%;margin-right:6px;box-shadow:0 0 10px var(--green);animation:livePulse 1.5s ease-in-out infinite;}}
+.scan-time{{font-family:'Space Mono',monospace;font-size:11px;color:var(--text-muted);margin-top:6px;animation:fadeDown 0.6s 0.3s ease both;}}
+@keyframes livePulse{{0%,100%{{transform:scale(1);opacity:1;}}50%{{transform:scale(1.5);opacity:0.5;}}}}
+@keyframes fadeDown{{from{{opacity:0;transform:translateY(-14px);}}to{{opacity:1;transform:translateY(0);}}}}
 
-.wrap{position:relative;z-index:1;max-width:920px;margin:0 auto;padding:0 13px 90px}
+/* BANKROLL */
+.bankroll-bar{{display:flex;background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:14px 20px;margin-bottom:14px;gap:4px;align-items:center;animation:fadeDown 0.6s 0.4s ease both;position:relative;overflow:hidden;}}
+.bankroll-bar::before{{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan)44,transparent);}}
+.bk-stat{{flex:1;text-align:center;}}
+.bk-label{{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;}}
+.bk-val{{font-size:17px;font-weight:700;color:var(--text);}}
+.bk-yellow{{color:var(--gold);text-shadow:0 0 16px #ffd70055;}}
+.bk-green{{color:var(--green);text-shadow:0 0 16px #00ff8855;}}
+.bk-blue{{color:var(--cyan);text-shadow:0 0 16px #00c8ff55;}}
+.bk-divider{{width:1px;height:36px;background:var(--border2);flex-shrink:0;}}
 
-/* ═══════════ HEADER ═══════════ */
-.hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 0 10px;border-bottom:1px solid var(--b2);margin-bottom:0;gap:10px;flex-wrap:wrap}
-.hdr-brand{display:flex;align-items:center;gap:11px}
-.brand-icon{width:38px;height:38px;background:linear-gradient(135deg,#00d8ff1a,#00ff9010);border:1px solid var(--cyan);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 0 20px #00d8ff22;animation:iconP 3s ease-in-out infinite}
-@keyframes iconP{0%,100%{box-shadow:0 0 20px #00d8ff22}50%{box-shadow:0 0 36px #00d8ff44}}
-.brand-name{font-size:19px;font-weight:800;letter-spacing:.8px;background:linear-gradient(90deg,var(--cyan),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1}
-.brand-sub{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2.5px;color:var(--text3);text-transform:uppercase;margin-top:1px}
-.ticker{display:flex;align-items:center;gap:14px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);flex-wrap:wrap}
-.tk{display:flex;align-items:center;gap:5px}
-.pip{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pip 1.4s ease-in-out infinite}
-@keyframes pip{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.65)}}
-.tv{font-weight:700}.tv.c{color:var(--cyan)}.tv.g{color:var(--green)}.tv.gold{color:var(--gold)}.tv.r{color:var(--red)}
+/* BUTTONS */
+.btn-row{{display:flex;gap:10px;margin-bottom:14px;animation:fadeDown 0.6s 0.5s ease both;}}
+.btn-scan{{flex:2;background:linear-gradient(135deg,#00c8ff18,#00ff8810);border:1px solid var(--cyan);color:var(--cyan);padding:14px 20px;font-size:15px;font-weight:700;font-family:'Outfit',sans-serif;border-radius:12px;cursor:pointer;letter-spacing:0.5px;transition:all 0.25s ease;text-shadow:0 0 12px var(--cyan);box-shadow:0 0 20px #00c8ff0e,inset 0 1px 0 #00c8ff22;position:relative;overflow:hidden;}}
+.btn-scan::after{{content:'';position:absolute;top:-50%;left:-60%;width:40%;height:200%;background:linear-gradient(105deg,transparent,rgba(0,200,255,0.12),transparent);transform:skewX(-20deg);transition:left 0.5s ease;}}
+.btn-scan:hover::after{{left:130%;}}
+.btn-scan:hover{{background:linear-gradient(135deg,#00c8ff28,#00ff8820);box-shadow:0 0 32px #00c8ff20,inset 0 1px 0 #00c8ff44;transform:translateY(-2px);}}
+.btn-scan:active{{transform:translateY(0);}}
+.btn-scan:disabled{{opacity:0.5;cursor:not-allowed;}}
+.btn-export{{flex:1;background:linear-gradient(135deg,#ffd70010,#ff950010);border:1px solid var(--gold);color:var(--gold);padding:14px 16px;font-size:14px;font-weight:700;font-family:'Outfit',sans-serif;border-radius:12px;cursor:pointer;transition:all 0.25s ease;text-shadow:0 0 12px var(--gold);}}
+.btn-export:hover{{background:linear-gradient(135deg,#ffd70022,#ff950022);transform:translateY(-2px);box-shadow:0 0 20px #ffd70018;}}
 
-/* ═══════════ CONFIG PANEL ═══════════ */
-.cfg{background:var(--surf);border:1px solid var(--b2);border-radius:16px;padding:18px 20px;margin:13px 0;position:relative;overflow:hidden;animation:fadeD .5s ease both}
-.cfg::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--cyan),var(--green),var(--gold))}
-@keyframes fadeD{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
-.cfg-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
-@media(max-width:560px){.cfg-grid{grid-template-columns:1fr}}
-.cfg-g{display:flex;flex-direction:column;gap:5px}.cfg-g.wide{grid-column:1/-1}
-.lbl{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase}
-.inp{background:var(--surf2);border:1px solid var(--b2);border-radius:9px;padding:9px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--text);outline:none;transition:border-color .2s,box-shadow .2s;width:100%}
-.inp:focus{border-color:var(--cyan);box-shadow:0 0 0 2px #00d8ff16}
-.inp.gold{color:var(--gold)}.inp.gold:focus{border-color:var(--gold);box-shadow:0 0 0 2px #ffd00016}
-.cfg-foot{display:flex;align-items:center;gap:10px;margin-top:13px;flex-wrap:wrap}
-.slider-g{display:flex;align-items:center;gap:10px;flex:1;min-width:180px}
-.slider{flex:1;-webkit-appearance:none;height:4px;border-radius:2px;outline:none;cursor:pointer;background:linear-gradient(90deg,var(--cyan) var(--p,30%),var(--b2) var(--p,30%))}
-.slider::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--bg);border:2px solid var(--cyan);box-shadow:0 0 10px var(--cyan);cursor:pointer;transition:transform .15s}
-.slider::-webkit-slider-thumb:active{transform:scale(1.35)}
-.kelly-v{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:800;color:var(--cyan);text-shadow:0 0 10px var(--cyan);min-width:42px;text-align:right}
+/* CONTROLS */
+.controls-bar{{background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:14px 20px;margin-bottom:14px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;animation:fadeDown 0.6s 0.55s ease both;}}
+.ctrl-group{{display:flex;align-items:center;gap:10px;flex:1;min-width:200px;}}
+.ctrl-label{{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:1px;color:var(--text-muted);white-space:nowrap;}}
+.kelly-slider{{flex:1;-webkit-appearance:none;height:4px;border-radius:2px;background:linear-gradient(90deg,var(--cyan) var(--pct,30%),var(--border2) var(--pct,30%));outline:none;cursor:pointer;}}
+.kelly-slider::-webkit-slider-thumb{{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--bg);border:2px solid var(--cyan);box-shadow:0 0 12px var(--cyan),0 0 24px #00c8ff44;cursor:pointer;transition:transform 0.15s ease;}}
+.kelly-slider::-webkit-slider-thumb:active{{transform:scale(1.3);}}
+.kelly-val{{font-family:'Space Mono',monospace;font-size:15px;font-weight:700;color:var(--cyan);min-width:40px;text-align:right;text-shadow:0 0 10px var(--cyan);}}
+.toggle-wrap{{display:flex;align-items:center;gap:10px;cursor:pointer;}}
+.toggle-switch{{position:relative;width:42px;height:24px;flex-shrink:0;}}
+.toggle-switch input{{opacity:0;width:0;height:0;position:absolute;}}
+.toggle-track{{position:absolute;inset:0;background:var(--border2);border-radius:12px;transition:all 0.3s ease;cursor:pointer;border:1px solid var(--border);}}
+.toggle-track::after{{content:'';position:absolute;left:4px;top:4px;width:14px;height:14px;background:var(--text-muted);border-radius:50%;transition:all 0.3s ease;}}
+.toggle-switch input:checked+.toggle-track{{background:var(--cyan);border-color:var(--cyan);box-shadow:0 0 14px #00c8ff44;}}
+.toggle-switch input:checked+.toggle-track::after{{transform:translateX(18px);background:white;}}
+.toggle-lbl{{font-size:13px;color:var(--text-dim);font-weight:600;}}
 
-/* ═══════════ BUTTONS ═══════════ */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 18px;border-radius:10px;border:1px solid;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s ease;white-space:nowrap;position:relative;overflow:hidden}
-.btn::after{content:'';position:absolute;top:-50%;left:-60%;width:40%;height:200%;background:linear-gradient(105deg,transparent,rgba(255,255,255,.06),transparent);transform:skewX(-20deg);transition:left .5s ease}
-.btn:hover::after{left:130%}
-.btn:disabled{opacity:.35;cursor:not-allowed}
-.btn-c{background:linear-gradient(135deg,#00d8ff16,#00ff9010);border-color:var(--cyan);color:var(--cyan);text-shadow:0 0 10px var(--cyan);box-shadow:0 0 14px #00d8ff10,inset 0 1px 0 #00d8ff1e}
-.btn-c:hover:not(:disabled){background:linear-gradient(135deg,#00d8ff26,#00ff9018);box-shadow:0 0 26px #00d8ff22;transform:translateY(-1px)}
-.btn-r{background:linear-gradient(135deg,#ff335216,#ff8c0010);border-color:var(--red);color:var(--red);text-shadow:0 0 10px var(--red)}
-.btn-r:hover:not(:disabled){background:linear-gradient(135deg,#ff335226,#ff8c0018);transform:translateY(-1px)}
-.btn-gold{background:linear-gradient(135deg,#ffd00016,#ff8c0010);border-color:var(--gold);color:var(--gold);text-shadow:0 0 10px var(--gold)}
-.btn-gold:hover:not(:disabled){background:linear-gradient(135deg,#ffd00026,#ff8c0018);transform:translateY(-1px)}
-.btn-sm{padding:7px 12px;font-size:12px;border-radius:8px}
+/* TABS */
+.tabs{{display:flex;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:4px;margin-bottom:18px;gap:3px;animation:fadeDown 0.6s 0.6s ease both;}}
+.tab{{flex:1;text-align:center;padding:10px 6px;cursor:pointer;font-size:13px;font-weight:700;color:var(--text-muted);border-radius:10px;transition:all 0.25s ease;white-space:nowrap;}}
+.tab:hover{{color:var(--text-dim);background:var(--surface2);}}
+.tab.active{{color:#000;background:linear-gradient(135deg,#00c8ff,#0099dd);box-shadow:0 2px 14px #00c8ff44;}}
+.tab.active-arb{{color:#000;background:linear-gradient(135deg,#bf5af2,#8b3dbb);box-shadow:0 2px 14px #bf5af244;}}
+.tab.active-analytics{{color:#000;background:linear-gradient(135deg,#ffd700,#ff9500);box-shadow:0 2px 14px #ffd70044;}}
+.tab-badge{{display:inline-block;background:rgba(0,0,0,0.22);border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;font-weight:800;}}
+.tab-content{{display:none;}}
+.tab-content.active{{display:block;}}
 
-/* ═══════════ SCAN STATUS ═══════════ */
-.scan-bar{background:var(--surf);border:1px solid var(--b2);border-radius:12px;padding:11px 15px;margin-bottom:13px;display:none;animation:fadeD .3s ease both}
-.scan-bar.on{display:block}
-.scan-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;gap:8px}
-.scan-sport{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--cyan);font-weight:700;letter-spacing:1px}
-.scan-pct{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)}
-.prog-track{height:3px;background:var(--b2);border-radius:2px;overflow:hidden}
-.prog-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--cyan),var(--green));box-shadow:0 0 8px var(--cyan);transition:width .4s ease}
-.scan-log{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-top:7px;max-height:56px;overflow-y:auto;line-height:1.75}
-.ll{animation:fadeIn .3s ease}.lok{color:var(--green)}.lerr{color:var(--red)}.linf{color:var(--cyan)}
-@keyframes fadeIn{from{opacity:0}to{opacity:1}}
-
-/* ═══════════ TABS ═══════════ */
-.tabs{display:flex;gap:3px;background:var(--surf);border:1px solid var(--b1);border-radius:14px;padding:4px;margin-bottom:14px;animation:fadeD .5s .15s ease both}
-.tab{flex:1;text-align:center;padding:9px 5px;font-size:12px;font-weight:700;color:var(--text3);cursor:pointer;border-radius:10px;transition:all .22s;user-select:none;white-space:nowrap}
-.tab:hover{color:var(--text2);background:var(--surf2)}
-.tab.ev.on{color:#000;background:linear-gradient(135deg,#00d8ff,#009ec0);box-shadow:0 2px 14px #00d8ff44}
-.tab.arb.on{color:#000;background:linear-gradient(135deg,#c47eff,#7e22ce);box-shadow:0 2px 14px #c47eff44}
-.tab.calc.on{color:#000;background:linear-gradient(135deg,#ffd000,#ff8c00);box-shadow:0 2px 14px #ffd00044}
-.tab.an.on{color:#000;background:linear-gradient(135deg,#00ff90,#00a865);box-shadow:0 2px 14px #00ff9044}
-.tbadge{display:inline-block;background:rgba(0,0,0,.24);border-radius:8px;padding:1px 6px;font-size:10px;margin-left:3px;font-weight:800}
-.pane{display:none}.pane.on{display:block}
-
-/* ═══════════ CARDS ═══════════ */
-.card{background:var(--surf);border:1px solid var(--b1);border-radius:16px;margin-bottom:13px;overflow:hidden;position:relative;transition:border-color .2s,transform .18s,box-shadow .18s;animation:cardIn .4s ease both}
-.card:hover{border-color:var(--b3);transform:translateY(-2px);box-shadow:0 8px 32px #00000066}
-@keyframes cardIn{from{opacity:0;transform:translateY(13px)}to{opacity:1;transform:translateY(0)}}
-.stripe{height:2px;width:100%;background-size:200%!important;animation:shim 2s linear infinite}
-.st-ev{background:linear-gradient(90deg,var(--cyan),var(--green),var(--cyan))}
-.st-arb{background:linear-gradient(90deg,var(--purple),var(--cyan),var(--purple))}
-.st-gold{background:linear-gradient(90deg,var(--gold),var(--orange),var(--gold))}
-.st-silver{background:linear-gradient(90deg,#94a3b8,#e2e8f0,#94a3b8)}
-.st-bronze{background:linear-gradient(90deg,#b56b27,#e8a870,#b56b27)}
-@keyframes shim{0%{background-position:-200%}100%{background-position:200%}}
-.c-head{display:flex;align-items:flex-start;justify-content:space-between;padding:13px 15px 9px;gap:10px}
-.c-head-l{display:flex;align-items:flex-start;gap:9px;flex:1;min-width:0}
-.spt{font-size:22px;flex-shrink:0;margin-top:1px}
-.mtitle{font-size:14px;font-weight:700;color:var(--text);line-height:1.3;overflow-wrap:break-word}
-.mmeta{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-top:2px;letter-spacing:.5px}
-.ev-badge{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:800;border:1px solid currentColor;border-radius:9px;padding:5px 11px;min-width:76px;text-align:center;background:rgba(0,0,0,.3);flex-shrink:0;line-height:1.1}
-.arb-badge{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
-.arb-pct{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:800}
-.ways{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;border:1px solid;letter-spacing:1px}
-.c-body{padding:0 15px 14px}
-.chip{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 10px;border-radius:14px;border:1px solid;letter-spacing:1px;margin-bottom:9px}
-.chip-ev{background:linear-gradient(135deg,#00d8ff10,#00ff9008);border-color:#00d8ff28;color:var(--cyan)}
-.chip-arb{background:linear-gradient(135deg,#c47eff10,#00d8ff08);border-color:#c47eff28;color:var(--purple)}
-.bet-box{display:flex;align-items:center;justify-content:space-between;background:var(--surf2);border:1px solid var(--b1);border-radius:10px;padding:9px 13px;margin-bottom:9px;gap:8px;flex-wrap:wrap}
-.bet-l{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-.blbl{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--text3)}
-.bsel{font-size:15px;font-weight:800;letter-spacing:.5px}
-.bpt{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text2)}
-.bodds{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--gold);text-shadow:0 0 8px #ffd00055}
-.book-tag{background:linear-gradient(135deg,#ffd00010,#ff8c0008);border:1px solid #ffd00028;color:var(--gold);font-size:11px;font-weight:700;padding:3px 9px;border-radius:7px;white-space:nowrap}
-.mrow{display:flex;gap:9px;margin-bottom:9px}
-.mbox{flex:1;background:var(--surf2);border:1px solid var(--b1);border-radius:10px;padding:9px 11px}
-.mlbl{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text3);display:block;margin-bottom:2px;text-transform:uppercase}
-.mval{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:800;display:block;transition:all .25s}
-.sv{color:var(--gold);text-shadow:0 0 14px #ffd00055}.tv2{color:var(--text2);font-size:17px}.pv{color:var(--green);text-shadow:0 0 14px #00ff9055}
-.crow{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
-.cbar-out{display:flex;align-items:center;gap:6px;flex:1;min-width:140px}
-.ctag{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:800;letter-spacing:1px;min-width:30px}
-.ctrack{flex:1;height:5px;background:var(--b2);border-radius:3px;overflow:hidden}
-.cfill{height:100%;border-radius:3px;animation:fillB .9s ease both}
-@keyframes fillB{from{width:0!important}}
-.cscore{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:800;min-width:22px;text-align:right}
-.clv{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:800;padding:2px 8px;border-radius:7px;border:1px solid;white-space:nowrap}
-.bd-wrap{margin-top:8px;border:1px solid var(--b1);border-radius:9px;overflow:hidden}
-.bd-tbl{width:100%;border-collapse:collapse;font-size:11px}
-.bd-tbl th{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text3);padding:7px 11px;text-align:left;background:var(--surf2);text-transform:uppercase}
-.bd-tbl td{padding:6px 11px;border-top:1px solid var(--b1);color:var(--text2)}
-.bd-tbl tr:hover td{background:var(--surf2)}
-.bk-best td{color:var(--cyan)!important;font-weight:700}
-.legs{background:var(--surf2);border:1px solid var(--b1);border-radius:10px;overflow:hidden;margin-bottom:9px}
-.leg{display:grid;grid-template-columns:1fr auto auto auto;gap:9px;align-items:center;padding:9px 13px;border-bottom:1px solid var(--b1)}
-.leg:last-child{border-bottom:none}
-.lsel{font-size:13px;font-weight:800}
-.lodds{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--gold)}
-.lstake{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;color:var(--cyan);text-shadow:0 0 8px #00d8ff55;transition:all .25s}
-.lbook{font-size:10px;color:var(--text3);background:var(--surf);border:1px solid var(--b2);padding:2px 7px;border-radius:5px;white-space:nowrap}
-.prof-banner{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#00ff900e,#00d8ff06);border:1px solid #00ff9028;border-radius:10px;padding:11px 15px}
-.pb-lbl{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3)}
-.pb-val{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:800;color:var(--green);text-shadow:0 0 18px #00ff9066}
-
-/* ═══════════ EMPTY ═══════════ */
-.empty{text-align:center;padding:56px 20px;background:var(--surf);border:1px dashed var(--b2);border-radius:16px;animation:cardIn .4s ease both}
-.ei{font-size:44px;margin-bottom:12px;opacity:.35;animation:flt 3s ease-in-out infinite}
-@keyframes flt{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-.et{font-size:15px;font-weight:700;color:var(--text2);margin-bottom:5px}
-.es{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);letter-spacing:1px}
-
-/* ═══════════ CALC TAB ═══════════ */
-.calc-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:13px}
-@media(max-width:540px){.calc-grid{grid-template-columns:1fr}}
-.calc-card{background:var(--surf);border:1px solid var(--b2);border-radius:16px;padding:18px;animation:cardIn .4s ease both}
-.cc-title{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:13px;display:flex;align-items:center;gap:6px}
-.cc-title::before{content:'';flex:1;height:1px;background:var(--b2)}
-.cf{margin-bottom:10px}
-.ci{background:var(--surf2);border:1px solid var(--b2);border-radius:8px;padding:8px 11px;font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;color:var(--text);outline:none;transition:border-color .2s,box-shadow .2s;width:100%}
-.ci:focus{border-color:var(--cyan);box-shadow:0 0 0 2px #00d8ff14}
-.rg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px}
-.rb{background:var(--surf2);border:1px solid var(--b1);border-radius:9px;padding:9px 11px}
-.rl{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text3);display:block;margin-bottom:3px}
-.rv{font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:800;display:block}
-.rdiv{grid-column:1/-1;height:1px;background:var(--b1)}
-.full{grid-column:1/-1}
-
-/* ═══════════ ANALYTICS ═══════════ */
-.kpi-row{display:flex;gap:9px;overflow-x:auto;margin-bottom:13px;padding-bottom:2px;scrollbar-width:thin;scrollbar-color:var(--b2) transparent}
-.kpi{background:var(--surf);border:1px solid var(--b2);border-radius:13px;padding:13px 14px;flex:1;min-width:105px;text-align:center;animation:cardIn .4s ease both;transition:all .2s}
-.kpi:hover{border-color:var(--b3);transform:translateY(-2px)}
-.ki{font-family:'JetBrains Mono',monospace;font-size:10px;margin-bottom:4px;opacity:.8}
-.kv{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:800;line-height:1.1;margin-bottom:3px}
-.kl{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace}
-.an-row{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:13px}
-@media(max-width:560px){.an-row{grid-template-columns:1fr}}
-.an-card{background:var(--surf);border:1px solid var(--b1);border-radius:14px;padding:17px;animation:cardIn .4s ease both}
-.an-title{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:13px}
-.hrow{display:flex;align-items:center;gap:7px;margin-bottom:9px}
-.hlbl{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);width:34px;flex-shrink:0}
-.htrack{flex:1;height:12px;background:var(--b2);border-radius:6px;overflow:hidden}
-.hbar{height:100%;border-radius:6px;animation:fillB .9s ease both;min-width:2px}
-.hcnt{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--text2);width:18px;text-align:right}
-.brow{display:flex;align-items:center;gap:7px;margin-bottom:8px}
-.blbl2{font-size:11px;color:var(--text2);width:86px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.btrack{flex:1;height:10px;background:var(--b2);border-radius:5px;overflow:hidden}
-.bfill{height:100%;border-radius:5px;animation:fillB .9s ease both}
-.bcnt{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);min-width:48px;text-align:right}
-.mini-stats{display:flex;border-top:1px solid var(--b1);padding-top:9px;margin-top:9px}
-.ms{flex:1;text-align:center}.ms+.ms{border-left:1px solid var(--b1)}
-.msl{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);display:block;margin-bottom:2px}
-.msv{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:800}
-.donut-wrap{display:flex;align-items:center;justify-content:center;gap:20px;padding:8px 0}
-.donut{width:74px;height:74px;border-radius:50%;flex-shrink:0;background:conic-gradient(var(--cyan) var(--tw,50%),var(--purple) var(--tw,50%));box-shadow:0 0 20px #00d8ff1a;position:relative}
-.donut::after{content:'';position:absolute;inset:15px;background:var(--surf);border-radius:50%}
-.dl{display:flex;align-items:center;gap:7px;margin-bottom:7px}
-.dld{width:9px;height:9px;border-radius:3px;flex-shrink:0}
-.dll{font-size:12px;color:var(--text2);flex:1}
-.dlv{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:800}
-
-/* ═══════════ BANKROLL MODAL ═══════════ */
-.modal{display:none;position:fixed;inset:0;z-index:999;background:rgba(3,5,11,.9);backdrop-filter:blur(8px);align-items:center;justify-content:center}
-.modal.open{display:flex;animation:fadeIn .2s ease}
-.mbox{background:var(--surf);border:1px solid var(--b3);border-radius:20px;padding:28px 24px;width:min(355px,92vw);position:relative;box-shadow:0 0 60px #00d8ff14,0 24px 80px rgba(0,0,0,.75);animation:mIn .3s ease both}
-@keyframes mIn{from{opacity:0;transform:scale(.9)translateY(-10px)}to{opacity:1;transform:scale(1)translateY(0)}}
-.mstripe{position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--cyan),var(--green),var(--gold));border-radius:20px 20px 0 0}
-.mey{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:3px;color:var(--text3);margin-bottom:5px}
-.mttl{font-size:20px;font-weight:800;margin-bottom:19px}
-.mlbl{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);display:block;margin-bottom:7px;text-transform:uppercase}
-.minp-w{position:relative;margin-bottom:15px}
-.mpfx{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--gold);font-size:17px;font-weight:800}
-.minp{width:100%;background:var(--surf2);border:1px solid var(--b2);border-radius:10px;padding:11px 12px 11px 32px;font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--gold);outline:none;transition:border-color .2s,box-shadow .2s}
-.minp:focus{border-color:var(--gold);box-shadow:0 0 0 2px #ffd00018}
-.mbr{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.mnote{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-align:center;margin-top:8px}
-
-/* ═══════════ TELEMETRY ═══════════ */
-.tele{margin-top:34px;padding:12px 17px;background:var(--surf);border:1px solid var(--b1);border-radius:13px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;display:flex;flex-wrap:wrap;gap:7px 18px;align-items:center;justify-content:center;position:relative;overflow:hidden}
-.tele::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--b2),transparent)}
-.tv3{color:var(--cyan);font-weight:700}
-
-/* ═══════════ MISC ═══════════ */
-::-webkit-scrollbar{width:5px;height:5px}
-::-webkit-scrollbar-track{background:var(--bg)}
-::-webkit-scrollbar-thumb{background:var(--b2);border-radius:3px}
-@media(max-width:480px){
-  .brand-name{font-size:16px}.ev-badge{font-size:16px;min-width:66px}.arb-pct{font-size:16px}
-  .leg{grid-template-columns:1fr auto auto}.lbook{display:none}.ticker{display:none}
-}
+/* CARDS */
+.card{{background:var(--surface);border:1px solid var(--border);border-radius:16px;margin-bottom:16px;overflow:hidden;position:relative;animation:cardIn 0.45s ease both;transition:border-color 0.25s ease,transform 0.2s ease,box-shadow 0.2s ease;}}
+.card:hover{{border-color:var(--border2);transform:translateY(-3px);box-shadow:0 10px 40px rgba(0,0,0,0.5),0 0 0 1px var(--border2);}}
+@keyframes cardIn{{from{{opacity:0;transform:translateY(18px);}}to{{opacity:1;transform:translateY(0);}}}}
+.card-rank-stripe{{height:3px;width:100%;}}
+.rank-gold{{background:linear-gradient(90deg,#ffd700,#ff9500,#ffd700);background-size:200%;animation:shimmer 2s linear infinite;}}
+.rank-silver{{background:linear-gradient(90deg,#94a3b8,#e2e8f0,#94a3b8);background-size:200%;animation:shimmer 2.5s linear infinite;}}
+.rank-bronze{{background:linear-gradient(90deg,#b56b27,#e8a870,#b56b27);background-size:200%;animation:shimmer 3s linear infinite;}}
+.arb-stripe{{background:linear-gradient(90deg,#bf5af2,#00c8ff,#bf5af2);background-size:200%;animation:shimmer 2.5s linear infinite;}}
+@keyframes shimmer{{0%{{background-position:-200% center;}}100%{{background-position:200% center;}}}}
+.card-header{{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;gap:12px;}}
+.card-header-left{{display:flex;align-items:flex-start;gap:10px;flex:1;min-width:0;}}
+.sport-icon{{font-size:24px;flex-shrink:0;margin-top:1px;}}
+.match-name{{font-size:15px;font-weight:700;color:var(--text);line-height:1.3;overflow-wrap:break-word;}}
+.match-meta{{font-size:10px;color:var(--text-muted);margin-top:3px;font-family:'Space Mono',monospace;letter-spacing:0.5px;}}
+.ev-badge{{font-family:'Space Mono',monospace;font-size:22px;font-weight:700;flex-shrink:0;border:1px solid currentColor;border-radius:10px;padding:6px 12px;text-align:center;min-width:82px;background:rgba(0,0,0,0.3);line-height:1;}}
+.arb-badge{{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0;}}
+.ways-tag{{font-size:10px;font-weight:800;font-family:'Space Mono',monospace;padding:2px 7px;border-radius:6px;border:1px solid;letter-spacing:1px;}}
+.card-body{{padding:0 16px 16px;}}
+.line-pill{{display:inline-block;background:linear-gradient(135deg,#00c8ff10,#00ff8810);border:1px solid #00c8ff30;color:var(--cyan);font-family:'Space Mono',monospace;font-size:11px;padding:4px 11px;border-radius:20px;letter-spacing:1px;margin-bottom:12px;}}
+.arb-line-pill{{background:linear-gradient(135deg,#bf5af210,#00c8ff10);border-color:#bf5af230;color:var(--purple);}}
+.bet-row{{display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:10px;gap:8px;flex-wrap:wrap;}}
+.bet-info{{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}}
+.bet-label{{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.5px;color:var(--text-muted);}}
+.bet-selection{{font-size:17px;font-weight:800;color:var(--text);letter-spacing:0.5px;}}
+.bet-point{{font-size:13px;color:var(--text-dim);font-family:'Space Mono',monospace;}}
+.bet-odds{{font-size:15px;font-weight:700;color:var(--gold);text-shadow:0 0 10px #ffd70066;}}
+.bookie-tag{{background:linear-gradient(135deg,#ffd70010,#ff950010);border:1px solid #ffd70030;color:var(--gold);font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px;white-space:nowrap;}}
+.stake-row{{display:flex;gap:10px;margin-bottom:10px;}}
+.stake-block,.true-odds-block{{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;}}
+.stake-label{{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text-muted);text-transform:uppercase;display:block;margin-bottom:3px;}}
+.stake-amount{{font-size:24px;font-weight:800;color:var(--gold);text-shadow:0 0 16px #ffd70055;font-family:'Space Mono',monospace;transition:all 0.25s ease;display:block;}}
+.true-val{{font-size:20px;font-weight:700;color:var(--text-dim);font-family:'Space Mono',monospace;display:block;}}
+.conf-section{{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;}}
+.conf-bar-wrap{{display:flex;align-items:center;gap:7px;flex:1;min-width:150px;}}
+.conf-label{{font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:1px;min-width:32px;}}
+.conf-bar-track{{flex:1;height:6px;background:var(--border2);border-radius:3px;overflow:hidden;}}
+.conf-bar-fill{{height:100%;border-radius:3px;animation:barFill 0.9s ease both;}}
+@keyframes barFill{{from{{width:0!important;}}}}
+.conf-num{{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;min-width:24px;text-align:right;}}
+.clv-badge{{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:8px;border:1px solid;white-space:nowrap;}}
+.breakdown-wrap{{margin-top:10px;border:1px solid var(--border);border-radius:10px;overflow:hidden;}}
+.breakdown-table{{width:100%;border-collapse:collapse;font-size:12px;}}
+.breakdown-table th{{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--text-muted);padding:8px 12px;text-align:left;background:var(--surface2);text-transform:uppercase;}}
+.breakdown-table td{{padding:7px 12px;border-top:1px solid var(--border);color:var(--text-dim);}}
+.breakdown-table tr:hover td{{background:var(--surface2);}}
+.breakdown-best td{{color:var(--cyan)!important;font-weight:700;}}
+.legs-table{{background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:10px;}}
+.leg-row{{display:grid;grid-template-columns:1fr auto auto auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);}}
+.leg-row:last-child{{border-bottom:none;}}
+.leg-side{{font-size:14px;font-weight:800;color:var(--text);letter-spacing:0.5px;}}
+.leg-odds{{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:var(--gold);text-shadow:0 0 8px #ffd70055;}}
+.leg-stake{{font-family:'Space Mono',monospace;font-size:15px;font-weight:700;color:var(--cyan);text-shadow:0 0 8px #00c8ff55;transition:all 0.25s ease;}}
+.leg-book{{font-size:11px;color:var(--text-muted);background:var(--surface);border:1px solid var(--border2);padding:3px 8px;border-radius:6px;white-space:nowrap;}}
+.profit-row{{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#00ff8810,#00c8ff08);border:1px solid #00ff8830;border-radius:10px;padding:12px 16px;}}
+.profit-label{{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.5px;color:var(--text-muted);text-transform:uppercase;}}
+.profit-val{{font-family:'Space Mono',monospace;font-size:26px;font-weight:700;color:var(--green);text-shadow:0 0 20px #00ff8866;}}
+.empty-state{{text-align:center;padding:60px 20px;background:var(--surface);border:1px dashed var(--border2);border-radius:16px;animation:cardIn 0.5s ease both;}}
+.empty-icon{{font-size:48px;margin-bottom:14px;opacity:0.45;animation:float 3s ease-in-out infinite;}}
+@keyframes float{{0%,100%{{transform:translateY(0);}}50%{{transform:translateY(-10px);}}}}
+.empty-state>div:nth-child(2){{font-size:16px;font-weight:600;color:var(--text-dim);margin-bottom:6px;}}
+.empty-sub{{font-size:12px;color:var(--text-muted);font-family:'Space Mono',monospace;letter-spacing:1px;}}
+.analytics-grid{{display:grid;grid-template-columns:1fr 1fr;gap:16px;}}
+@media(max-width:540px){{.analytics-grid{{grid-template-columns:1fr;}}}}
+.analytics-card{{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;animation:cardIn 0.5s 0.1s ease both;}}
+.an-title{{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text-muted);text-transform:uppercase;margin-bottom:16px;}}
+.histogram{{display:flex;flex-direction:column;gap:12px;}}
+.hist-row{{display:flex;align-items:center;gap:8px;}}
+.hist-label{{font-family:'Space Mono',monospace;font-size:10px;color:var(--text-muted);width:36px;flex-shrink:0;}}
+.hist-track{{flex:1;height:14px;background:var(--border2);border-radius:7px;overflow:hidden;}}
+.hist-bar{{height:100%;border-radius:7px;animation:barFill 1s ease both;min-width:3px;}}
+.hist-count{{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--text-dim);width:20px;text-align:right;}}
+.analytics-stats{{display:grid;grid-template-columns:1fr 1fr;gap:10px;}}
+.an-stat-card{{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 14px;animation:cardIn 0.5s ease both;transition:all 0.2s ease;}}
+.an-stat-card:hover{{border-color:var(--border2);transform:translateY(-2px);}}
+.an-stat-label{{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;}}
+.an-stat-val{{font-family:'Space Mono',monospace;font-size:26px;font-weight:700;line-height:1;}}
+.telemetry{{margin-top:40px;padding:14px 20px;background:var(--surface);border:1px solid var(--border);border-radius:14px;font-family:'Space Mono',monospace;font-size:10px;color:var(--text-muted);letter-spacing:1px;display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;justify-content:center;position:relative;overflow:hidden;}}
+.telemetry::before{{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--border2),transparent);}}
+.tele-item{{white-space:nowrap;}}
+.tele-val{{color:var(--cyan);font-weight:700;}}
+::-webkit-scrollbar{{width:5px;}}
+::-webkit-scrollbar-track{{background:var(--bg);}}
+::-webkit-scrollbar-thumb{{background:var(--border2);border-radius:3px;}}
+@media(max-width:480px){{.header-title{{font-size:28px;}}.ev-badge{{font-size:18px;min-width:70px;}}.leg-row{{grid-template-columns:1fr auto auto;}}.leg-book{{display:none;}}.stake-amount{{font-size:20px;}}.bk-val{{font-size:14px;}}.bankroll-bar{{padding:12px 10px;}}}}
 </style>
 </head>
 <body>
-
-<!-- BANKROLL MODAL -->
-<div class="modal" id="bkModal">
-  <div class="mbox">
-    <div class="mstripe"></div>
-    <div class="mey">Configure</div>
-    <div class="mttl">💰 Edit Bankroll</div>
-    <label class="mlbl">Total Bankroll (₹)</label>
-    <div class="minp-w">
-      <span class="mpfx">₹</span>
-      <input class="minp" id="bkIn" type="number" min="100" step="100" value="1500">
-    </div>
-    <div class="mbr">
-      <button class="btn btn-gold" onclick="saveBK()">💾 Apply</button>
-      <button class="btn btn-c" onclick="closeBK()">Cancel</button>
-    </div>
-    <div class="mnote">Saved in browser · recalculates all Kelly stakes</div>
+<div class="container">
+  <div class="header">
+    <div class="header-logo">Quantitative Betting Intelligence</div>
+    <div class="header-title">⚡ ARB SNIPER</div>
+    <div class="header-subtitle"><span class="live-dot"></span>LIVE MARKET SCANNER · IST</div>
+    <div class="scan-time">Last Sweep: {current_time}</div>
   </div>
-</div>
 
-<div class="wrap">
+  {bankroll_html}
 
-<!-- HEADER -->
-<div class="hdr">
-  <div class="hdr-brand">
-    <div class="brand-icon">⚡</div>
-    <div>
-      <div class="brand-name">ARB SNIPER</div>
-      <div class="brand-sub">Quantitative Edge Terminal</div>
+  <div class="btn-row">
+    <button class="btn-scan" onclick="triggerScan()">⚡ Launch Cloud Scan</button>
+    <button class="btn-export" onclick="exportCSV()">⬇ Export CSV</button>
+  </div>
+
+  <div class="controls-bar">
+    <div class="ctrl-group">
+      <span class="ctrl-label">KELLY %</span>
+      <input type="range" class="kelly-slider" id="kellySlider" min="0" max="100" value="30" oninput="updateKelly(this.value)" style="--pct:30%">
+      <span class="kelly-val" id="kellyValue">30%</span>
     </div>
-  </div>
-  <div class="ticker">
-    <div class="tk"><div class="pip"></div><span id="tTime" class="tv c">--:-- IST</span></div>
-    <div class="tk">QUOTA <span id="tQuota" class="tv gold">--</span></div>
-    <div class="tk">EV <span id="tEV" class="tv g">0</span></div>
-    <div class="tk">ARB <span id="tARB" class="tv c">0</span></div>
-    <div class="tk">BURN <span id="tBurn" class="tv r">0</span></div>
-  </div>
-</div>
-
-<!-- CONFIG -->
-<div class="cfg">
-  <div class="cfg-grid">
-    <div class="cfg-g wide">
-      <label class="lbl">🔑 API Keys</label>
-      <div id="keyStatus" style="display:flex;align-items:center;gap:9px;background:var(--surf2);border:1px solid var(--b2);border-radius:9px;padding:9px 13px;">
-        <span id="keyDot" style="width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);flex-shrink:0"></span>
-        <span id="keyMsg" style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--green)">Keys injected via GitHub Secrets — ready to scan</span>
+    <label class="toggle-wrap" for="top5Toggle">
+      <div class="toggle-switch">
+        <input type="checkbox" id="top5Toggle" onchange="applyTop5()">
+        <div class="toggle-track"></div>
       </div>
-    </div>
-    <div class="cfg-g">
-      <label class="lbl">💰 Bankroll (₹) &nbsp;<span style="color:var(--text3);cursor:pointer;font-size:10px" onclick="openBK()">✏️</span></label>
-      <input class="inp gold" id="cfgBK" type="number" value="1500" min="100" step="100" oninput="onBKChange()">
-    </div>
-    <div class="cfg-g">
-      <label class="lbl">📡 Bookmakers</label>
-      <input class="inp" id="cfgBooks" value="pinnacle,onexbet,marathonbet,dafabet,stake,betfair_ex_eu,betway">
-    </div>
-    <div class="cfg-g">
-      <label class="lbl">⚡ Min EV%</label>
-      <input class="inp" id="cfgEV" type="number" value="1.5" step="0.1" min="0">
-    </div>
-    <div class="cfg-g">
-      <label class="lbl">🔒 Min ARB%</label>
-      <input class="inp" id="cfgARB" type="number" value="1.0" step="0.1" min="0">
-    </div>
+      <span class="toggle-lbl">Top 5 Only</span>
+    </label>
   </div>
-  <div class="cfg-foot">
-    <div class="slider-g">
-      <span class="lbl">KELLY</span>
-      <input type="range" class="slider" id="kellyR" min="1" max="100" value="30" oninput="onKelly(this.value)" style="--p:30%">
-      <span class="kelly-v" id="kellyV">30%</span>
-    </div>
-    <button class="btn btn-c" id="btnStart" onclick="startScan()">▶ Start Sweep</button>
-    <button class="btn btn-r"  id="btnStop"  onclick="stopScan()"  style="display:none">⏹ Stop</button>
-    <button class="btn btn-gold btn-sm" onclick="exportCSV()">⬇ CSV</button>
+
+  <div class="tabs">
+    <div class="tab active" id="tab-ev" onclick="switchTab('ev')">⚡ EV Edges <span class="tab-badge">{len(evs)}</span></div>
+    <div class="tab" id="tab-arb" onclick="switchTab('arb')">🔒 Arbitrage <span class="tab-badge">{len(arbs)}</span></div>
+    <div class="tab" id="tab-analytics" onclick="switchTab('analytics')">📊 Analytics</div>
+  </div>
+
+  <div id="content-ev" class="tab-content active">
+    <div id="ev-cards">{ev_cards_inner}</div>
+  </div>
+  <div id="content-arb" class="tab-content">
+    <div id="arb-cards">{arb_cards_inner}</div>
+  </div>
+  {analytics_html}
+
+  <div class="telemetry">
+    <span class="tele-item">🔑 KEY <span class="tele-val">#{current_key_index + 1}</span></span>
+    <span class="tele-item">📡 QUOTA <span class="tele-val">{requests_remaining}/500</span></span>
+    <span class="tele-item">⚡ SCAN COST <span class="tele-val">~{credits_burned} credits</span></span>
+    <span class="tele-item">🏦 BANKROLL <span class="tele-val">₹{TOTAL_BANKROLL}</span></span>
   </div>
 </div>
-
-<!-- SCAN STATUS -->
-<div class="scan-bar" id="scanBar">
-  <div class="scan-top">
-    <span class="scan-sport" id="scanSport">Initializing…</span>
-    <span class="scan-pct"  id="scanPct">0/6</span>
-  </div>
-  <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0"></div></div>
-  <div class="scan-log" id="scanLog"></div>
-</div>
-
-<!-- TABS -->
-<div class="tabs">
-  <div class="tab ev on"   id="tab-ev"   onclick="switchTab('ev')">⚡ EV <span class="tbadge" id="bEV">0</span></div>
-  <div class="tab arb"     id="tab-arb"  onclick="switchTab('arb')">🔒 ARB <span class="tbadge" id="bARB">0</span></div>
-  <div class="tab calc"    id="tab-calc" onclick="switchTab('calc')">🧮 Calc</div>
-  <div class="tab an"      id="tab-an"   onclick="switchTab('an')">📊 Analytics</div>
-</div>
-
-<!-- EV PANE -->
-<div class="pane on" id="pane-ev">
-  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-    <button class="btn btn-sm" id="top5Btn" onclick="toggleTop5()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">🔝 Top 5</button>
-    <button class="btn btn-sm" id="sortBtn" onclick="toggleSort()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">↕ Sort EV%</button>
-    <button class="btn btn-sm" id="filterHCBtn" onclick="toggleHC()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">🎯 High Conf</button>
-  </div>
-  <div id="ev-cards"></div>
-</div>
-
-<!-- ARB PANE -->
-<div class="pane" id="pane-arb">
-  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-    <button class="btn btn-sm" id="arb3Btn" onclick="toggleArb3()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">🔱 3-Way Only</button>
-    <button class="btn btn-sm" id="arbSortBtn" onclick="toggleArbSort()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">↕ Sort ARB%</button>
-  </div>
-  <div id="arb-cards"></div>
-</div>
-
-<!-- CALC PANE -->
-<div class="pane" id="pane-calc">
-  <div class="calc-grid">
-
-    <div class="calc-card">
-      <div class="cc-title">⚡ EV Calculator</div>
-      <div class="cf"><label class="lbl">Soft Book Odds</label><input class="ci" id="cSoft" type="number" step="0.01" value="2.10" oninput="calcEV()"></div>
-      <div class="cf"><label class="lbl">Pinnacle Side A</label><input class="ci" id="cPinA" type="number" step="0.01" value="1.95" oninput="calcEV()"></div>
-      <div class="cf"><label class="lbl">Pinnacle Side B</label><input class="ci" id="cPinB" type="number" step="0.01" value="2.08" oninput="calcEV()"></div>
-      <div class="rg">
-        <div class="rb"><span class="rl">TRUE ODDS</span><span class="rv" id="rTO" style="color:var(--text2)">--</span></div>
-        <div class="rb"><span class="rl">EV %</span><span class="rv" id="rEV" style="color:var(--cyan)">--</span></div>
-        <div class="rb"><span class="rl">KELLY STAKE</span><span class="rv" id="rKS" style="color:var(--gold)">--</span></div>
-        <div class="rb"><span class="rl">CONFIDENCE</span><span class="rv" id="rCF" style="color:var(--green)">--</span></div>
-      </div>
-    </div>
-
-    <div class="calc-card">
-      <div class="cc-title">🔒 ARB Calculator</div>
-      <div class="cf"><label class="lbl">Side A Odds</label><input class="ci" id="cAA" type="number" step="0.01" value="2.15" oninput="calcARB()"></div>
-      <div class="cf"><label class="lbl">Side B Odds</label><input class="ci" id="cAB" type="number" step="0.01" value="2.10" oninput="calcARB()"></div>
-      <div class="cf"><label class="lbl">Side C (3-way, optional)</label><input class="ci" id="cAC" type="number" step="0.01" placeholder="leave blank" oninput="calcARB()"></div>
-      <div class="rg">
-        <div class="rb"><span class="rl">MARGIN</span><span class="rv" id="rAM" style="color:var(--text2)">--</span></div>
-        <div class="rb"><span class="rl">ARB %</span><span class="rv" id="rAP" style="color:var(--purple)">--</span></div>
-        <div class="rb"><span class="rl">STAKE A</span><span class="rv" id="rAS" style="color:var(--cyan)">--</span></div>
-        <div class="rb"><span class="rl">STAKE B</span><span class="rv" id="rAB" style="color:var(--cyan)">--</span></div>
-        <div class="rdiv"></div>
-        <div class="rb full"><span class="rl">GUARANTEED PROFIT</span><span class="rv" id="rAG" style="color:var(--green);font-size:20px">--</span></div>
-      </div>
-    </div>
-
-    <div class="calc-card">
-      <div class="cc-title">💚 Green-Up Calculator</div>
-      <div class="cf"><label class="lbl">Back Stake (₹)</label><input class="ci" id="gBS" type="number" value="500" oninput="calcGU()"></div>
-      <div class="cf"><label class="lbl">Back Odds</label><input class="ci" id="gBO" type="number" step="0.01" value="2.10" oninput="calcGU()"></div>
-      <div class="cf"><label class="lbl">Lay / True Odds</label><input class="ci" id="gLO" type="number" step="0.01" value="1.95" oninput="calcGU()"></div>
-      <div class="rg">
-        <div class="rb"><span class="rl">LAY STAKE</span><span class="rv" id="rGL" style="color:var(--cyan)">--</span></div>
-        <div class="rb"><span class="rl">GREEN PROFIT</span><span class="rv" id="rGP" style="color:var(--green)">--</span></div>
-      </div>
-    </div>
-
-    <div class="calc-card">
-      <div class="cc-title">📐 Kelly Criterion</div>
-      <div class="cf"><label class="lbl">Win Probability (0–1)</label><input class="ci" id="kP" type="number" step="0.01" value="0.55" min="0.01" max="0.99" oninput="calcKelly()"></div>
-      <div class="cf"><label class="lbl">Decimal Odds</label><input class="ci" id="kO" type="number" step="0.01" value="2.10" oninput="calcKelly()"></div>
-      <div class="cf"><label class="lbl">Bankroll (₹)</label><input class="ci" id="kB" type="number" value="1500" oninput="calcKelly()"></div>
-      <div class="rg">
-        <div class="rb"><span class="rl">FULL KELLY %</span><span class="rv" id="rFK" style="color:var(--text2)">--</span></div>
-        <div class="rb"><span class="rl">FRAC KELLY 30%</span><span class="rv" id="rFR" style="color:var(--gold)">--</span></div>
-        <div class="rdiv"></div>
-        <div class="rb full"><span class="rl">RECOMMENDED STAKE</span><span class="rv" id="rKA" style="color:var(--green);font-size:20px">--</span></div>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-<!-- ANALYTICS PANE -->
-<div class="pane" id="pane-an">
-  <div class="kpi-row">
-    <div class="kpi"><div class="ki" style="color:var(--cyan)">⚡ EV</div><div class="kv" id="anTE" style="color:var(--cyan)">0</div><div class="kl">Total Edges</div></div>
-    <div class="kpi"><div class="ki" style="color:var(--green)">AVG</div><div class="kv" id="anAE" style="color:var(--green)">0%</div><div class="kl">Avg EV%</div></div>
-    <div class="kpi"><div class="ki" style="color:var(--gold)">PEAK</div><div class="kv" id="anPE" style="color:var(--gold)">0%</div><div class="kl">Peak EV%</div></div>
-    <div class="kpi"><div class="ki" style="color:var(--purple)">🔒 ARB</div><div class="kv" id="anTA" style="color:var(--purple)">0</div><div class="kl">ARB Opps</div></div>
-    <div class="kpi"><div class="ki" style="color:var(--green)">₹</div><div class="kv" id="anAP" style="color:var(--green)">₹0</div><div class="kl">ARB Profit</div></div>
-    <div class="kpi"><div class="ki" style="color:var(--orange)">ROI</div><div class="kv" id="anROI" style="color:var(--orange)">0%</div><div class="kl">ARB ROI</div></div>
-  </div>
-  <div class="an-row">
-    <div class="an-card"><div class="an-title">⚡ EV Distribution</div><div id="anEH"></div><div class="mini-stats" id="anES"></div></div>
-    <div class="an-card"><div class="an-title">🔒 ARB Distribution</div><div id="anAH"></div><div class="mini-stats" id="anAS"></div></div>
-  </div>
-  <div class="an-row">
-    <div class="an-card"><div class="an-title">⚽ EV by Sport</div><div id="anESP"></div></div>
-    <div class="an-card"><div class="an-title">🔒 ARB by Sport</div><div id="anASP"></div></div>
-  </div>
-  <div class="an-row">
-    <div class="an-card"><div class="an-title">📚 Top EV Bookmakers</div><div id="anEB"></div></div>
-    <div class="an-card"><div class="an-title">🔗 Top ARB Pairs</div><div id="anAPR"></div></div>
-  </div>
-  <div class="an-row">
-    <div class="an-card">
-      <div class="an-title">📐 ARB Structure</div>
-      <div class="donut-wrap">
-        <div class="donut" id="anDonut"></div>
-        <div>
-          <div class="dl"><span class="dld" style="background:var(--cyan)"></span><span class="dll">2-Way</span><span class="dlv" id="an2w" style="color:var(--cyan)">0</span></div>
-          <div class="dl"><span class="dld" style="background:var(--purple)"></span><span class="dll">3-Way</span><span class="dlv" id="an3w" style="color:var(--purple)">0</span></div>
-        </div>
-      </div>
-      <div class="mini-stats" id="anAMeta"></div>
-    </div>
-    <div class="an-card"><div class="an-title">🎯 Confidence Spread</div><div id="anCS"></div></div>
-  </div>
-</div>
-
-<!-- TELEMETRY -->
-<div class="tele">
-  <span>🔑 KEY <span class="tv3" id="telKey">#1</span></span>
-  <span>📡 QUOTA <span class="tv3" id="telQ">--/500</span></span>
-  <span>⚡ BURN <span class="tv3" id="telB">0</span></span>
-  <span>🏦 BANKROLL <span class="tv3" id="telBK">₹1500</span></span>
-  <span>⏱ SCAN <span class="tv3" id="telT">--</span></span>
-</div>
-
-</div><!-- /wrap -->
 
 <script>
-'use strict';
-/* ── CONSTANTS ── */
-const SPORTS=[
-  {k:'soccer_epl',          l:'⚽ EPL'},
-  {k:'soccer_uefa_champs_league',l:'⚽ UCL'},
-  {k:'basketball_nba',      l:'🏀 NBA'},
-  {k:'icehockey_nhl',       l:'🏒 NHL'},
-  {k:'tennis_atp',          l:'🎾 ATP'},
-  {k:'tennis_wta',          l:'🎾 WTA'},
-];
-const CAPS={betway:300,stake:500,onexbet:400,marathonbet:400,dafabet:350,betfair_ex_eu:600,pinnacle:1000};
-const BKNAMES={onexbet:'1xBet',pinnacle:'Pinnacle',marathonbet:'Marathon',dafabet:'Dafabet',stake:'Stake.com',betfair_ex_eu:'Betfair',betway:'Betway'};
-const SICONS={soccer:'⚽',basketball:'🏀',icehockey:'🏒',tennis:'🎾',baseball:'⚾',football:'🏈'};
+const ALL_EVS={evs_json};
+const ALL_ARBS={arbs_json};
 
-/* ── STATE ── */
-let EVS=[],ARBS=[];
-let scanning=false,sportIdx=0,scanT0=null,creditT0=null;
-let quotaRem='--',top5=false,sortOn=false,hcFilter=false,arb3=false,arbSort=false;
-
-/* ── UTILS ── */
-const $=id=>document.getElementById(id);
-const bk=k=>BKNAMES[k]||k.replace(/_/g,' ');
-const si=s=>{for(const[k,v]of Object.entries(SICONS))if(s.includes(k))return v;return'🎯'};
-const fmt=n=>'₹'+Math.round(n).toLocaleString('en-IN');
-const fp=n=>n.toFixed(2)+'%';
-const getBK=()=>parseFloat($('cfgBK').value)||1500;
-const getKF=()=>parseFloat($('kellyR').value)/100;
-const getMinEV=()=>parseFloat($('cfgEV').value)||1.5;
-const getMinARB=()=>parseFloat($('cfgARB').value)||1.0;
-const getBooks=()=>$('cfgBooks').value.split(',').map(s=>s.trim()).filter(Boolean);
-
-function devig(o1,o2){const i1=1/o1,i2=1/o2,m=i1+i2;return[1/(i1/m),1/(i2/m)]}
-function kelly(soft,trueO,bankroll,kf=.30,book=null){
-  const b=soft-1,p=1/trueO,q=1-p;
-  let k=((b*p-q)/b)*kf;
-  if(k<=0)return 0;if(k>.05)k=.05;
-  let s=Math.max(20,bankroll*k);
-  if(book&&CAPS[book])s=Math.min(s,CAPS[book]);
-  return s;
-}
-function conf(soft,trueO){return Math.max(0,Math.min(100,Math.round(Math.abs(1/soft-1/trueO)/(1/trueO)*500)))}
-function IST(){return new Date(Date.now()+5.5*36e5).toLocaleTimeString('en-IN',{hour12:true,timeZone:'UTC'})}
-function fmtIST(iso){try{return new Date(iso).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}catch{return'?'}}
-
-/* ── CLOCK ── */
-setInterval(()=>$('tTime').textContent=IST(),1000);
-
-/* ── KELLY SLIDER ── */
-function onKelly(v){
-  $('kellyV').textContent=v+'%';
-  $('kellyR').style.setProperty('--p',v+'%');
-  recalc();calcEV();
-}
-
-/* ── BANKROLL CHANGES ── */
-function onBKChange(){
-  localStorage.setItem('arb_bk',$('cfgBK').value);
-  $('telBK').textContent=fmt(getBK());
-  recalc();
-}
-function recalc(){
-  const bkv=getBK(),kf=getKF();
-  $('telBK').textContent=fmt(bkv);
-  document.querySelectorAll('.sdyn').forEach(el=>{
-    const s=kelly(parseFloat(el.dataset.soft)||2,parseFloat(el.dataset.true)||1.9,bkv,kf,el.dataset.book||null);
-    el.textContent=fmt(s);
-  });
-  document.querySelectorAll('.ldyn').forEach(el=>{
-    const ratio=bkv/1500;
-    el.textContent=fmt(parseFloat(el.dataset.base)*ratio);
-  });
-}
-
-/* ── BANKROLL MODAL ── */
-function openBK(){$('bkIn').value=getBK();$('bkModal').classList.add('open');setTimeout(()=>$('bkIn').focus(),100)}
-function closeBK(){$('bkModal').classList.remove('open')}
-function saveBK(){
-  const v=parseFloat($('bkIn').value);
-  if(!v||v<100){alert('Enter a valid bankroll (min ₹100)');return}
-  $('cfgBK').value=v;$('kB').value=v;
-  localStorage.setItem('arb_bk',v);
-  onBKChange();closeBK();
-  $('cfgBK').style.color='var(--green)';
-  setTimeout(()=>$('cfgBK').style.color='var(--gold)',700);
-}
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeBK()});
-$('bkModal').addEventListener('click',e=>{if(e.target===$('bkModal'))closeBK()});
-
-/* ── TABS ── */
-function switchTab(t){
-  ['ev','arb','calc','an'].forEach(id=>{
-    $('tab-'+id).classList.remove('on');
-    $('pane-'+id).classList.remove('on');
-  });
-  $('tab-'+t).classList.add('on');
-  $('pane-'+t).classList.add('on');
-  if(t==='an')renderAn();
-}
-
-/* ── SCAN LOG ── */
-function log(msg,cls=''){
-  const el=$('scanLog'),d=document.createElement('div');
-  d.className='ll '+(cls||'');d.textContent='['+IST()+'] '+msg;
-  el.appendChild(d);el.scrollTop=el.scrollHeight;
-}
-
-/* ── INJECTED API KEYS (set by Python from GitHub Secrets) ── */
-const API_KEYS = __INJECTED_KEYS__;
-let keyIdx = 0;
-function getKey(){return API_KEYS[keyIdx % Math.max(API_KEYS.length,1)]}
-function rotateKey(){keyIdx++;log('🔄 Rotating to key #'+(keyIdx+1),'linf')}
-
-/* ── START / STOP ── */
-function startScan(){
-  if(!API_KEYS.length){
-    // No keys injected — show a one-time fallback input
-    const k=prompt('No keys injected. Enter your Odds API key to scan:');
-    if(!k)return;
-    API_KEYS.push(k.trim());
-  }
-  EVS=[];ARBS=[];sportIdx=0;scanning=true;scanT0=Date.now();creditT0=null;keyIdx=0;
-  $('btnStart').style.display='none';$('btnStop').style.display='';
-  $('scanBar').classList.add('on');$('scanLog').innerHTML='';
-  $('ev-cards').innerHTML='';$('arb-cards').innerHTML='';
-  updateBadges();log('Sweep initializing… key #1 active','linf');
-  runNext();
+function switchTab(tab){{
+  const tabMap={{ev:'active',arb:'active-arb',analytics:'active-analytics'}};
+  ['ev','arb','analytics'].forEach(t=>{{
+    document.getElementById('content-'+t).classList.remove('active');
+    const el=document.getElementById('tab-'+t);
+    el.classList.remove('active','active-arb','active-analytics');
+  }});
+  document.getElementById('content-'+tab).classList.add('active');
+  document.getElementById('tab-'+tab).classList.add(tabMap[tab]);
 }}
-function stopScan(){
-  scanning=false;
-  $('btnStart').style.display='';$('btnStop').style.display='none';
-  $('progFill').style.width='100%';
-  log('Sweep stopped.','lerr');
-  $('telT').textContent=((Date.now()-scanT0)/1000).toFixed(1)+'s';
-  if(EVS.length||ARBS.length)renderAn();
-}
 
-/* ── SPORT LOOP ── */
-async function runNext(){
-  if(!scanning||sportIdx>=SPORTS.length){stopScan();log('✅ Complete! EV:'+EVS.length+' ARB:'+ARBS.length,'lok');return}
-  const sp=SPORTS[sportIdx];
-  const pct=Math.round(sportIdx/SPORTS.length*100);
-  $('scanSport').textContent=sp.l;
-  $('scanPct').textContent=(sportIdx+1)+'/'+SPORTS.length;
-  $('progFill').style.width=pct+'%';
-  log('Fetching '+sp.l+'…');
-  try{
-    const key=getKey();
-    const books=getBooks().join(',');
-    const url=`https://api.the-odds-api.com/v4/sports/${sp.k}/odds?apiKey=${key}&regions=eu&bookmakers=${encodeURIComponent(books)}&markets=totals,spreads&oddsFormat=decimal`;
-    const res=await fetch(url);
-    const rem=res.headers.get('x-requests-remaining');
-    const used=res.headers.get('x-requests-used');
-    if(rem){quotaRem=rem;$('tQuota').textContent=rem+'/500';$('telQ').textContent=rem+'/500'}
-    if(used){
-      if(!creditT0)creditT0=parseInt(used)-1;
-      const burn=parseInt(used)-creditT0;
-      $('tBurn').textContent=burn;$('telB').textContent=burn;
-    }
-    if(res.status===401){
-      log('❌ Key #'+(keyIdx+1)+' rejected (401)','lerr');
-      if(keyIdx+1<API_KEYS.length){rotateKey();runNext();return}
-      else{log('❌ All keys exhausted','lerr');stopScan();return}
-    }
-    if(res.status===429){
-      log('⚠ Rate limit on key #'+(keyIdx+1),'lerr');
-      if(keyIdx+1<API_KEYS.length){rotateKey();setTimeout(runNext,500);return}
-      else{log('⚠ All keys rate-limited, waiting 5s…','lerr');await sleep(5000);runNext();return}
-    }
-    if(!res.ok){log('⚠ HTTP '+res.status,'lerr');sportIdx++;setTimeout(runNext,1200);return}
-    const events=await res.json();
-    log('📦 '+events.length+' events (key #'+(keyIdx+1)+')','lok');
-    processEvents(events,sp.k);
-  }catch(e){log('❌ '+e.message,'lerr')}
-  sportIdx++;
-  setTimeout(runNext,1500);
-}
-function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
-
-/* ── MATH ENGINE ── */
-function processEvents(events,sport){
-  const books=getBooks(),minEV=getMinEV(),minARB=getMinARB();
-  const bankroll=getBK(),kf=getKF();
-  events.forEach(event=>{
-    const match=event.home_team+' vs '+event.away_team;
-    const mt=fmtIST(event.commence_time);
-    const bookmakers=event.bookmakers||[];
-    const EL={},AL={};
-    bookmakers.forEach(b=>{
-      if(!books.includes(b.key))return;
-      (b.markets||[]).forEach(m=>{
-        if(!['totals','spreads'].includes(m.key))return;
-        const mk=m.key.toUpperCase();
-        m.outcomes.forEach(o=>{
-          const pt=String(o.point||'0'),name=o.name;
-          let price=o.price;
-          if(b.key==='betfair_ex_eu')price=1+(price-1)*.97;
-          const lk=mk+'_'+pt;
-          if(!EL[lk])EL[lk]={pin:{},best:{},all:{}};
-          if(!AL[lk])AL[lk]={};
-          if(b.key==='pinnacle'){
-            EL[lk].pin[name]=price;
-          }else{
-            if(!EL[lk].best[name]||price>EL[lk].best[name].price)EL[lk].best[name]={price,bookie:b.key};
-            if(!EL[lk].all[name])EL[lk].all[name]={};
-            EL[lk].all[name][b.key]=price;
-          }
-          if(!AL[lk][name]||price>AL[lk][name].price)AL[lk][name]={price,bookie:b.key};
-        });
-      });
-    });
-    // EV
-    Object.entries(EL).forEach(([lk,d])=>{
-      const sides=Object.keys(d.pin);
-      if(sides.length<2)return;
-      const[s1,s2]=sides;
-      const[t1,t2]=devig(d.pin[s1],d.pin[s2]);
-      [[s1,t1],[s2,t2]].forEach(([side,trueO])=>{
-        if(!d.best[side])return;
-        const sp=d.best[side].price;
-        if(sp<=trueO)return;
-        const evp=((sp/trueO)-1)*100;
-        if(evp<minEV)return;
-        const stake=kelly(sp,trueO,bankroll,kf,d.best[side].bookie);
-        const cf=conf(sp,trueO);
-        const bd=buildBD(d,side,trueO);
-        const ev={pct:evp,match,time:mt,sport,line:lk,sel:side,odds:sp,true:trueO,bookie:d.best[side].bookie,stake,conf:cf,bd};
-        EVS.push(ev);renderEV(ev,EVS.length-1);
-      });
-    });
-    // ARB
-    Object.entries(AL).forEach(([lk,outs])=>{
-      const keys=Object.keys(outs);
-      for(let ways=2;ways<=3;ways++){
-        if(keys.length<ways)continue;
-        const k=keys.slice(0,ways);
-        const margin=k.reduce((s,ki)=>s+1/outs[ki].price,0);
-        if(margin>=1)continue;
-        const pct=(1-margin)*100;
-        if(pct<minARB)continue;
-        const arb={pct,match,time:mt,sport,line:lk,ways,
-          sides:k.map(ki=>({sel:ki,price:outs[ki].price,bookie:outs[ki].bookie,stake:(bankroll/margin)/outs[ki].price})),
-          profit:(bankroll/margin)-bankroll};
-        ARBS.push(arb);renderARB(arb,ARBS.length-1);
-      }
-    });
-    $('tEV').textContent=EVS.length;$('tARB').textContent=ARBS.length;
-    updateBadges();
-  });
-}
-
-function buildBD(d,side,trueO){
-  const rows=[];
-  if(d.pin[side])rows.push({bookie:'pinnacle',odds:d.pin[side],ev:0,best:false});
-  const all=d.all[side]||{};
-  let bEV=-999,bBk=null;
-  Object.entries(all).forEach(([bk,odds])=>{const e=((odds/trueO)-1)*100;rows.push({bookie:bk,odds,ev:e,best:false});if(e>bEV){bEV=e;bBk=bk}});
-  rows.forEach(r=>{if(r.bookie===bBk)r.best=true});
-  return rows;
-}
-
-/* ── RENDER EV ── */
-function renderEV(ev,idx){
-  const c=$('ev-cards');
-  if(c.querySelector('.empty'))c.innerHTML='';
-  const eColor=ev.pct>=10?'var(--red)':ev.pct>=5?'var(--gold)':'var(--green)';
-  const stripe=idx===0?'st-gold':idx===1?'st-silver':idx===2?'st-bronze':'st-ev';
-  const cColor=ev.conf>=70?'var(--green)':ev.conf>=40?'var(--gold)':'var(--red)';
-  const cLbl=ev.conf>=70?'HIGH':ev.conf>=40?'MED':'LOW';
-  let bd='';
-  if(ev.bd&&ev.bd.length){
-    const rows=ev.bd.map(r=>`<tr class="${r.best?'bk-best':''}"><td>${bk(r.bookie)}</td><td>${r.odds.toFixed(3)}</td><td>${r.ev>=0?'+':''}${r.ev.toFixed(2)}%</td></tr>`).join('');
-    bd=`<div class="bd-wrap"><table class="bd-tbl"><thead><tr><th>Book</th><th>Odds</th><th>EV%</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-  }
-  const card=document.createElement('div');
-  card.className='card ev-card';card.style.animationDelay=(idx*.05)+'s';card.dataset.pct=ev.pct;card.dataset.conf=ev.conf;
-  card.innerHTML=`<div class="stripe ${stripe}"></div>
-    <div class="c-head">
-      <div class="c-head-l"><span class="spt">${si(ev.sport)}</span><div><div class="mtitle">${ev.match}</div><div class="mmeta">${ev.sport.replace(/_/g,' ').toUpperCase()} · ${ev.time}</div></div></div>
-      <div class="ev-badge" style="color:${eColor};border-color:${eColor}44;text-shadow:0 0 12px ${eColor}88">${fp(ev.pct)}</div>
-    </div>
-    <div class="c-body">
-      <div class="chip chip-ev">${ev.line}</div>
-      <div class="bet-box">
-        <div class="bet-l"><span class="blbl">BET</span><span class="bsel">${ev.sel.toUpperCase()}</span><span class="bpt">@ ${ev.line.split('_')[1]||''}</span><span class="bodds">× ${ev.odds.toFixed(2)}</span></div>
-        <span class="book-tag">${bk(ev.bookie)}</span>
-      </div>
-      <div class="mrow">
-        <div class="mbox"><span class="mlbl">KELLY STAKE</span>
-          <span class="mval sv sdyn" data-soft="${ev.odds}" data-true="${ev.true}" data-book="${ev.bookie}">${fmt(ev.stake)}</span></div>
-        <div class="mbox"><span class="mlbl">TRUE ODDS</span><span class="mval tv2">${ev.true.toFixed(3)}</span></div>
-      </div>
-      <div class="crow"><span class="mlbl" style="font-size:8px">CONF</span>
-        <div class="cbar-out"><span class="ctag" style="color:${cColor}">${cLbl}</span>
-          <div class="ctrack"><div class="cfill" style="width:${ev.conf}%;background:${cColor};box-shadow:0 0 8px ${cColor}66"></div></div>
-          <span class="cscore" style="color:${cColor}">${ev.conf}</span>
-        </div>
-      </div>
-      ${bd}
-    </div>`;
-  c.appendChild(card);applyFilters();
-}
-
-/* ── RENDER ARB ── */
-function renderARB(arb,idx){
-  const c=$('arb-cards');
-  if(c.querySelector('.empty'))c.innerHTML='';
-  const wc=arb.ways===2?'var(--cyan)':'var(--purple)';
-  const legs=arb.sides.map(s=>`<div class="leg">
-    <span class="lsel">${s.sel.toUpperCase()}</span>
-    <span class="lodds">@ ${s.price.toFixed(2)}</span>
-    <span class="lstake ldyn" data-base="${s.stake.toFixed(2)}">${fmt(s.stake)}</span>
-    <span class="lbook">${bk(s.bookie)}</span>
-  </div>`).join('');
-  const card=document.createElement('div');
-  card.className='card arb-card';card.style.animationDelay=(idx*.05)+'s';card.dataset.pct=arb.pct;card.dataset.ways=arb.ways;
-  card.innerHTML=`<div class="stripe st-arb"></div>
-    <div class="c-head">
-      <div class="c-head-l"><span class="spt">${si(arb.sport)}</span><div><div class="mtitle">${arb.match}</div><div class="mmeta">${arb.sport.replace(/_/g,' ').toUpperCase()} · ${arb.time}</div></div></div>
-      <div class="arb-badge">
-        <span class="arb-pct" style="color:${wc};font-family:'JetBrains Mono',monospace">${fp(arb.pct)}</span>
-        <span class="ways" style="color:${wc};border-color:${wc}44;background:${wc}14">${arb.ways}W</span>
-      </div>
-    </div>
-    <div class="c-body">
-      <div class="chip chip-arb">${arb.line}</div>
-      <div class="legs">${legs}</div>
-      <div class="prof-banner"><span class="pb-lbl">GUARANTEED PROFIT</span><span class="pb-val">${fmt(arb.profit)}</span></div>
-    </div>`;
-  c.appendChild(card);applyArbFilters();
-}
-
-/* ── BADGES ── */
-function updateBadges(){$('bEV').textContent=EVS.length;$('bARB').textContent=ARBS.length}
-
-/* ── INIT EMPTY ── */
-function initEmpty(){
-  $('ev-cards').innerHTML=`<div class="empty"><div class="ei">📡</div><div class="et">No EV edges yet</div><div class="es">Configure your key and tap Start Sweep</div></div>`;
-  $('arb-cards').innerHTML=`<div class="empty"><div class="ei">🔒</div><div class="et">No arbitrage windows</div><div class="es">All sports will be scanned on sweep</div></div>`;
-}
-initEmpty();
-
-/* ── EV FILTERS ── */
-function applyFilters(){
-  const cards=[...$('ev-cards').querySelectorAll('.ev-card')];
-  cards.forEach((c,i)=>{
-    let hide=false;
-    if(top5&&i>=5)hide=true;
-    if(hcFilter&&parseFloat(c.dataset.conf)<60)hide=true;
-    c.style.display=hide?'none':'';
-  });
-}
-function toggleTop5(){
-  top5=!top5;
-  $('top5Btn').style.borderColor=top5?'var(--cyan)':'var(--b2)';
-  $('top5Btn').style.color=top5?'var(--cyan)':'var(--text2)';
-  applyFilters();
-}
-function toggleSort(){
-  sortOn=!sortOn;
-  $('sortBtn').style.borderColor=sortOn?'var(--gold)':'var(--b2)';
-  $('sortBtn').style.color=sortOn?'var(--gold)':'var(--text2)';
-  const c=$('ev-cards');
-  const cards=[...c.querySelectorAll('.ev-card')];
-  if(sortOn)cards.sort((a,b)=>parseFloat(b.dataset.pct)-parseFloat(a.dataset.pct));
-  cards.forEach(card=>c.appendChild(card));
-}
-function toggleHC(){
-  hcFilter=!hcFilter;
-  $('filterHCBtn').style.borderColor=hcFilter?'var(--green)':'var(--b2)';
-  $('filterHCBtn').style.color=hcFilter?'var(--green)':'var(--text2)';
-  applyFilters();
-}
-
-/* ── ARB FILTERS ── */
-function applyArbFilters(){
-  const cards=[...$('arb-cards').querySelectorAll('.arb-card')];
-  cards.forEach((c,i)=>{
-    let hide=false;
-    if(arb3&&parseInt(c.dataset.ways)!==3)hide=true;
-    c.style.display=hide?'none':'';
-  });
-}
-function toggleArb3(){
-  arb3=!arb3;
-  $('arb3Btn').style.borderColor=arb3?'var(--purple)':'var(--b2)';
-  $('arb3Btn').style.color=arb3?'var(--purple)':'var(--text2)';
-  applyArbFilters();
-}
-function toggleArbSort(){
-  arbSort=!arbSort;
-  $('arbSortBtn').style.borderColor=arbSort?'var(--gold)':'var(--b2)';
-  $('arbSortBtn').style.color=arbSort?'var(--gold)':'var(--text2)';
-  const c=$('arb-cards');
-  const cards=[...c.querySelectorAll('.arb-card')];
-  if(arbSort)cards.sort((a,b)=>parseFloat(b.dataset.pct)-parseFloat(a.dataset.pct));
-  cards.forEach(card=>c.appendChild(card));
-}
-
-/* ── CSV EXPORT ── */
-function exportCSV(){
-  let rows=[['Type','Match','Sport','Line','Selection','Odds','TrueOdds','EV%/ARB%','Stake','Bookmaker','Confidence']];
-  EVS.forEach(e=>rows.push(['EV',e.match,e.sport,e.line,e.sel,e.odds.toFixed(3),e.true.toFixed(3),e.pct.toFixed(2),e.stake.toFixed(0),bk(e.bookie),e.conf]));
-  ARBS.forEach(a=>rows.push(['ARB',a.match,a.sport,a.line,a.sides.map(s=>s.sel).join('/'),a.sides.map(s=>s.price.toFixed(2)).join('/'), '',a.pct.toFixed(2),a.sides.reduce((s,x)=>s+x.stake,0).toFixed(0),a.sides.map(s=>bk(s.bookie)).join('+'),'']));
-  const csv=rows.map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\\n');
-  const bl=new Blob([csv],{type:'text/csv'});
-  const u=URL.createObjectURL(bl);
-  const a=document.createElement('a');a.href=u;a.download='arb_sniper_'+Date.now()+'.csv';a.click();
-  URL.revokeObjectURL(u);
-}
-
-/* ══════════ CALCULATORS ══════════ */
-function calcEV(){
-  const soft=parseFloat($('cSoft').value)||0,pA=parseFloat($('cPinA').value)||0,pB=parseFloat($('cPinB').value)||0;
-  if(!soft||!pA||!pB||pA<=1||pB<=1){rst(['rTO','rEV','rKS','rCF']);return}
-  const[t1]=devig(pA,pB);
-  const evp=((soft/t1)-1)*100;
-  const stake=kelly(soft,t1,getBK(),getKF());
-  const cf=conf(soft,t1);
-  $('rTO').textContent=t1.toFixed(3);
-  $('rEV').textContent=(evp>=0?'+':'')+evp.toFixed(2)+'%';$('rEV').style.color=evp>=0?'var(--green)':'var(--red)';
-  $('rKS').textContent=stake>0?fmt(stake):'No edge';
-  const cc=cf>=70?'var(--green)':cf>=40?'var(--gold)':'var(--red)';
-  $('rCF').textContent=cf+'/100';$('rCF').style.color=cc;
-}
-function calcARB(){
-  const A=parseFloat($('cAA').value)||0,B=parseFloat($('cAB').value)||0;
-  const Cv=$('cAC').value.trim();const C=Cv?parseFloat(Cv):0;
-  if(!A||!B||A<=1||B<=1){rst(['rAM','rAP','rAS','rAB','rAG']);return}
-  const sides=C>1?[A,B,C]:[A,B];
-  const margin=sides.reduce((s,o)=>s+1/o,0);
-  const bkv=getBK(),pct=(1-margin)*100;
-  $('rAM').textContent=margin.toFixed(4);$('rAM').style.color=margin<1?'var(--green)':'var(--red)';
-  $('rAP').textContent=pct.toFixed(3)+'%';$('rAP').style.color=pct>0?'var(--green)':'var(--red)';
-  $('rAS').textContent=margin<1?fmt((bkv/margin)/A):'--';
-  $('rAB').textContent=margin<1?fmt((bkv/margin)/B):'--';
-  $('rAG').textContent=margin<1?fmt((bkv/margin)-bkv):'No ARB';$('rAG').style.color=margin<1?'var(--green)':'var(--red)';
-}
-function calcGU(){
-  const stake=parseFloat($('gBS').value)||0,back=parseFloat($('gBO').value)||0,lay=parseFloat($('gLO').value)||0;
-  if(!stake||!back||!lay||back<=1||lay<=1){rst(['rGL','rGP']);return}
-  const ls=(stake*back)/lay,p=ls-stake;
-  $('rGL').textContent=fmt(ls);
-  $('rGP').textContent=(p>=0?'+':'')+fmt(p);$('rGP').style.color=p>=0?'var(--green)':'var(--red)';
-}
-function calcKelly(){
-  const p=parseFloat($('kP').value)||0,o=parseFloat($('kO').value)||0,bkv=parseFloat($('kB').value)||1500;
-  if(!p||!o||p<=0||p>=1||o<=1){rst(['rFK','rFR','rKA']);return}
-  const b=o-1,q=1-p,full=((b*p-q)/b);
-  const frac=full*.30;
-  $('rFK').textContent=(full*100).toFixed(2)+'%';
-  $('rFR').textContent=(frac*100).toFixed(2)+'%';
-  const stake=frac>0?Math.max(20,Math.min(bkv*frac,bkv*.05)):0;
-  $('rKA').textContent=stake>0?fmt(stake):'No edge';$('rKA').style.color=stake>0?'var(--green)':'var(--red)';
-}
-function rst(ids){ids.forEach(id=>{$(id).textContent='--';$(id).style.color=''})}
-calcEV();calcARB();calcGU();calcKelly();
-
-/* ══════════ ANALYTICS ══════════ */
-function renderAn(){
-  const evs=EVS,arbs=ARBS;
-  const totP=arbs.reduce((s,a)=>s+a.profit,0);
-  const totS=arbs.reduce((s,a)=>s+a.sides.reduce((x,y)=>x+y.stake,0),0);
-  const roi=totS>0?(totP/totS*100):0;
-  const avgEV=evs.length?evs.reduce((s,e)=>s+e.pct,0)/evs.length:0;
-  const pkEV=evs.length?Math.max(...evs.map(e=>e.pct)):0;
-  const avgARB=arbs.length?arbs.reduce((s,a)=>s+a.pct,0)/arbs.length:0;
-  const pkARB=arbs.length?Math.max(...arbs.map(a=>a.pct)):0;
-  $('anTE').textContent=evs.length;$('anAE').textContent=avgEV.toFixed(2)+'%';$('anPE').textContent=pkEV.toFixed(2)+'%';
-  $('anTA').textContent=arbs.length;$('anAP').textContent=fmt(totP);$('anROI').textContent=roi.toFixed(2)+'%';
-  // EV hist
-  const eh=[{l:'0–2%',c:evs.filter(e=>e.pct<2).length,g:'linear-gradient(90deg,#4fa3ff,#00d8ff)'},
-    {l:'2–5%',c:evs.filter(e=>e.pct>=2&&e.pct<5).length,g:'linear-gradient(90deg,#00ff90,#00d8ff)'},
-    {l:'5–10%',c:evs.filter(e=>e.pct>=5&&e.pct<10).length,g:'linear-gradient(90deg,#ffd000,#ff8c00)'},
-    {l:'10%+',c:evs.filter(e=>e.pct>=10).length,g:'linear-gradient(90deg,#ff3352,#ff6b35)'}];
-  hist('anEH',eh);
-  $('anES').innerHTML=ms('AVG','var(--green)',avgEV.toFixed(2)+'%')+ms('PEAK','var(--gold)',pkEV.toFixed(2)+'%')+ms('COUNT','var(--cyan)',evs.length);
-  // ARB hist
-  const ah=[{l:'0–1%',c:arbs.filter(a=>a.pct<1).length,g:'linear-gradient(90deg,#64748b,#94a3b8)'},
-    {l:'1–2%',c:arbs.filter(a=>a.pct>=1&&a.pct<2).length,g:'linear-gradient(90deg,#c47eff,#7e22ce)'},
-    {l:'2–5%',c:arbs.filter(a=>a.pct>=2&&a.pct<5).length,g:'linear-gradient(90deg,#00d8ff,#c47eff)'},
-    {l:'5%+',c:arbs.filter(a=>a.pct>=5).length,g:'linear-gradient(90deg,#00ff90,#00d8ff)'}];
-  hist('anAH',ah);
-  $('anAS').innerHTML=ms('AVG','var(--purple)',avgARB.toFixed(2)+'%')+ms('PEAK','var(--cyan)',pkARB.toFixed(2)+'%')+ms('COUNT','var(--green)',arbs.length);
-  // EV by sport
-  bars('anESP',groupBy(evs,e=>sportFmt(e.sport)),'linear-gradient(90deg,var(--cyan),var(--green))',v=>v.length,v=>v.length+' | avg '+(v.reduce((s,e)=>s+e.pct,0)/v.length).toFixed(1)+'%');
-  bars('anASP',groupBy(arbs,a=>sportFmt(a.sport)),'linear-gradient(90deg,var(--purple),var(--cyan))',v=>v.length,v=>v.length);
-  // EV bookmakers
-  barsColor('anEB',groupBy(evs,e=>bk(e.bookie)),['var(--cyan)','var(--green)','var(--gold)','var(--purple)','var(--red)'],v=>v.length,v=>v.length+' | avg '+(v.reduce((s,e)=>s+e.pct,0)/v.length).toFixed(1)+'%');
-  // ARB pairs
-  const pm={};arbs.forEach(a=>{const p=a.sides.map(s=>bk(s.bookie)).join(' + ');pm[p]=(pm[p]||0)+1});
-  const ps=Object.entries(pm).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  const maxP=ps[0]?ps[0][1]:1;
-  $('anAPR').innerHTML=ps.map(([p,c])=>`<div class="brow"><span class="blbl2" style="font-size:10px">${p}</span><div class="btrack"><div class="bfill" style="width:${Math.round(c/maxP*100)}%;background:linear-gradient(90deg,var(--purple),var(--cyan))"></div></div><span class="bcnt" style="color:var(--purple)">${c}</span></div>`).join('')||empty2();
-  // Donut
-  const tw=arbs.filter(a=>a.ways===2).length,th=arbs.filter(a=>a.ways===3).length,tot=Math.max(tw+th,1);
-  $('anDonut').style.setProperty('--tw',Math.round(tw/tot*100)+'%');
-  $('an2w').textContent=tw;$('an3w').textContent=th;
-  $('anAMeta').innerHTML=ms('STAKE','var(--gold)',fmt(totS))+ms('PROFIT','var(--green)',fmt(totP))+ms('ROI','var(--orange)',roi.toFixed(2)+'%');
-  // Confidence
-  const cb=[{l:'0–29',c:evs.filter(e=>e.conf<30).length,cl:'var(--red)'},
-    {l:'30–59',c:evs.filter(e=>e.conf>=30&&e.conf<60).length,cl:'var(--gold)'},
-    {l:'60–79',c:evs.filter(e=>e.conf>=60&&e.conf<80).length,cl:'var(--cyan)'},
-    {l:'80+',c:evs.filter(e=>e.conf>=80).length,cl:'var(--green)'}];
-  const mc=Math.max(...cb.map(b=>b.c),1);
-  const hc=evs.filter(e=>e.conf>=60).length,hcP=evs.length?Math.round(hc/evs.length*100):0;
-  $('anCS').innerHTML=cb.map(b=>`<div class="hrow"><span class="hlbl">${b.l}</span><div class="htrack"><div class="hbar" style="width:${Math.round(b.c/mc*100)}%;background:${b.cl};box-shadow:0 0 6px ${b.cl}55"></div></div><span class="hcnt" style="color:${b.cl}">${b.c}</span></div>`).join('')+
-    `<div class="mini-stats" style="margin-top:10px;border-top:1px solid var(--b1);padding-top:9px;">${ms('HIGH CONF','var(--green)',hcP+'%')}${ms('SCORED','var(--cyan)',evs.length)}</div>`;
-}
-function ms(l,c,v){return`<div class="ms"><span class="msl">${l}</span><span class="msv" style="color:${c}">${v}</span></div>`}
-function sportFmt(s){return s.replace(/_/g,' ').split(' ').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ')}
-function groupBy(arr,fn){const m={};arr.forEach(x=>{const k=fn(x);(m[k]=m[k]||[]).push(x)});return Object.entries(m).sort((a,b)=>b[1].length-a[1].length).slice(0,5)}
-function hist(id,buckets){const max=Math.max(...buckets.map(b=>b.c),1);$(id).innerHTML=buckets.map(b=>`<div class="hrow"><span class="hlbl">${b.l}</span><div class="htrack"><div class="hbar" style="width:${Math.round(b.c/max*100)}%;background:${b.g}"></div></div><span class="hcnt">${b.c}</span></div>`).join('')}
-function bars(id,entries,grad,vFn,lFn){
-  if(!entries.length){$(id).innerHTML=empty2();return}
-  const max=Math.max(...entries.map(([,v])=>vFn(v)),1);
-  $(id).innerHTML=entries.map(([k,v])=>`<div class="brow"><span class="blbl2">${k}</span><div class="btrack"><div class="bfill" style="width:${Math.round(vFn(v)/max*100)}%;background:${grad}"></div></div><span class="bcnt">${lFn(v)}</span></div>`).join('')
-}
-function barsColor(id,entries,cols,vFn,lFn){
-  if(!entries.length){$(id).innerHTML=empty2();return}
-  const max=Math.max(...entries.map(([,v])=>vFn(v)),1);
-  $(id).innerHTML=entries.map(([k,v],i)=>{const c=cols[i%cols.length];return`<div class="brow"><span class="blbl2" style="color:${c}">${k}</span><div class="btrack"><div class="bfill" style="width:${Math.round(vFn(v)/max*100)}%;background:${c}"></div></div><span class="bcnt" style="color:${c}">${lFn(v)}</span></div>`}).join('')
-}
-function empty2(){return'<div style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--text3);padding:10px 0">No data yet</div>'}
-
-/* ── INIT ── */
-(()=>{
-  const bkv=localStorage.getItem('arb_bk');
-  if(bkv){$('cfgBK').value=bkv;$('kB').value=bkv;$('telBK').textContent=fmt(parseFloat(bkv))}
-  // Show key status in header indicator
-  if(API_KEYS.length===0){
-    $('keyDot').style.background='var(--red)';
-    $('keyDot').style.boxShadow='0 0 8px var(--red)';
-    $('keyMsg').style.color='var(--red)';
-    $('keyMsg').textContent='No keys injected — deploy via GitHub Actions or enter key manually on scan';
-  } else {
-    const plural=API_KEYS.length>1?' keys':' key';
-    $('keyMsg').textContent=API_KEYS.length+plural+' injected via GitHub Secrets — ready ✓';
-    $('telKey').textContent=API_KEYS.length+' key'+(API_KEYS.length>1?'s':'');
+function triggerScan(){{
+  let pat=localStorage.getItem('gh_dispatch_token');
+  if(!pat){{
+    pat=prompt("Enter your GitHub PAT (ghp_...) to authorize this scan:\\n(Stored only in your browser — never public)");
+    if(!pat) return;
+    localStorage.setItem('gh_dispatch_token',pat);
   }}
-}})();
-$('cfgBK').addEventListener('change',()=>{{localStorage.setItem('arb_bk',$('cfgBK').value);$('kB').value=$('cfgBK').value}});
+  const btn=document.querySelector('.btn-scan');
+  btn.textContent='⏳ Firing engine...';
+  btn.disabled=true;
+  fetch('https://api.github.com/repos/nikunj7711/arb-sniper/actions/workflows/sniper.yml/dispatches',{{
+    method:'POST',
+    headers:{{'Accept':'application/vnd.github.v3+json','Authorization':'token '+pat,'Content-Type':'application/json'}},
+    body:JSON.stringify({{ref:'main'}})
+  }})
+  .then(r=>{{
+    btn.textContent='⚡ Launch Cloud Scan';
+    btn.disabled=false;
+    if(r.ok){{alert("✅ Engine fired! Scan running — wait 2–3 mins then Ctrl+F5 to refresh.");}}
+    else{{alert("❌ Auth failed. Token may be expired. Clearing stored token...");localStorage.removeItem('gh_dispatch_token');}}
+  }})
+  .catch(()=>{{btn.textContent='⚡ Launch Cloud Scan';btn.disabled=false;}});
+}}
+
+let currentKelly=0.30;
+function updateKelly(val){{
+  currentKelly=val/100;
+  document.getElementById('kellyValue').textContent=val+'%';
+  document.getElementById('kellySlider').style.setProperty('--pct',val+'%');
+  document.querySelectorAll('.stake-display').forEach(el=>{{
+    const base=parseFloat(el.getAttribute('data-base-stake'));
+    el.textContent='₹'+Math.round(base*(currentKelly/0.30));
+  }});
+}}
+
+function applyTop5(){{
+  const top5=document.getElementById('top5Toggle').checked;
+  document.querySelectorAll('#ev-cards .ev-card').forEach((c,i)=>{{c.style.display=(top5&&i>=5)?'none':'';}});
+  document.querySelectorAll('#arb-cards .arb-card').forEach((c,i)=>{{c.style.display=(top5&&i>=5)?'none':'';}});
+}}
+
+function exportCSV(){{
+  let rows=[['Type','Match','Sport','Line','Selection','Odds','EV%/ARB%','Stake','Bookmaker','Confidence','CLV%']];
+  ALL_EVS.forEach(e=>{{rows.push(['EV',e.match,e.sport,e.line,e.selection,e.odds,e.pct.toFixed(2),e.stake.toFixed(0),e.bookie,e.confidence,e.clv_pct??'']);}});
+  ALL_ARBS.forEach(a=>{{rows.push(['ARB',a.match,a.sport,a.line,a.s1+'/'+a.s2,a.s1_price+'/'+a.s2_price,a.pct.toFixed(2),(a.stk1+a.stk2).toFixed(0),a.s1_bookie+'+'+a.s2_bookie,'','']);}});
+  const csv=rows.map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\\n');
+  const blob=new Blob([csv],{{type:'text/csv'}});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='arb_sniper_export.csv';a.click();
+  URL.revokeObjectURL(url);
+}}
 </script>
 </body>
-</html>"""
+</html>'''
 
-with open("index.html", "w", encoding="utf-8") as f:
-    # Inject the real key array from GitHub Secrets into the placeholder
-    f.write(HTML.replace('__INJECTED_KEYS__', INJECTED_KEYS_JS))
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(html)
+    print(" Web Dashboard successfully updated (index.html)")
 
-print(f"✅ index.html generated — {len(HTML):,} chars")
-print(f"   API keys injected: {len(_keys_list)} key(s) from ODDS_API_KEYS secret")
 
+# ==========================================
+#  MAIN SCANNER
+# ==========================================
+def run_hybrid_scanner():
+    global scan_starting_used
+    my_bookies_list = MY_BOOKIES.split(',')
+    scan_starting_used = None
+
+    ist_now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+    current_time_str = ist_now.strftime('%d %b %Y, %I:%M:%S %p IST')
+
+    print(f"\n [{current_time_str}] ALL-SPORTS Sweep (EV + ARB) active...")
+    all_evs, all_arbs = [], []
+
+    sport_events = fetch_all_sports_parallel(TARGET_SPORTS)
+
+    for sport, events in sport_events.items():
+        if not events:
+            continue
+        for event in events:
+            match_name = f"{event['home_team']} vs {event['away_team']}"
+            match_time = format_time_ist(event['commence_time'])
+            ev_lines, arb_lines = extract_hybrid_data(event.get('bookmakers', []), my_bookies_list)
+            new_evs, new_arbs = evaluate_markets(ev_lines, arb_lines, match_name, match_time, sport)
+            all_evs.extend(new_evs)
+            all_arbs.extend(new_arbs)
+
+    history_log = append_to_history(all_evs, all_arbs)
+    all_evs = compute_clv(all_evs, history_log)
+    bankroll_state = update_bankroll_state(all_evs, all_arbs)
+
+    alert_cache = load_alert_cache()
+    alert_cache = prune_alert_cache(alert_cache)
+
+    if all_arbs:
+        all_arbs.sort(key=lambda x: x['pct'], reverse=True)
+        for arb in all_arbs:
+            sel = arb['s1']
+            odds = arb['s1_data']['price']
+            if is_duplicate_alert(alert_cache, arb['match'], arb['line'], sel, odds):
+                continue
+            ways = arb.get('ways', 2)
+            third_leg = ''
+            if ways == 3:
+                third_leg = f"\n \u20b9{arb.get('stk3',0):.0f} on {arb['s3'].upper()} @ {arb['s3_data']['price']:.2f} [{display_bookie(arb['s3_data']['bookie'])}]"
+            msg = (f"\U0001f512 {arb['pct']:.2f}% ARB | {arb['match']}\n {arb['sport'].replace('_',' ').title()}\n"
+                   f" {arb['time']}\n {arb['line']}\n\n"
+                   f" \u20b9{arb['stk1']:.0f} on {arb['s1'].upper()} @ {arb['s1_data']['price']:.2f} [{display_bookie(arb['s1_data']['bookie'])}]\n"
+                   f" \u20b9{arb['stk2']:.0f} on {arb['s2'].upper()} @ {arb['s2_data']['price']:.2f} [{display_bookie(arb['s2_data']['bookie'])}]{third_leg}\n\n"
+                   f" Profit: \u20b9{arb['profit']:.0f}")
+            send_phone_alert(msg, arb['pct'], arb['match'], "ARB")
+            mark_alert_sent(alert_cache, arb['match'], arb['line'], sel, odds)
+
+    if all_evs:
+        all_evs.sort(key=lambda x: x['pct'], reverse=True)
+        for ev in all_evs:
+            if is_duplicate_alert(alert_cache, ev['match'], ev['line'], ev['selection'], ev['odds']):
+                continue
+            clv_line = f"\n CLV: {ev['clv_pct']:+.2f}%" if ev.get('clv_pct') is not None else ''
+            msg = (f"\u26a1 {ev['pct']:.2f}% EV | {ev['match']}\n {ev['sport'].replace('_',' ').title()}\n"
+                   f" {ev['time']}\n {ev['line']}\n\n"
+                   f" BET EXACTLY: \u20b9{ev['stake']:.0f}\n"
+                   f" {ev['selection'].upper()} {ev['line'].split('_')[1]} @ {ev['odds']:.2f} on {display_bookie(ev['bookie'])}\n\n"
+                   f" True Odds: {ev['true']:.2f} | Confidence: {ev.get('confidence',0)}/100{clv_line}")
+            send_phone_alert(msg, ev['pct'], ev['match'], "EV")
+            mark_alert_sent(alert_cache, ev['match'], ev['line'], ev['selection'], ev['odds'])
+
+    save_alert_cache(alert_cache)
+    generate_web_dashboard(all_evs, all_arbs, current_time_str, bankroll_state=bankroll_state)
+
+    print("\n" + "=" * 65)
+    print(" API USAGE REPORT")
+    print("=" * 65)
+    print(f" Active Key Index: #{current_key_index + 1}")
+    print(f" Remaining Monthly Credits: {requests_remaining} / 500")
+    print("=" * 65)
+
+
+if __name__ == "__main__":
+    print(" GitHub Actions Master Cloud Engine Started...")
+    run_hybrid_scanner()
+    print(" Scan complete.")
