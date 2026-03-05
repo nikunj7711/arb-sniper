@@ -404,5 +404,32 @@
     "arb_pct": 3.591,
     "stake": 1500.0,
     "clv_pct": -0.017
+  },
+  {
+    "type": "EV",
+    "timestamp": "2026-03-05 21:42:02 IST",
+    "match": "Columbus Blue Jackets vs Florida Panthers",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet",
+    "odds": 2.26,
+    "true_odds": 2.037,
+    "selection": "Over",
+    "ev_pct": 10.967,
+    "stake": 39.17,
+    "clv_pct": -0.017
+  },
+  {
+    "type": "ARB",
+    "timestamp": "2026-03-05 21:42:02 IST",
+    "match": "Columbus Blue Jackets vs Florida Panthers",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet+pinnacle",
+    "odds": 2.26,
+    "selection": "Over",
+    "arb_pct": 3.396,
+    "stake": 1500.0,
+    "clv_pct": -0.017
   }
 ]
