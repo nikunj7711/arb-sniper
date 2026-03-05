@@ -350,5 +350,59 @@
     "arb_pct": 2.561,
     "stake": 1500.0,
     "clv_pct": -0.024
+  },
+  {
+    "type": "EV",
+    "timestamp": "2026-03-05 19:51:19 IST",
+    "match": "Pittsburgh Penguins vs Buffalo Sabres",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet",
+    "odds": 2.2,
+    "true_odds": 2.01,
+    "selection": "Over",
+    "ev_pct": 9.433,
+    "stake": 35.37,
+    "clv_pct": 0.018
+  },
+  {
+    "type": "EV",
+    "timestamp": "2026-03-05 19:51:19 IST",
+    "match": "Columbus Blue Jackets vs Florida Panthers",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet",
+    "odds": 2.27,
+    "true_odds": 2.037,
+    "selection": "Over",
+    "ev_pct": 11.458,
+    "stake": 40.6,
+    "clv_pct": -0.017
+  },
+  {
+    "type": "ARB",
+    "timestamp": "2026-03-05 19:51:19 IST",
+    "match": "Pittsburgh Penguins vs Buffalo Sabres",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet+pinnacle",
+    "odds": 2.2,
+    "selection": "Over",
+    "arb_pct": 2.732,
+    "stake": 1500.0,
+    "clv_pct": 0.018
+  },
+  {
+    "type": "ARB",
+    "timestamp": "2026-03-05 19:51:19 IST",
+    "match": "Columbus Blue Jackets vs Florida Panthers",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet+pinnacle",
+    "odds": 2.27,
+    "selection": "Over",
+    "arb_pct": 3.591,
+    "stake": 1500.0,
+    "clv_pct": -0.017
   }
 ]

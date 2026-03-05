@@ -150,11 +150,33 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 .hist-track{flex:1;height:14px;background:var(--border2);border-radius:7px;overflow:hidden;}
 .hist-bar{height:100%;border-radius:7px;animation:barFill 1s ease both;min-width:3px;}
 .hist-count{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--text-dim);width:20px;text-align:right;}
-.analytics-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-.an-stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 14px;animation:cardIn 0.5s ease both;transition:all 0.2s ease;}
-.an-stat-card:hover{border-color:var(--border2);transform:translateY(-2px);}
-.an-stat-label{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;}
-.an-stat-val{font-family:'Space Mono',monospace;font-size:26px;font-weight:700;line-height:1;}
+.an-two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+@media(max-width:560px){.an-two-col{grid-template-columns:1fr;}}
+.an-kpi-row{display:flex;gap:10px;overflow-x:auto;margin-bottom:16px;padding-bottom:2px;}
+.an-kpi-row::-webkit-scrollbar{height:3px;}
+.an-kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;flex:1;min-width:110px;text-align:center;animation:cardIn 0.4s ease both;transition:all 0.2s ease;}
+.an-kpi-card:hover{border-color:var(--border2);transform:translateY(-2px);}
+.an-kpi-icon{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;margin-bottom:4px;opacity:0.8;}
+.an-kpi-val{font-family:'Space Mono',monospace;font-size:20px;font-weight:800;line-height:1;margin-bottom:4px;}
+.an-kpi-label{font-size:10px;color:var(--text-muted);font-family:'Space Mono',monospace;letter-spacing:0.5px;}
+.an-mini-stats{display:flex;gap:0;margin-top:14px;border-top:1px solid var(--border);padding-top:12px;}
+.an-mini-stats>div{flex:1;text-align:center;}
+.an-mini-stats>div+div{border-left:1px solid var(--border);}
+.an-ms-label{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--text-muted);display:block;margin-bottom:3px;text-transform:uppercase;}
+.an-sport-row{display:flex;align-items:center;gap:8px;margin-bottom:9px;}
+.an-sport-name{font-size:11px;color:var(--text-dim);width:90px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.an-sport-bar-track{flex:1;height:12px;background:var(--border2);border-radius:6px;overflow:hidden;}
+.an-sport-stats{display:flex;gap:6px;font-family:'Space Mono',monospace;font-size:10px;min-width:70px;justify-content:flex-end;}
+.an-donut-wrap{display:flex;align-items:center;justify-content:center;gap:20px;padding:10px 0;}
+.an-donut{width:80px;height:80px;border-radius:50%;background:conic-gradient(#00c8ff calc(var(--two-pct,50)*1%),#bf5af2 calc(var(--two-pct,50)*1%));box-shadow:0 0 20px #00c8ff22,0 0 40px #bf5af211;position:relative;}
+.an-donut::after{content:'';position:absolute;inset:18px;background:var(--surface);border-radius:50%;}
+.an-dl-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.an-dl-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0;}
+.an-dl-label{font-size:12px;color:var(--text-dim);flex:1;}
+.an-dl-val{font-family:'Space Mono',monospace;font-size:14px;font-weight:700;}
+.an-conf-bar-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.an-conf-range{font-family:'Space Mono',monospace;font-size:9px;color:var(--text-muted);width:46px;flex-shrink:0;}
+.analytics-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;animation:cardIn 0.5s 0.1s ease both;}
 .telemetry{margin-top:40px;padding:14px 20px;background:var(--surface);border:1px solid var(--border);border-radius:14px;font-family:'Space Mono',monospace;font-size:10px;color:var(--text-muted);letter-spacing:1px;display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;justify-content:center;position:relative;overflow:hidden;}
 .telemetry::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--border2),transparent);}
 .tele-item{white-space:nowrap;}
@@ -171,17 +193,46 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
     <div class="header-logo">Quantitative Betting Intelligence</div>
     <div class="header-title">⚡ ARB SNIPER</div>
     <div class="header-subtitle"><span class="live-dot"></span>LIVE MARKET SCANNER · IST</div>
-    <div class="scan-time">Last Sweep: 05 Mar 2026, 07:12:12 PM IST</div>
+    <div class="scan-time">Last Sweep: 05 Mar 2026, 07:51:15 PM IST</div>
   </div>
 
-  <div class="bankroll-bar">
-  <div class="bk-stat"><div class="bk-label">BANKROLL</div><div class="bk-val">₹1500</div></div>
+  
+<!-- BANKROLL EDITOR MODAL -->
+<div id="bk-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(7,9,15,0.85);z-index:1000;backdrop-filter:blur(6px);align-items:center;justify-content:center;">
+  <div style="background:#0d1117;border:1px solid #253044;border-radius:20px;padding:32px 28px;width:min(380px,90vw);position:relative;box-shadow:0 0 60px #00c8ff18,0 24px 80px rgba(0,0,0,0.6);">
+    <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#00c8ff,#00ff88,#ffd700);border-radius:20px 20px 0 0;"></div>
+    <div style="font-family:'Space Mono',monospace;font-size:10px;letter-spacing:3px;color:#64748b;text-transform:uppercase;margin-bottom:6px;">Configure</div>
+    <div style="font-size:22px;font-weight:800;color:#e2e8f0;margin-bottom:24px;">Edit Bankroll</div>
+    <div style="margin-bottom:16px;">
+      <label style="font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.5px;color:#64748b;display:block;margin-bottom:8px;text-transform:uppercase;">Total Bankroll (₹)</label>
+      <div style="position:relative;">
+        <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#ffd700;font-size:18px;font-weight:700;">₹</span>
+        <input id="bk-input" type="number" min="100" step="100" value="1500"
+          style="width:100%;background:#141923;border:1px solid #253044;border-radius:10px;padding:12px 14px 12px 36px;font-size:22px;font-weight:700;font-family:'Space Mono',monospace;color:#ffd700;outline:none;transition:border-color 0.2s ease;"
+          onfocus="this.style.borderColor='#ffd700';this.style.boxShadow='0 0 16px #ffd70022'"
+          onblur="this.style.borderColor='#253044';this.style.boxShadow='none'">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px;">
+      <button onclick="saveBankroll()" style="background:linear-gradient(135deg,#ffd70020,#ff950015);border:1px solid #ffd700;color:#ffd700;padding:12px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:all 0.2s ease;" onmouseover="this.style.background='linear-gradient(135deg,#ffd70030,#ff950025)'" onmouseout="this.style.background='linear-gradient(135deg,#ffd70020,#ff950015)'">💾 Save & Apply</button>
+      <button onclick="closeBkModal()" style="background:#141923;border:1px solid #253044;color:#94a3b8;padding:12px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:all 0.2s ease;" onmouseover="this.style.borderColor='#94a3b8'" onmouseout="this.style.borderColor='#253044'">Cancel</button>
+    </div>
+    <div style="font-size:11px;color:#64748b;font-family:'Space Mono',monospace;text-align:center;margin-top:8px;">Saved in browser · affects Kelly stake sizing</div>
+  </div>
+</div>
+
+<div class="bankroll-bar" onclick="openBkModal()" title="Click to edit bankroll" style="cursor:pointer;">
+  <div class="bk-stat">
+    <div class="bk-label">BANKROLL</div>
+    <div class="bk-val" id="bk-display">₹<span id="bk-amount">1500</span></div>
+  </div>
   <div class="bk-divider"></div>
-  <div class="bk-stat"><div class="bk-label">STAKES TODAY</div><div class="bk-val bk-yellow">₹15371</div></div>
+  <div class="bk-stat"><div class="bk-label">STAKES TODAY</div><div class="bk-val bk-yellow">₹18447</div></div>
   <div class="bk-divider"></div>
-  <div class="bk-stat"><div class="bk-label">ARB PROFIT</div><div class="bk-val bk-green">₹401</div></div>
+  <div class="bk-stat"><div class="bk-label">ARB PROFIT</div><div class="bk-val bk-green">₹499</div></div>
   <div class="bk-divider"></div>
-  <div class="bk-stat"><div class="bk-label">EV EXPOSURE</div><div class="bk-val bk-blue">₹34</div></div>
+  <div class="bk-stat"><div class="bk-label">EV EXPOSURE</div><div class="bk-val bk-blue">₹42</div></div>
+  <div style="position:absolute;top:10px;right:12px;font-size:14px;opacity:0.4;">✏️</div>
 </div>
 
   <div class="btn-row">
@@ -205,30 +256,49 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
   </div>
 
   <div class="tabs">
-    <div class="tab active" id="tab-ev" onclick="switchTab('ev')">⚡ EV Edges <span class="tab-badge">1</span></div>
-    <div class="tab" id="tab-arb" onclick="switchTab('arb')">🔒 Arbitrage <span class="tab-badge">1</span></div>
+    <div class="tab active" id="tab-ev" onclick="switchTab('ev')">⚡ EV Edges <span class="tab-badge">2</span></div>
+    <div class="tab" id="tab-arb" onclick="switchTab('arb')">🔒 Arbitrage <span class="tab-badge">2</span></div>
     <div class="tab" id="tab-analytics" onclick="switchTab('analytics')">📊 Analytics</div>
   </div>
 
   <div id="content-ev" class="tab-content active">
-    <div id="ev-cards"><div class="card ev-card" data-pct="10.066838046272508" data-stake="36.83" style="animation-delay:0.0s">
+    <div id="ev-cards"><div class="card ev-card" data-pct="11.45758354755786" data-stake="40.60" style="animation-delay:0.0s">
   <div class="card-rank-stripe rank-gold"></div>
   <div class="card-header">
-    <div class="card-header-left"><span class="sport-icon">🏒</span><div><div class="match-name">Pittsburgh Penguins vs Buffalo Sabres</div><div class="match-meta">Icehockey Nhl · 06 Mar 2026, 05:40 AM</div></div></div>
-    <div class="ev-badge" style="color:#ff4d6d;border-color:#ff4d6d44;text-shadow:0 0 14px #ff4d6d88;">10.07%</div>
+    <div class="card-header-left"><span class="sport-icon">🏒</span><div><div class="match-name">Columbus Blue Jackets vs Florida Panthers</div><div class="match-meta">Icehockey Nhl · 06 Mar 2026, 05:40 AM</div></div></div>
+    <div class="ev-badge" style="color:#ff4d6d;border-color:#ff4d6d44;text-shadow:0 0 14px #ff4d6d88;">11.46%</div>
   </div>
   <div class="card-body">
     <div class="line-pill">TOTALS_6.5</div>
     <div class="bet-row">
-      <div class="bet-info"><span class="bet-label">BET ON</span><span class="bet-selection">OVER</span><span class="bet-point">@ 6.5</span><span class="bet-odds">× 2.23</span></div>
+      <div class="bet-info"><span class="bet-label">BET ON</span><span class="bet-selection">OVER</span><span class="bet-point">@ 6.5</span><span class="bet-odds">× 2.27</span></div>
       <div class="bookie-tag">1xBet/Melbet</div>
     </div>
     <div class="stake-row">
-      <div class="stake-block"><span class="stake-label">KELLY STAKE</span><span class="stake-amount stake-display" data-base-stake="36.83">₹37</span></div>
-      <div class="true-odds-block"><span class="stake-label">TRUE ODDS</span><span class="true-val">2.026</span></div>
+      <div class="stake-block"><span class="stake-label">KELLY STAKE</span><span class="stake-amount stake-display" data-base-stake="40.60">₹41</span></div>
+      <div class="true-odds-block"><span class="stake-label">TRUE ODDS</span><span class="true-val">2.037</span></div>
     </div>
-    <div class="conf-section"><span class="stake-label">CONFIDENCE</span><div class="conf-bar-wrap"><span class="conf-label" style="color:#ffd700">MED</span><div class="conf-bar-track"><div class="conf-bar-fill" style="width:45%;background:#ffd700;box-shadow:0 0 8px #ffd70088;"></div></div><span class="conf-num" style="color:#ffd700">45</span></div><span class="clv-badge" style="color:#ff4d6d;border-color:#ff4d6d88;">CLV -1.60%</span></div>
-    <div class="breakdown-wrap"><table class="breakdown-table"><thead><tr><th>Book</th><th>Odds</th><th>EV%</th></tr></thead><tbody><tr><td>Pinnacle</td><td>1.970</td><td>0.00%</td></tr><tr class="breakdown-best"><td>1xBet/Melbet</td><td>2.230</td><td>+10.07%</td></tr></tbody></table></div>
+    <div class="conf-section"><span class="stake-label">CONFIDENCE</span><div class="conf-bar-wrap"><span class="conf-label" style="color:#ffd700">MED</span><div class="conf-bar-track"><div class="conf-bar-fill" style="width:51%;background:#ffd700;box-shadow:0 0 8px #ffd70088;"></div></div><span class="conf-num" style="color:#ffd700">51</span></div><span class="clv-badge" style="color:#ff4d6d;border-color:#ff4d6d88;">CLV -0.02%</span></div>
+    <div class="breakdown-wrap"><table class="breakdown-table"><thead><tr><th>Book</th><th>Odds</th><th>EV%</th></tr></thead><tbody><tr><td>Pinnacle</td><td>1.980</td><td>0.00%</td></tr><tr class="breakdown-best"><td>1xBet/Melbet</td><td>2.270</td><td>+11.46%</td></tr></tbody></table></div>
+  </div>
+</div><div class="card ev-card" data-pct="9.432989690721683" data-stake="35.37" style="animation-delay:0.07s">
+  <div class="card-rank-stripe rank-silver"></div>
+  <div class="card-header">
+    <div class="card-header-left"><span class="sport-icon">🏒</span><div><div class="match-name">Pittsburgh Penguins vs Buffalo Sabres</div><div class="match-meta">Icehockey Nhl · 06 Mar 2026, 05:40 AM</div></div></div>
+    <div class="ev-badge" style="color:#ffd700;border-color:#ffd70044;text-shadow:0 0 14px #ffd70088;">9.43%</div>
+  </div>
+  <div class="card-body">
+    <div class="line-pill">TOTALS_6.5</div>
+    <div class="bet-row">
+      <div class="bet-info"><span class="bet-label">BET ON</span><span class="bet-selection">OVER</span><span class="bet-point">@ 6.5</span><span class="bet-odds">× 2.20</span></div>
+      <div class="bookie-tag">1xBet/Melbet</div>
+    </div>
+    <div class="stake-row">
+      <div class="stake-block"><span class="stake-label">KELLY STAKE</span><span class="stake-amount stake-display" data-base-stake="35.37">₹35</span></div>
+      <div class="true-odds-block"><span class="stake-label">TRUE ODDS</span><span class="true-val">2.010</span></div>
+    </div>
+    <div class="conf-section"><span class="stake-label">CONFIDENCE</span><div class="conf-bar-wrap"><span class="conf-label" style="color:#ffd700">MED</span><div class="conf-bar-track"><div class="conf-bar-fill" style="width:43%;background:#ffd700;box-shadow:0 0 8px #ffd70088;"></div></div><span class="conf-num" style="color:#ffd700">43</span></div><span class="clv-badge" style="color:#00ff88;border-color:#00ff8888;">CLV +0.02%</span></div>
+    <div class="breakdown-wrap"><table class="breakdown-table"><thead><tr><th>Book</th><th>Odds</th><th>EV%</th></tr></thead><tbody><tr><td>Pinnacle</td><td>1.950</td><td>0.00%</td></tr><tr class="breakdown-best"><td>1xBet/Melbet</td><td>2.200</td><td>+9.43%</td></tr></tbody></table></div>
   </div>
 </div></div>
   </div>
@@ -236,47 +306,151 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
     <div id="arb-cards"><div class="card arb-card" style="animation-delay:0.0s">
   <div class="card-rank-stripe arb-stripe"></div>
   <div class="card-header">
-    <div class="card-header-left"><span class="sport-icon">🏒</span><div><div class="match-name">Pittsburgh Penguins vs Buffalo Sabres</div><div class="match-meta">Icehockey Nhl · 06 Mar 2026, 05:40 AM</div></div></div>
-    <div class="arb-badge"><span style="color:#00c8ff;font-family:'Space Mono',monospace;font-size:22px;font-weight:700;">3.07%</span><span class="ways-tag" style="background:#00c8ff22;color:#00c8ff;border-color:#00c8ff44">2W</span></div>
+    <div class="card-header-left"><span class="sport-icon">🏒</span><div><div class="match-name">Columbus Blue Jackets vs Florida Panthers</div><div class="match-meta">Icehockey Nhl · 06 Mar 2026, 05:40 AM</div></div></div>
+    <div class="arb-badge"><span style="color:#00c8ff;font-family:'Space Mono',monospace;font-size:22px;font-weight:700;">3.59%</span><span class="ways-tag" style="background:#00c8ff22;color:#00c8ff;border-color:#00c8ff44">2W</span></div>
   </div>
   <div class="card-body">
     <div class="line-pill arb-line-pill">TOTALS_6.5</div>
-    <div class="legs-table"><div class="leg-row"><div class="leg-side">OVER</div><div class="leg-odds">@ 2.23</div><div class="leg-stake stake-display" data-base-stake="693.98">₹694</div><div class="leg-book">1xBet/Melbet</div></div><div class="leg-row"><div class="leg-side">UNDER</div><div class="leg-odds">@ 1.92</div><div class="leg-stake stake-display" data-base-stake="806.02">₹806</div><div class="leg-book">Pinnacle</div></div></div>
-    <div class="profit-row"><span class="profit-label">GUARANTEED PROFIT</span><span class="profit-val">₹48</span></div>
+    <div class="legs-table"><div class="leg-row"><div class="leg-side">OVER</div><div class="leg-odds">@ 2.27</div><div class="leg-stake stake-display" data-base-stake="685.41">₹685</div><div class="leg-book">1xBet/Melbet</div></div><div class="leg-row"><div class="leg-side">UNDER</div><div class="leg-odds">@ 1.91</div><div class="leg-stake stake-display" data-base-stake="814.59">₹815</div><div class="leg-book">Pinnacle</div></div></div>
+    <div class="profit-row"><span class="profit-label">GUARANTEED PROFIT</span><span class="profit-val">₹56</span></div>
+  </div>
+</div><div class="card arb-card" style="animation-delay:0.07s">
+  <div class="card-rank-stripe arb-stripe"></div>
+  <div class="card-header">
+    <div class="card-header-left"><span class="sport-icon">🏒</span><div><div class="match-name">Pittsburgh Penguins vs Buffalo Sabres</div><div class="match-meta">Icehockey Nhl · 06 Mar 2026, 05:40 AM</div></div></div>
+    <div class="arb-badge"><span style="color:#00c8ff;font-family:'Space Mono',monospace;font-size:22px;font-weight:700;">2.73%</span><span class="ways-tag" style="background:#00c8ff22;color:#00c8ff;border-color:#00c8ff44">2W</span></div>
+  </div>
+  <div class="card-body">
+    <div class="line-pill arb-line-pill">TOTALS_6.5</div>
+    <div class="legs-table"><div class="leg-row"><div class="leg-side">OVER</div><div class="leg-odds">@ 2.20</div><div class="leg-stake stake-display" data-base-stake="700.97">₹701</div><div class="leg-book">1xBet/Melbet</div></div><div class="leg-row"><div class="leg-side">UNDER</div><div class="leg-odds">@ 1.93</div><div class="leg-stake stake-display" data-base-stake="799.03">₹799</div><div class="leg-book">Pinnacle</div></div></div>
+    <div class="profit-row"><span class="profit-label">GUARANTEED PROFIT</span><span class="profit-val">₹42</span></div>
   </div>
 </div></div>
   </div>
   <div id="content-analytics" class="tab-content">
-  <div class="analytics-grid">
+
+  <!-- TOP KPI ROW -->
+  <div class="an-kpi-row">
+    <div class="an-kpi-card">
+      <div class="an-kpi-icon" style="color:#00c8ff">⚡</div>
+      <div class="an-kpi-val" style="color:#00c8ff">2</div>
+      <div class="an-kpi-label">EV Edges</div>
+    </div>
+    <div class="an-kpi-card">
+      <div class="an-kpi-icon" style="color:#00ff88">10.45%</div>
+      <div class="an-kpi-val" style="color:#00ff88">11.46%</div>
+      <div class="an-kpi-label">Avg / Peak EV</div>
+    </div>
+    <div class="an-kpi-card">
+      <div class="an-kpi-icon" style="color:#bf5af2">🔒</div>
+      <div class="an-kpi-val" style="color:#bf5af2">2</div>
+      <div class="an-kpi-label">ARB Opps</div>
+    </div>
+    <div class="an-kpi-card">
+      <div class="an-kpi-icon" style="color:#ffd700">₹</div>
+      <div class="an-kpi-val" style="color:#ffd700">₹98</div>
+      <div class="an-kpi-label">ARB Profit</div>
+    </div>
+    <div class="an-kpi-card">
+      <div class="an-kpi-icon" style="color:#ff9500">📈</div>
+      <div class="an-kpi-val" style="color:#ff9500">3.27%</div>
+      <div class="an-kpi-label">ARB ROI</div>
+    </div>
+  </div>
+
+  <!-- EV + ARB HISTOGRAMS -->
+  <div class="an-two-col">
     <div class="analytics-card">
-      <div class="an-title">EV Distribution · Current Scan</div>
+      <div class="an-title">⚡ EV Distribution</div>
       <div class="histogram">
         <div class="hist-row"><span class="hist-label">0–2%</span><div class="hist-track"><div class="hist-bar" style="width:0%;background:linear-gradient(90deg,#58a6ff,#00c8ff);"></div></div><span class="hist-count">0</span></div>
         <div class="hist-row"><span class="hist-label">2–5%</span><div class="hist-track"><div class="hist-bar" style="width:0%;background:linear-gradient(90deg,#00ff88,#00c8ff);"></div></div><span class="hist-count">0</span></div>
-        <div class="hist-row"><span class="hist-label">5–10%</span><div class="hist-track"><div class="hist-bar" style="width:0%;background:linear-gradient(90deg,#ffd700,#ff9500);"></div></div><span class="hist-count">0</span></div>
+        <div class="hist-row"><span class="hist-label">5–10%</span><div class="hist-track"><div class="hist-bar" style="width:100%;background:linear-gradient(90deg,#ffd700,#ff9500);"></div></div><span class="hist-count">1</span></div>
         <div class="hist-row"><span class="hist-label">10%+</span><div class="hist-track"><div class="hist-bar" style="width:100%;background:linear-gradient(90deg,#ff4d6d,#ff6b35);"></div></div><span class="hist-count">1</span></div>
       </div>
+      <div class="an-mini-stats">
+        <div><span class="an-ms-label">AVG</span><span style="color:#00ff88">10.45%</span></div>
+        <div><span class="an-ms-label">PEAK</span><span style="color:#ffd700">11.46%</span></div>
+        <div><span class="an-ms-label">COUNT</span><span style="color:#00c8ff">2</span></div>
+      </div>
     </div>
-    <div class="analytics-stats">
-      <div class="an-stat-card"><div class="an-stat-label">TOTAL EDGES</div><div class="an-stat-val" style="color:#00c8ff">1</div></div>
-      <div class="an-stat-card"><div class="an-stat-label">AVERAGE EV</div><div class="an-stat-val" style="color:#00ff88">10.07%</div></div>
-      <div class="an-stat-card"><div class="an-stat-label">PEAK EV</div><div class="an-stat-val" style="color:#ffd700">10.07%</div></div>
-      <div class="an-stat-card"><div class="an-stat-label">ARB OPPS</div><div class="an-stat-val" style="color:#bf5af2">1</div></div>
+
+    <div class="analytics-card">
+      <div class="an-title">🔒 ARB Distribution</div>
+      <div class="histogram">
+        <div class="hist-row"><span class="hist-label">0–1%</span><div class="hist-track"><div class="hist-bar" style="width:0%;background:linear-gradient(90deg,#94a3b8,#64748b);"></div></div><span class="hist-count">0</span></div>
+        <div class="hist-row"><span class="hist-label">1–2%</span><div class="hist-track"><div class="hist-bar" style="width:0%;background:linear-gradient(90deg,#bf5af2,#8b3dbb);"></div></div><span class="hist-count">0</span></div>
+        <div class="hist-row"><span class="hist-label">2–5%</span><div class="hist-track"><div class="hist-bar" style="width:100%;background:linear-gradient(90deg,#00c8ff,#bf5af2);"></div></div><span class="hist-count">2</span></div>
+        <div class="hist-row"><span class="hist-label">5%+</span><div class="hist-track"><div class="hist-bar" style="width:0%;background:linear-gradient(90deg,#00ff88,#00c8ff);"></div></div><span class="hist-count">0</span></div>
+      </div>
+      <div class="an-mini-stats">
+        <div><span class="an-ms-label">AVG</span><span style="color:#bf5af2">3.16%</span></div>
+        <div><span class="an-ms-label">PEAK</span><span style="color:#00c8ff">3.59%</span></div>
+        <div><span class="an-ms-label">COUNT</span><span style="color:#00ff88">2</span></div>
+      </div>
     </div>
   </div>
+
+  <!-- SPORT BREAKDOWNS -->
+  <div class="an-two-col">
+    <div class="analytics-card">
+      <div class="an-title">⚽ EV by Sport</div>
+      <div class="an-sport-row"><div class="an-sport-name">Icehockey Nhl</div><div class="an-sport-bar-track"><div style="width:100%;background:linear-gradient(90deg,#00c8ff,#00ff88);height:100%;border-radius:4px;animation:barFill 0.8s ease both;"></div></div><div class="an-sport-stats"><span style="color:linear-gradient(90deg,#00c8ff,#00ff88)">2</span><span style="color:#64748b">avg 10.4%</span></div></div>
+    </div>
+    <div class="analytics-card">
+      <div class="an-title">🔒 ARB by Sport</div>
+      <div class="an-sport-row"><div class="an-sport-name">Icehockey Nhl</div><div class="an-sport-bar-track"><div style="width:100%;background:linear-gradient(90deg,#bf5af2,#00c8ff);height:100%;border-radius:4px;animation:barFill 0.8s ease both;"></div></div><div class="an-sport-stats"><span style="color:linear-gradient(90deg,#bf5af2,#00c8ff)">2</span><span style="color:#64748b">avg 0.0%</span></div></div>
+    </div>
+  </div>
+
+  <!-- BOOKIE + ARB PAIRS -->
+  <div class="an-two-col">
+    <div class="analytics-card">
+      <div class="an-title">📚 Top EV Bookmakers</div>
+      <div class="an-sport-row"><div class="an-sport-name" style="color:#00c8ff">1xBet/Melbet</div><div class="an-sport-bar-track"><div style="width:100%;background:#00c8ff;height:100%;border-radius:4px;animation:barFill 0.8s ease both;"></div></div><div class="an-sport-stats"><span style="color:#00c8ff">2</span><span style="color:#64748b">avg 10.4%</span></div></div>
+    </div>
+    <div class="analytics-card">
+      <div class="an-title">🔗 Top ARB Book Pairs</div>
+      <div class="an-sport-row"><div class="an-sport-name" style="font-size:11px;">onexbet + pinnacle</div><div class="an-sport-bar-track"><div style="width:100%;background:linear-gradient(90deg,#bf5af2,#00c8ff);height:100%;border-radius:4px;animation:barFill 0.8s ease both;"></div></div><div class="an-sport-stats"><span style="color:#bf5af2">2</span></div></div>
+    </div>
+  </div>
+
+  <!-- ARB STRUCTURE + STAKE BREAKDOWN -->
+  <div class="an-two-col">
+    <div class="analytics-card">
+      <div class="an-title">📐 ARB Structure</div>
+      <div class="an-donut-wrap">
+        <div class="an-donut" id="an-donut" style="--two-pct:100"></div>
+        <div class="an-donut-legend">
+          <div class="an-dl-row"><span style="background:#00c8ff" class="an-dl-dot"></span><span class="an-dl-label">2-way</span><span class="an-dl-val" style="color:#00c8ff">2</span></div>
+          <div class="an-dl-row"><span style="background:#bf5af2" class="an-dl-dot"></span><span class="an-dl-label">3-way</span><span class="an-dl-val" style="color:#bf5af2">0</span></div>
+        </div>
+      </div>
+      <div class="an-mini-stats" style="margin-top:16px;">
+        <div><span class="an-ms-label">TOTAL STAKE</span><span style="color:#ffd700">₹3000</span></div>
+        <div><span class="an-ms-label">PROFIT</span><span style="color:#00ff88">₹98</span></div>
+        <div><span class="an-ms-label">ROI</span><span style="color:#ff9500">3.27%</span></div>
+      </div>
+    </div>
+    <div class="analytics-card" id="an-confidence-panel">
+      <div class="an-title">🎯 EV Confidence Spread</div>
+      <div id="an-conf-chart"></div>
+    </div>
+  </div>
+
 </div>
 
   <div class="telemetry">
     <span class="tele-item">🔑 KEY <span class="tele-val">#1</span></span>
-    <span class="tele-item">📡 QUOTA <span class="tele-val">52/500</span></span>
-    <span class="tele-item">⚡ SCAN COST <span class="tele-val">~8 credits</span></span>
+    <span class="tele-item">📡 QUOTA <span class="tele-val">14/500</span></span>
+    <span class="tele-item">⚡ SCAN COST <span class="tele-val">~6 credits</span></span>
     <span class="tele-item">🏦 BANKROLL <span class="tele-val">₹1500</span></span>
   </div>
 </div>
 
 <script>
-const ALL_EVS=[{"pct": 10.066838046272508, "match": "Pittsburgh Penguins vs Buffalo Sabres", "time": "06 Mar 2026, 05:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "selection": "Over", "odds": 2.23, "true": 2.0260416666666665, "bookie": "onexbet", "stake": 36.829895291240845, "confidence": 45, "clv_pct": -1.601}];
-const ALL_ARBS=[{"pct": 3.0736173393123956, "match": "Pittsburgh Penguins vs Buffalo Sabres", "time": "06 Mar 2026, 05:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "ways": 2, "s1": "Over", "s1_price": 2.23, "s1_bookie": "onexbet", "s2": "Under", "s2_price": 1.92, "s2_bookie": "pinnacle", "s3": "", "s3_price": 0, "s3_bookie": "", "stk1": 693.9759036144577, "stk2": 806.0240963855421, "stk3": 0, "profit": 47.56626506024077}];
+const ALL_EVS=[{"pct": 11.45758354755786, "match": "Columbus Blue Jackets vs Florida Panthers", "time": "06 Mar 2026, 05:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "selection": "Over", "odds": 2.27, "true": 2.0366492146596857, "bookie": "onexbet", "stake": 40.59773697953568, "confidence": 51, "clv_pct": -0.017}, {"pct": 9.432989690721683, "match": "Pittsburgh Penguins vs Buffalo Sabres", "time": "06 Mar 2026, 05:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "selection": "Over", "odds": 2.2, "true": 2.0103626943005177, "bookie": "onexbet", "stake": 35.373711340206306, "confidence": 43, "clv_pct": 0.018}];
+const ALL_ARBS=[{"pct": 3.591115621468277, "match": "Columbus Blue Jackets vs Florida Panthers", "time": "06 Mar 2026, 05:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "ways": 2, "s1": "Over", "s1_price": 2.27, "s1_bookie": "onexbet", "s2": "Under", "s2_price": 1.91, "s2_bookie": "pinnacle", "s3": "", "s3_price": 0, "s3_bookie": "", "stk1": 685.4066985645933, "stk2": 814.5933014354067, "stk3": 0, "profit": 55.87320574162686}, {"pct": 2.7319830428638614, "match": "Pittsburgh Penguins vs Buffalo Sabres", "time": "06 Mar 2026, 05:40 AM", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "ways": 2, "s1": "Over", "s1_price": 2.2, "s1_bookie": "onexbet", "s2": "Under", "s2_price": 1.93, "s2_bookie": "pinnacle", "s3": "", "s3_price": 0, "s3_bookie": "", "stk1": 700.9685230024212, "stk2": 799.0314769975787, "stk3": 0, "profit": 42.13075060532674}];
 
 function switchTab(tab){
   const tabMap={ev:'active',arb:'active-arb',analytics:'active-analytics'};
@@ -341,6 +515,73 @@ function exportCSV(){
   a.href=url;a.download='arb_sniper_export.csv';a.click();
   URL.revokeObjectURL(url);
 }
+
+// ── BANKROLL EDITOR ──
+let activeBankroll = parseFloat(localStorage.getItem('custom_bankroll') || '1500');
+function openBkModal(){
+  document.getElementById('bk-modal-overlay').style.display='flex';
+  document.getElementById('bk-input').value = activeBankroll;
+  setTimeout(()=>document.getElementById('bk-input').focus(),100);
+}
+function closeBkModal(){
+  document.getElementById('bk-modal-overlay').style.display='none';
+}
+function saveBankroll(){
+  const val = parseFloat(document.getElementById('bk-input').value);
+  if(isNaN(val)||val<100){ alert('Please enter a valid bankroll (min ₹100)'); return; }
+  activeBankroll = val;
+  localStorage.setItem('custom_bankroll', val);
+  document.getElementById('bk-amount').textContent = Math.round(val).toLocaleString('en-IN');
+  // Recompute all stakes based on new bankroll ratio
+  const ratio = val / 1500;
+  document.querySelectorAll('.stake-display').forEach(el=>{
+    const base = parseFloat(el.getAttribute('data-base-stake'));
+    const kelly = parseFloat(document.getElementById('kellySlider').value)/100;
+    el.textContent = '₹' + Math.round(base * ratio * (kelly/0.30));
+  });
+  closeBkModal();
+  // Flash the bankroll display
+  const disp = document.getElementById('bk-display');
+  disp.style.transition='color 0.2s';
+  disp.style.color='#00ff88';
+  setTimeout(()=>{disp.style.color='';disp.style.transition='';disp.style.color='var(--text)';},800);
+}
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeBkModal(); });
+document.getElementById('bk-modal-overlay').addEventListener('click', e=>{ if(e.target===document.getElementById('bk-modal-overlay')) closeBkModal(); });
+// Init bankroll from localStorage
+(function(){
+  const stored = localStorage.getItem('custom_bankroll');
+  if(stored){
+    activeBankroll = parseFloat(stored);
+    document.getElementById('bk-amount').textContent = Math.round(activeBankroll).toLocaleString('en-IN');
+  }
+})();
+
+// ── CONFIDENCE CHART (analytics tab) ──
+(function buildConfChart(){
+  const container = document.getElementById('an-conf-chart');
+  if(!container) return;
+  const bands = [{label:'0–29',min:0,max:29,color:'#ff4d6d'},{label:'30–59',min:30,max:59,color:'#ffd700'},{label:'60–79',min:60,max:79,color:'#00c8ff'},{label:'80–100',min:80,max:100,color:'#00ff88'}];
+  const counts = bands.map(b=>ALL_EVS.filter(e=>e.confidence>=b.min&&e.confidence<=b.max).length);
+  const maxC = Math.max(...counts,1);
+  let html='';
+  bands.forEach((b,i)=>{
+    const w = Math.round(counts[i]/maxC*100);
+    html+=`<div class="an-conf-bar-row">
+      <span class="an-conf-range">${b.label}</span>
+      <div class="an-sport-bar-track"><div style="width:${w}%;background:${b.color};height:100%;border-radius:4px;animation:barFill 0.8s ${i*0.1}s ease both;box-shadow:0 0 8px ${b.color}55;"></div></div>
+      <span style="font-family:'Space Mono',monospace;font-size:11px;color:${b.color};min-width:20px;text-align:right;">${counts[i]}</span>
+    </div>`;
+  });
+  const total = counts.reduce((a,b)=>a+b,0);
+  const highConf = counts[2]+counts[3];
+  const highPct = total>0?Math.round(highConf/total*100):0;
+  html += `<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;display:flex;gap:16px;">
+    <div style="flex:1;text-align:center;"><div style="font-family:'Space Mono',monospace;font-size:8px;color:#64748b;margin-bottom:3px;letter-spacing:1px;">HIGH CONF</div><div style="font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:#00ff88">${highPct}%</div></div>
+    <div style="flex:1;text-align:center;"><div style="font-family:'Space Mono',monospace;font-size:8px;color:#64748b;margin-bottom:3px;letter-spacing:1px;">SCORED</div><div style="font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:#00c8ff">${total}</div></div>
+  </div>`;
+  container.innerHTML = html;
+})();
 </script>
 </body>
 </html>
