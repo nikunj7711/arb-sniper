@@ -2,8 +2,8 @@ name: Arb Sniper Bot
 
 on:
   schedule:
-    - cron: '30 4-18 * * *' 
-  workflow_dispatch: 
+    - cron: '30 4-18 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -11,33 +11,27 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-          
+
       - name: Install dependencies
         run: pip install requests
-        
+
       - name: Run Sniper & Generate Dashboard
         env:
           ODDS_API_KEYS: ${{ secrets.ODDS_API_KEYS }}
         run: python arb_sniper.py
 
-      - name: Publish Dashboard to Web
-        run: |
-          git config --global user.name "Arb Sniper Bot"
-          git config --global user.email "bot@arbsniper.com"
-          git add index.html
-          git commit -m "Update live dashboard" || exit 0
-          git push
       - name: Publish Dashboard & Save State
         run: |
           git config --global user.name "Arb Sniper Bot"
           git config --global user.email "bot@arbsniper.com"
-          git add index.html *.json
-          git commit -m "Update dashboard and save neural memory" || exit 0
+          git add index.html bankroll_state.json history_log.json alert_cache.json || true
+          git commit -m "Update dashboard and save state [$(date '+%Y-%m-%d %H:%M IST')]" || exit 0
           git push
