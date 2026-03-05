@@ -1039,3 +1039,4 @@ with open("index.html", "w", encoding="utf-8") as f:
 
 print(f"✅ index.html generated — {len(HTML):,} chars")
 print(f"   API keys injected: {len(_keys_list)} key(s) from ODDS_API_KEYS secret")
+
