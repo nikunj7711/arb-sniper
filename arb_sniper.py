@@ -454,7 +454,7 @@ def fetch_all_sports_parallel(sports):
     return results
 
 # ==========================================
-#  FEATURE 3: EV DISTRIBUTION ANALYTICS
+#  FEATURE 3: EV + ARB DISTRIBUTION ANALYTICS
 # ==========================================
 def compute_ev_analytics(all_evs):
     buckets = {'0-2%': 0, '2-5%': 0, '5-10%': 0, '10%+': 0}
@@ -468,6 +468,54 @@ def compute_ev_analytics(all_evs):
     max_ev = max((e['pct'] for e in all_evs), default=0)
     return buckets, round(avg_ev, 3), round(max_ev, 3)
 
+def compute_arb_analytics(all_arbs):
+    arb_buckets = {'0-1%': 0, '1-2%': 0, '2-5%': 0, '5%+': 0}
+    sport_counts = {}
+    ways_counts = {2: 0, 3: 0}
+    total_profit = 0.0
+    total_stake = 0.0
+    bookie_pairs = {}
+    for arb in all_arbs:
+        p = arb['pct']
+        if p < 1: arb_buckets['0-1%'] += 1
+        elif p < 2: arb_buckets['1-2%'] += 1
+        elif p < 5: arb_buckets['2-5%'] += 1
+        else: arb_buckets['5%+'] += 1
+        sport = arb['sport'].replace('_', ' ').title()
+        sport_counts[sport] = sport_counts.get(sport, 0) + 1
+        ways = arb.get('ways', 2)
+        ways_counts[ways] = ways_counts.get(ways, 0) + 1
+        total_profit += arb.get('profit', 0)
+        total_stake += arb.get('stk1', 0) + arb.get('stk2', 0) + arb.get('stk3', 0)
+        pair = f"{arb['s1_data']['bookie']} + {arb['s2_data']['bookie']}"
+        bookie_pairs[pair] = bookie_pairs.get(pair, 0) + 1
+    avg_arb = (sum(a['pct'] for a in all_arbs) / len(all_arbs)) if all_arbs else 0
+    max_arb = max((a['pct'] for a in all_arbs), default=0)
+    top_sports = sorted(sport_counts.items(), key=lambda x: x[1], reverse=True)[:4]
+    top_pairs = sorted(bookie_pairs.items(), key=lambda x: x[1], reverse=True)[:4]
+    return arb_buckets, round(avg_arb, 3), round(max_arb, 3), round(total_profit, 2), round(total_stake, 2), top_sports, top_pairs, ways_counts
+
+def compute_sport_ev_breakdown(all_evs):
+    sport_ev = {}
+    for ev in all_evs:
+        sport = ev['sport'].replace('_', ' ').title()
+        if sport not in sport_ev:
+            sport_ev[sport] = {'count': 0, 'total_pct': 0.0, 'max_pct': 0.0}
+        sport_ev[sport]['count'] += 1
+        sport_ev[sport]['total_pct'] += ev['pct']
+        sport_ev[sport]['max_pct'] = max(sport_ev[sport]['max_pct'], ev['pct'])
+    return sorted(sport_ev.items(), key=lambda x: x[1]['count'], reverse=True)
+
+def compute_bookie_ev_breakdown(all_evs):
+    bookie_ev = {}
+    for ev in all_evs:
+        b = display_bookie(ev['bookie'])
+        if b not in bookie_ev:
+            bookie_ev[b] = {'count': 0, 'total_pct': 0.0}
+        bookie_ev[b]['count'] += 1
+        bookie_ev[b]['total_pct'] += ev['pct']
+    return sorted(bookie_ev.items(), key=lambda x: x[1]['count'], reverse=True)
+
 # ==========================================
 #  DASHBOARD GENERATION
 # ==========================================
@@ -475,6 +523,9 @@ def generate_web_dashboard(evs, arbs, current_time, bankroll_state=None):
     evs.sort(key=lambda x: x['pct'], reverse=True)
     arbs.sort(key=lambda x: x['pct'], reverse=True)
     buckets, avg_ev, max_ev = compute_ev_analytics(evs)
+    arb_buckets, avg_arb, max_arb, total_arb_profit, total_arb_stake, top_arb_sports, top_bookie_pairs, ways_counts = compute_arb_analytics(arbs)
+    sport_ev_data = compute_sport_ev_breakdown(evs)
+    bookie_ev_data = compute_bookie_ev_breakdown(evs)
 
     def ev_breakdown_html(breakdown):
         if not breakdown:
@@ -576,37 +627,201 @@ def generate_web_dashboard(evs, arbs, current_time, bankroll_state=None):
 </div>'''
 
     bk = bankroll_state or {}
-    bankroll_html = f'''<div class="bankroll-bar">
-  <div class="bk-stat"><div class="bk-label">BANKROLL</div><div class="bk-val">₹{bk.get('starting_bankroll', TOTAL_BANKROLL):.0f}</div></div>
+    bankroll_html = f'''
+<!-- BANKROLL EDITOR MODAL -->
+<div id="bk-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(7,9,15,0.85);z-index:1000;backdrop-filter:blur(6px);align-items:center;justify-content:center;">
+  <div style="background:#0d1117;border:1px solid #253044;border-radius:20px;padding:32px 28px;width:min(380px,90vw);position:relative;box-shadow:0 0 60px #00c8ff18,0 24px 80px rgba(0,0,0,0.6);">
+    <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#00c8ff,#00ff88,#ffd700);border-radius:20px 20px 0 0;"></div>
+    <div style="font-family:'Space Mono',monospace;font-size:10px;letter-spacing:3px;color:#64748b;text-transform:uppercase;margin-bottom:6px;">Configure</div>
+    <div style="font-size:22px;font-weight:800;color:#e2e8f0;margin-bottom:24px;">Edit Bankroll</div>
+    <div style="margin-bottom:16px;">
+      <label style="font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.5px;color:#64748b;display:block;margin-bottom:8px;text-transform:uppercase;">Total Bankroll (₹)</label>
+      <div style="position:relative;">
+        <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#ffd700;font-size:18px;font-weight:700;">₹</span>
+        <input id="bk-input" type="number" min="100" step="100" value="{bk.get('starting_bankroll', TOTAL_BANKROLL):.0f}"
+          style="width:100%;background:#141923;border:1px solid #253044;border-radius:10px;padding:12px 14px 12px 36px;font-size:22px;font-weight:700;font-family:'Space Mono',monospace;color:#ffd700;outline:none;transition:border-color 0.2s ease;"
+          onfocus="this.style.borderColor='#ffd700';this.style.boxShadow='0 0 16px #ffd70022'"
+          onblur="this.style.borderColor='#253044';this.style.boxShadow='none'">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px;">
+      <button onclick="saveBankroll()" style="background:linear-gradient(135deg,#ffd70020,#ff950015);border:1px solid #ffd700;color:#ffd700;padding:12px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:all 0.2s ease;" onmouseover="this.style.background='linear-gradient(135deg,#ffd70030,#ff950025)'" onmouseout="this.style.background='linear-gradient(135deg,#ffd70020,#ff950015)'">💾 Save & Apply</button>
+      <button onclick="closeBkModal()" style="background:#141923;border:1px solid #253044;color:#94a3b8;padding:12px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:all 0.2s ease;" onmouseover="this.style.borderColor='#94a3b8'" onmouseout="this.style.borderColor='#253044'">Cancel</button>
+    </div>
+    <div style="font-size:11px;color:#64748b;font-family:'Space Mono',monospace;text-align:center;margin-top:8px;">Saved in browser · affects Kelly stake sizing</div>
+  </div>
+</div>
+
+<div class="bankroll-bar" onclick="openBkModal()" title="Click to edit bankroll" style="cursor:pointer;">
+  <div class="bk-stat">
+    <div class="bk-label">BANKROLL</div>
+    <div class="bk-val" id="bk-display">₹<span id="bk-amount">{bk.get('starting_bankroll', TOTAL_BANKROLL):.0f}</span></div>
+  </div>
   <div class="bk-divider"></div>
   <div class="bk-stat"><div class="bk-label">STAKES TODAY</div><div class="bk-val bk-yellow">₹{bk.get('total_stakes', 0):.0f}</div></div>
   <div class="bk-divider"></div>
   <div class="bk-stat"><div class="bk-label">ARB PROFIT</div><div class="bk-val bk-green">₹{bk.get('theoretical_arb_profit', 0):.0f}</div></div>
   <div class="bk-divider"></div>
   <div class="bk-stat"><div class="bk-label">EV EXPOSURE</div><div class="bk-val bk-blue">₹{bk.get('theoretical_ev_exposure', 0):.0f}</div></div>
+  <div style="position:absolute;top:10px;right:12px;font-size:14px;opacity:0.4;">✏️</div>
 </div>'''
 
     b02 = buckets['0-2%']; b25 = buckets['2-5%']; b510 = buckets['5-10%']; b10p = buckets['10%+']
     max_b = max(b02, b25, b510, b10p, 1)
 
+    ab01 = arb_buckets['0-1%']; ab12 = arb_buckets['1-2%']; ab25 = arb_buckets['2-5%']; ab5p = arb_buckets['5%+']
+    max_ab = max(ab01, ab12, ab25, ab5p, 1)
+
+    def sport_rows_html(data, color):
+        if not data:
+            return '<div style="color:#64748b;font-family:Space Mono,monospace;font-size:11px;padding:8px 0;">No data</div>'
+        max_c = max(d[1]['count'] for d in data) if data else 1
+        out = ''
+        for sport, info in data:
+            pct_w = int(info['count'] / max_c * 100)
+            avg = info['total_pct'] / info['count'] if info['count'] else 0
+            out += f'<div class="an-sport-row"><div class="an-sport-name">{sport}</div><div class="an-sport-bar-track"><div style="width:{pct_w}%;background:{color};height:100%;border-radius:4px;animation:barFill 0.8s ease both;"></div></div><div class="an-sport-stats"><span style="color:{color}">{info["count"]}</span><span style="color:#64748b">avg {avg:.1f}%</span></div></div>'
+        return out
+
+    def bookie_rows_html(data):
+        if not data:
+            return '<div style="color:#64748b;font-family:Space Mono,monospace;font-size:11px;padding:8px 0;">No data</div>'
+        max_c = max(d[1]['count'] for d in data) if data else 1
+        colors = ['#00c8ff','#00ff88','#ffd700','#bf5af2','#ff4d6d']
+        out = ''
+        for i, (bookie, info) in enumerate(data):
+            c = colors[i % len(colors)]
+            pct_w = int(info['count'] / max_c * 100)
+            avg = info['total_pct'] / info['count'] if info['count'] else 0
+            out += f'<div class="an-sport-row"><div class="an-sport-name" style="color:{c}">{bookie}</div><div class="an-sport-bar-track"><div style="width:{pct_w}%;background:{c};height:100%;border-radius:4px;animation:barFill 0.8s ease both;"></div></div><div class="an-sport-stats"><span style="color:{c}">{info["count"]}</span><span style="color:#64748b">avg {avg:.1f}%</span></div></div>'
+        return out
+
+    def arb_pair_rows_html(pairs):
+        if not pairs:
+            return '<div style="color:#64748b;font-family:Space Mono,monospace;font-size:11px;padding:8px 0;">No data</div>'
+        max_c = max(c for _, c in pairs) if pairs else 1
+        out = ''
+        for pair, count in pairs:
+            pct_w = int(count / max_c * 100)
+            out += f'<div class="an-sport-row"><div class="an-sport-name" style="font-size:11px;">{pair}</div><div class="an-sport-bar-track"><div style="width:{pct_w}%;background:linear-gradient(90deg,#bf5af2,#00c8ff);height:100%;border-radius:4px;animation:barFill 0.8s ease both;"></div></div><div class="an-sport-stats"><span style="color:#bf5af2">{count}</span></div></div>'
+        return out
+
+    two_way_count = ways_counts.get(2, 0)
+    three_way_count = ways_counts.get(3, 0)
+    total_ways = max(two_way_count + three_way_count, 1)
+    roi_pct = (total_arb_profit / total_arb_stake * 100) if total_arb_stake > 0 else 0
+
     analytics_html = f'''<div id="content-analytics" class="tab-content">
-  <div class="analytics-grid">
+
+  <!-- TOP KPI ROW -->
+  <div class="an-kpi-row">
+    <div class="an-kpi-card">
+      <div class="an-kpi-icon" style="color:#00c8ff">⚡</div>
+      <div class="an-kpi-val" style="color:#00c8ff">{len(evs)}</div>
+      <div class="an-kpi-label">EV Edges</div>
+    </div>
+    <div class="an-kpi-card">
+      <div class="an-kpi-icon" style="color:#00ff88">{avg_ev:.2f}%</div>
+      <div class="an-kpi-val" style="color:#00ff88">{max_ev:.2f}%</div>
+      <div class="an-kpi-label">Avg / Peak EV</div>
+    </div>
+    <div class="an-kpi-card">
+      <div class="an-kpi-icon" style="color:#bf5af2">🔒</div>
+      <div class="an-kpi-val" style="color:#bf5af2">{len(arbs)}</div>
+      <div class="an-kpi-label">ARB Opps</div>
+    </div>
+    <div class="an-kpi-card">
+      <div class="an-kpi-icon" style="color:#ffd700">₹</div>
+      <div class="an-kpi-val" style="color:#ffd700">₹{total_arb_profit:.0f}</div>
+      <div class="an-kpi-label">ARB Profit</div>
+    </div>
+    <div class="an-kpi-card">
+      <div class="an-kpi-icon" style="color:#ff9500">📈</div>
+      <div class="an-kpi-val" style="color:#ff9500">{roi_pct:.2f}%</div>
+      <div class="an-kpi-label">ARB ROI</div>
+    </div>
+  </div>
+
+  <!-- EV + ARB HISTOGRAMS -->
+  <div class="an-two-col">
     <div class="analytics-card">
-      <div class="an-title">EV Distribution · Current Scan</div>
+      <div class="an-title">⚡ EV Distribution</div>
       <div class="histogram">
         <div class="hist-row"><span class="hist-label">0–2%</span><div class="hist-track"><div class="hist-bar" style="width:{b02/max_b*100:.0f}%;background:linear-gradient(90deg,#58a6ff,#00c8ff);"></div></div><span class="hist-count">{b02}</span></div>
         <div class="hist-row"><span class="hist-label">2–5%</span><div class="hist-track"><div class="hist-bar" style="width:{b25/max_b*100:.0f}%;background:linear-gradient(90deg,#00ff88,#00c8ff);"></div></div><span class="hist-count">{b25}</span></div>
         <div class="hist-row"><span class="hist-label">5–10%</span><div class="hist-track"><div class="hist-bar" style="width:{b510/max_b*100:.0f}%;background:linear-gradient(90deg,#ffd700,#ff9500);"></div></div><span class="hist-count">{b510}</span></div>
         <div class="hist-row"><span class="hist-label">10%+</span><div class="hist-track"><div class="hist-bar" style="width:{b10p/max_b*100:.0f}%;background:linear-gradient(90deg,#ff4d6d,#ff6b35);"></div></div><span class="hist-count">{b10p}</span></div>
       </div>
+      <div class="an-mini-stats">
+        <div><span class="an-ms-label">AVG</span><span style="color:#00ff88">{avg_ev:.2f}%</span></div>
+        <div><span class="an-ms-label">PEAK</span><span style="color:#ffd700">{max_ev:.2f}%</span></div>
+        <div><span class="an-ms-label">COUNT</span><span style="color:#00c8ff">{len(evs)}</span></div>
+      </div>
     </div>
-    <div class="analytics-stats">
-      <div class="an-stat-card"><div class="an-stat-label">TOTAL EDGES</div><div class="an-stat-val" style="color:#00c8ff">{len(evs)}</div></div>
-      <div class="an-stat-card"><div class="an-stat-label">AVERAGE EV</div><div class="an-stat-val" style="color:#00ff88">{avg_ev:.2f}%</div></div>
-      <div class="an-stat-card"><div class="an-stat-label">PEAK EV</div><div class="an-stat-val" style="color:#ffd700">{max_ev:.2f}%</div></div>
-      <div class="an-stat-card"><div class="an-stat-label">ARB OPPS</div><div class="an-stat-val" style="color:#bf5af2">{len(arbs)}</div></div>
+
+    <div class="analytics-card">
+      <div class="an-title">🔒 ARB Distribution</div>
+      <div class="histogram">
+        <div class="hist-row"><span class="hist-label">0–1%</span><div class="hist-track"><div class="hist-bar" style="width:{ab01/max_ab*100:.0f}%;background:linear-gradient(90deg,#94a3b8,#64748b);"></div></div><span class="hist-count">{ab01}</span></div>
+        <div class="hist-row"><span class="hist-label">1–2%</span><div class="hist-track"><div class="hist-bar" style="width:{ab12/max_ab*100:.0f}%;background:linear-gradient(90deg,#bf5af2,#8b3dbb);"></div></div><span class="hist-count">{ab12}</span></div>
+        <div class="hist-row"><span class="hist-label">2–5%</span><div class="hist-track"><div class="hist-bar" style="width:{ab25/max_ab*100:.0f}%;background:linear-gradient(90deg,#00c8ff,#bf5af2);"></div></div><span class="hist-count">{ab25}</span></div>
+        <div class="hist-row"><span class="hist-label">5%+</span><div class="hist-track"><div class="hist-bar" style="width:{ab5p/max_ab*100:.0f}%;background:linear-gradient(90deg,#00ff88,#00c8ff);"></div></div><span class="hist-count">{ab5p}</span></div>
+      </div>
+      <div class="an-mini-stats">
+        <div><span class="an-ms-label">AVG</span><span style="color:#bf5af2">{avg_arb:.2f}%</span></div>
+        <div><span class="an-ms-label">PEAK</span><span style="color:#00c8ff">{max_arb:.2f}%</span></div>
+        <div><span class="an-ms-label">COUNT</span><span style="color:#00ff88">{len(arbs)}</span></div>
+      </div>
     </div>
   </div>
+
+  <!-- SPORT BREAKDOWNS -->
+  <div class="an-two-col">
+    <div class="analytics-card">
+      <div class="an-title">⚽ EV by Sport</div>
+      {sport_rows_html(sport_ev_data, 'linear-gradient(90deg,#00c8ff,#00ff88)')}
+    </div>
+    <div class="analytics-card">
+      <div class="an-title">🔒 ARB by Sport</div>
+      {sport_rows_html([(s, {{"count": c, "total_pct": 0, "max_pct": 0}}) for s, c in top_arb_sports], 'linear-gradient(90deg,#bf5af2,#00c8ff)')}
+    </div>
+  </div>
+
+  <!-- BOOKIE + ARB PAIRS -->
+  <div class="an-two-col">
+    <div class="analytics-card">
+      <div class="an-title">📚 Top EV Bookmakers</div>
+      {bookie_rows_html(bookie_ev_data)}
+    </div>
+    <div class="analytics-card">
+      <div class="an-title">🔗 Top ARB Book Pairs</div>
+      {arb_pair_rows_html(top_bookie_pairs)}
+    </div>
+  </div>
+
+  <!-- ARB STRUCTURE + STAKE BREAKDOWN -->
+  <div class="an-two-col">
+    <div class="analytics-card">
+      <div class="an-title">📐 ARB Structure</div>
+      <div class="an-donut-wrap">
+        <div class="an-donut" id="an-donut" style="--two-pct:{two_way_count/total_ways*100:.0f}"></div>
+        <div class="an-donut-legend">
+          <div class="an-dl-row"><span style="background:#00c8ff" class="an-dl-dot"></span><span class="an-dl-label">2-way</span><span class="an-dl-val" style="color:#00c8ff">{two_way_count}</span></div>
+          <div class="an-dl-row"><span style="background:#bf5af2" class="an-dl-dot"></span><span class="an-dl-label">3-way</span><span class="an-dl-val" style="color:#bf5af2">{three_way_count}</span></div>
+        </div>
+      </div>
+      <div class="an-mini-stats" style="margin-top:16px;">
+        <div><span class="an-ms-label">TOTAL STAKE</span><span style="color:#ffd700">₹{total_arb_stake:.0f}</span></div>
+        <div><span class="an-ms-label">PROFIT</span><span style="color:#00ff88">₹{total_arb_profit:.0f}</span></div>
+        <div><span class="an-ms-label">ROI</span><span style="color:#ff9500">{roi_pct:.2f}%</span></div>
+      </div>
+    </div>
+    <div class="analytics-card" id="an-confidence-panel">
+      <div class="an-title">🎯 EV Confidence Spread</div>
+      <div id="an-conf-chart"></div>
+    </div>
+  </div>
+
 </div>'''
 
     credits_burned = int(requests_used_total) - scan_starting_used if scan_starting_used is not None and str(requests_used_total).isdigit() else "?"
@@ -763,11 +978,33 @@ body::after{{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .hist-track{{flex:1;height:14px;background:var(--border2);border-radius:7px;overflow:hidden;}}
 .hist-bar{{height:100%;border-radius:7px;animation:barFill 1s ease both;min-width:3px;}}
 .hist-count{{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--text-dim);width:20px;text-align:right;}}
-.analytics-stats{{display:grid;grid-template-columns:1fr 1fr;gap:10px;}}
-.an-stat-card{{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 14px;animation:cardIn 0.5s ease both;transition:all 0.2s ease;}}
-.an-stat-card:hover{{border-color:var(--border2);transform:translateY(-2px);}}
-.an-stat-label{{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;}}
-.an-stat-val{{font-family:'Space Mono',monospace;font-size:26px;font-weight:700;line-height:1;}}
+.an-two-col{{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}}
+@media(max-width:560px){{.an-two-col{{grid-template-columns:1fr;}}}}
+.an-kpi-row{{display:flex;gap:10px;overflow-x:auto;margin-bottom:16px;padding-bottom:2px;}}
+.an-kpi-row::-webkit-scrollbar{{height:3px;}}
+.an-kpi-card{{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;flex:1;min-width:110px;text-align:center;animation:cardIn 0.4s ease both;transition:all 0.2s ease;}}
+.an-kpi-card:hover{{border-color:var(--border2);transform:translateY(-2px);}}
+.an-kpi-icon{{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;margin-bottom:4px;opacity:0.8;}}
+.an-kpi-val{{font-family:'Space Mono',monospace;font-size:20px;font-weight:800;line-height:1;margin-bottom:4px;}}
+.an-kpi-label{{font-size:10px;color:var(--text-muted);font-family:'Space Mono',monospace;letter-spacing:0.5px;}}
+.an-mini-stats{{display:flex;gap:0;margin-top:14px;border-top:1px solid var(--border);padding-top:12px;}}
+.an-mini-stats>div{{flex:1;text-align:center;}}
+.an-mini-stats>div+div{{border-left:1px solid var(--border);}}
+.an-ms-label{{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--text-muted);display:block;margin-bottom:3px;text-transform:uppercase;}}
+.an-sport-row{{display:flex;align-items:center;gap:8px;margin-bottom:9px;}}
+.an-sport-name{{font-size:11px;color:var(--text-dim);width:90px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}}
+.an-sport-bar-track{{flex:1;height:12px;background:var(--border2);border-radius:6px;overflow:hidden;}}
+.an-sport-stats{{display:flex;gap:6px;font-family:'Space Mono',monospace;font-size:10px;min-width:70px;justify-content:flex-end;}}
+.an-donut-wrap{{display:flex;align-items:center;justify-content:center;gap:20px;padding:10px 0;}}
+.an-donut{{width:80px;height:80px;border-radius:50%;background:conic-gradient(#00c8ff calc(var(--two-pct,50)*1%),#bf5af2 calc(var(--two-pct,50)*1%));box-shadow:0 0 20px #00c8ff22,0 0 40px #bf5af211;position:relative;}}
+.an-donut::after{{content:'';position:absolute;inset:18px;background:var(--surface);border-radius:50%;}}
+.an-dl-row{{display:flex;align-items:center;gap:8px;margin-bottom:8px;}}
+.an-dl-dot{{width:10px;height:10px;border-radius:3px;flex-shrink:0;}}
+.an-dl-label{{font-size:12px;color:var(--text-dim);flex:1;}}
+.an-dl-val{{font-family:'Space Mono',monospace;font-size:14px;font-weight:700;}}
+.an-conf-bar-row{{display:flex;align-items:center;gap:8px;margin-bottom:8px;}}
+.an-conf-range{{font-family:'Space Mono',monospace;font-size:9px;color:var(--text-muted);width:46px;flex-shrink:0;}}
+.analytics-card{{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;animation:cardIn 0.5s 0.1s ease both;}}
 .telemetry{{margin-top:40px;padding:14px 20px;background:var(--surface);border:1px solid var(--border);border-radius:14px;font-family:'Space Mono',monospace;font-size:10px;color:var(--text-muted);letter-spacing:1px;display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;justify-content:center;position:relative;overflow:hidden;}}
 .telemetry::before{{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--border2),transparent);}}
 .tele-item{{white-space:nowrap;}}
@@ -898,6 +1135,73 @@ function exportCSV(){{
   a.href=url;a.download='arb_sniper_export.csv';a.click();
   URL.revokeObjectURL(url);
 }}
+
+// ── BANKROLL EDITOR ──
+let activeBankroll = parseFloat(localStorage.getItem('custom_bankroll') || '{bk.get("starting_bankroll", TOTAL_BANKROLL):.0f}');
+function openBkModal(){{
+  document.getElementById('bk-modal-overlay').style.display='flex';
+  document.getElementById('bk-input').value = activeBankroll;
+  setTimeout(()=>document.getElementById('bk-input').focus(),100);
+}}
+function closeBkModal(){{
+  document.getElementById('bk-modal-overlay').style.display='none';
+}}
+function saveBankroll(){{
+  const val = parseFloat(document.getElementById('bk-input').value);
+  if(isNaN(val)||val<100){{ alert('Please enter a valid bankroll (min ₹100)'); return; }}
+  activeBankroll = val;
+  localStorage.setItem('custom_bankroll', val);
+  document.getElementById('bk-amount').textContent = Math.round(val).toLocaleString('en-IN');
+  // Recompute all stakes based on new bankroll ratio
+  const ratio = val / {bk.get("starting_bankroll", TOTAL_BANKROLL):.0f};
+  document.querySelectorAll('.stake-display').forEach(el=>{{
+    const base = parseFloat(el.getAttribute('data-base-stake'));
+    const kelly = parseFloat(document.getElementById('kellySlider').value)/100;
+    el.textContent = '₹' + Math.round(base * ratio * (kelly/0.30));
+  }});
+  closeBkModal();
+  // Flash the bankroll display
+  const disp = document.getElementById('bk-display');
+  disp.style.transition='color 0.2s';
+  disp.style.color='#00ff88';
+  setTimeout(()=>{{disp.style.color='';disp.style.transition='';disp.style.color='var(--text)';}},800);
+}}
+document.addEventListener('keydown', e=>{{ if(e.key==='Escape') closeBkModal(); }});
+document.getElementById('bk-modal-overlay').addEventListener('click', e=>{{ if(e.target===document.getElementById('bk-modal-overlay')) closeBkModal(); }});
+// Init bankroll from localStorage
+(function(){{
+  const stored = localStorage.getItem('custom_bankroll');
+  if(stored){{
+    activeBankroll = parseFloat(stored);
+    document.getElementById('bk-amount').textContent = Math.round(activeBankroll).toLocaleString('en-IN');
+  }}
+}})();
+
+// ── CONFIDENCE CHART (analytics tab) ──
+(function buildConfChart(){{
+  const container = document.getElementById('an-conf-chart');
+  if(!container) return;
+  const bands = [{{label:'0–29',min:0,max:29,color:'#ff4d6d'}},{{label:'30–59',min:30,max:59,color:'#ffd700'}},{{label:'60–79',min:60,max:79,color:'#00c8ff'}},{{label:'80–100',min:80,max:100,color:'#00ff88'}}];
+  const counts = bands.map(b=>ALL_EVS.filter(e=>e.confidence>=b.min&&e.confidence<=b.max).length);
+  const maxC = Math.max(...counts,1);
+  let html='';
+  bands.forEach((b,i)=>{{
+    const w = Math.round(counts[i]/maxC*100);
+    html+=`<div class="an-conf-bar-row">
+      <span class="an-conf-range">${{b.label}}</span>
+      <div class="an-sport-bar-track"><div style="width:${{w}}%;background:${{b.color}};height:100%;border-radius:4px;animation:barFill 0.8s ${{i*0.1}}s ease both;box-shadow:0 0 8px ${{b.color}}55;"></div></div>
+      <span style="font-family:'Space Mono',monospace;font-size:11px;color:${{b.color}};min-width:20px;text-align:right;">${{counts[i]}}</span>
+    </div>`;
+  }});
+  const total = counts.reduce((a,b)=>a+b,0);
+  const highConf = counts[2]+counts[3];
+  const highPct = total>0?Math.round(highConf/total*100):0;
+  html += `<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;display:flex;gap:16px;">
+    <div style="flex:1;text-align:center;"><div style="font-family:'Space Mono',monospace;font-size:8px;color:#64748b;margin-bottom:3px;letter-spacing:1px;">HIGH CONF</div><div style="font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:#00ff88">${{highPct}}%</div></div>
+    <div style="flex:1;text-align:center;"><div style="font-family:'Space Mono',monospace;font-size:8px;color:#64748b;margin-bottom:3px;letter-spacing:1px;">SCORED</div><div style="font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:#00c8ff">${{total}}</div></div>
+  </div>`;
+  container.innerHTML = html;
+}})();
 </script>
 </body>
 </html>'''
