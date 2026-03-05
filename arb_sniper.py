@@ -1,5 +1,13 @@
 # Writes the complete index.html SPA
-import os
+import os, json
+
+# ── KEY INJECTION ──
+# Reads comma-separated keys from GitHub Secret ODDS_API_KEYS
+# Injects them directly into the JS so the browser never prompts for input
+_raw_keys = os.getenv('ODDS_API_KEYS', '')
+_keys_list = [k.strip() for k in _raw_keys.split(',') if k.strip()]
+# Serialise as a JS array literal, e.g. ["key1","key2"]
+INJECTED_KEYS_JS = json.dumps(_keys_list)
 
 HTML = """<!DOCTYPE html>
 <html lang="en">
@@ -299,8 +307,11 @@ body::after{content:'';position:fixed;inset:0;z-index:0;
 <div class="cfg">
   <div class="cfg-grid">
     <div class="cfg-g wide">
-      <label class="lbl">🔑 The Odds API Key</label>
-      <input class="inp" id="cfgKey" type="password" placeholder="Paste your API key here…" autocomplete="off">
+      <label class="lbl">🔑 API Keys</label>
+      <div id="keyStatus" style="display:flex;align-items:center;gap:9px;background:var(--surf2);border:1px solid var(--b2);border-radius:9px;padding:9px 13px;">
+        <span id="keyDot" style="width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);flex-shrink:0"></span>
+        <span id="keyMsg" style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--green)">Keys injected via GitHub Secrets — ready to scan</span>
+      </div>
     </div>
     <div class="cfg-g">
       <label class="lbl">💰 Bankroll (₹) &nbsp;<span style="color:var(--text3);cursor:pointer;font-size:10px" onclick="openBK()">✏️</span></label>
@@ -583,17 +594,27 @@ function log(msg,cls=''){
   el.appendChild(d);el.scrollTop=el.scrollHeight;
 }
 
+/* ── INJECTED API KEYS (set by Python from GitHub Secrets) ── */
+const API_KEYS = __INJECTED_KEYS__;
+let keyIdx = 0;
+function getKey(){return API_KEYS[keyIdx % Math.max(API_KEYS.length,1)]}
+function rotateKey(){keyIdx++;log('🔄 Rotating to key #'+(keyIdx+1),'linf')}
+
 /* ── START / STOP ── */
 function startScan(){
-  const key=$('cfgKey').value.trim();
-  if(!key){alert('Enter your API key first');$('cfgKey').focus();return}
-  EVS=[];ARBS=[];sportIdx=0;scanning=true;scanT0=Date.now();creditT0=null;
+  if(!API_KEYS.length){
+    // No keys injected — show a one-time fallback input
+    const k=prompt('No keys injected. Enter your Odds API key to scan:');
+    if(!k)return;
+    API_KEYS.push(k.trim());
+  }
+  EVS=[];ARBS=[];sportIdx=0;scanning=true;scanT0=Date.now();creditT0=null;keyIdx=0;
   $('btnStart').style.display='none';$('btnStop').style.display='';
   $('scanBar').classList.add('on');$('scanLog').innerHTML='';
   $('ev-cards').innerHTML='';$('arb-cards').innerHTML='';
-  updateBadges();log('Sweep initializing…','linf');
+  updateBadges();log('Sweep initializing… key #1 active','linf');
   runNext();
-}
+}}
 function stopScan(){
   scanning=false;
   $('btnStart').style.display='';$('btnStop').style.display='none';
@@ -613,7 +634,7 @@ async function runNext(){
   $('progFill').style.width=pct+'%';
   log('Fetching '+sp.l+'…');
   try{
-    const key=$('cfgKey').value.trim();
+    const key=getKey();
     const books=getBooks().join(',');
     const url=`https://api.the-odds-api.com/v4/sports/${sp.k}/odds?apiKey=${key}&regions=eu&bookmakers=${encodeURIComponent(books)}&markets=totals,spreads&oddsFormat=decimal`;
     const res=await fetch(url);
@@ -625,11 +646,19 @@ async function runNext(){
       const burn=parseInt(used)-creditT0;
       $('tBurn').textContent=burn;$('telB').textContent=burn;
     }
-    if(res.status===401){log('❌ Invalid API key','lerr');stopScan();return}
-    if(res.status===429){log('⚠ Rate limited, waiting 3s…','lerr');await sleep(3000);runNext();return}
+    if(res.status===401){
+      log('❌ Key #'+(keyIdx+1)+' rejected (401)','lerr');
+      if(keyIdx+1<API_KEYS.length){rotateKey();runNext();return}
+      else{log('❌ All keys exhausted','lerr');stopScan();return}
+    }
+    if(res.status===429){
+      log('⚠ Rate limit on key #'+(keyIdx+1),'lerr');
+      if(keyIdx+1<API_KEYS.length){rotateKey();setTimeout(runNext,500);return}
+      else{log('⚠ All keys rate-limited, waiting 5s…','lerr');await sleep(5000);runNext();return}
+    }
     if(!res.ok){log('⚠ HTTP '+res.status,'lerr');sportIdx++;setTimeout(runNext,1200);return}
     const events=await res.json();
-    log('📦 '+events.length+' events','lok');
+    log('📦 '+events.length+' events (key #'+(keyIdx+1)+')','lok');
     processEvents(events,sp.k);
   }catch(e){log('❌ '+e.message,'lerr')}
   sportIdx++;
@@ -983,20 +1012,30 @@ function barsColor(id,entries,cols,vFn,lFn){
 }
 function empty2(){return'<div style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--text3);padding:10px 0">No data yet</div>'}
 
-/* ── INIT FROM LOCALSTORAGE ── */
+/* ── INIT ── */
 (()=>{
   const bkv=localStorage.getItem('arb_bk');
   if(bkv){$('cfgBK').value=bkv;$('kB').value=bkv;$('telBK').textContent=fmt(parseFloat(bkv))}
-  const key=localStorage.getItem('arb_key');
-  if(key)$('cfgKey').value=key;
-})();
-$('cfgKey').addEventListener('change',()=>localStorage.setItem('arb_key',$('cfgKey').value));
-$('cfgBK').addEventListener('change',()=>{localStorage.setItem('arb_bk',$('cfgBK').value);$('kB').value=$('cfgBK').value});
+  // Show key status in header indicator
+  if(API_KEYS.length===0){
+    $('keyDot').style.background='var(--red)';
+    $('keyDot').style.boxShadow='0 0 8px var(--red)';
+    $('keyMsg').style.color='var(--red)';
+    $('keyMsg').textContent='No keys injected — deploy via GitHub Actions or enter key manually on scan';
+  } else {
+    const plural=API_KEYS.length>1?' keys':' key';
+    $('keyMsg').textContent=API_KEYS.length+plural+' injected via GitHub Secrets — ready ✓';
+    $('telKey').textContent=API_KEYS.length+' key'+(API_KEYS.length>1?'s':'');
+  }}
+}})();
+$('cfgBK').addEventListener('change',()=>{{localStorage.setItem('arb_bk',$('cfgBK').value);$('kB').value=$('cfgBK').value}});
 </script>
 </body>
 </html>"""
 
 with open("index.html", "w", encoding="utf-8") as f:
-    f.write(HTML)
+    # Inject the real key array from GitHub Secrets into the placeholder
+    f.write(HTML.replace('__INJECTED_KEYS__', INJECTED_KEYS_JS))
 
-print(f"✅ index.html generated — {len(HTML):,} chars, {HTML.count(chr(10))} lines")
+print(f"✅ index.html generated — {len(HTML):,} chars")
+print(f"   API keys injected: {len(_keys_list)} key(s) from ODDS_API_KEYS secret")
