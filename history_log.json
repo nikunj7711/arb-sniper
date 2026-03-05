@@ -269,5 +269,32 @@
     "arb_pct": 1.893,
     "stake": 1500.0,
     "clv_pct": -0.014
+  },
+  {
+    "type": "EV",
+    "timestamp": "2026-03-05 11:03:01 IST",
+    "match": "Pittsburgh Penguins vs Buffalo Sabres",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet",
+    "odds": 2.23,
+    "true_odds": 2.042,
+    "selection": "Over",
+    "ev_pct": 9.189,
+    "stake": 33.62,
+    "clv_pct": 0.016
+  },
+  {
+    "type": "ARB",
+    "timestamp": "2026-03-05 11:03:01 IST",
+    "match": "Pittsburgh Penguins vs Buffalo Sabres",
+    "sport": "icehockey_nhl",
+    "line": "TOTALS_6.5",
+    "bookmaker": "onexbet+pinnacle",
+    "odds": 2.23,
+    "selection": "Over",
+    "arb_pct": 2.247,
+    "stake": 1500.0,
+    "clv_pct": 0.016
   }
 ]
