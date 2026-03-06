@@ -3,1085 +3,312 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate">
-<title>ARB SNIPER ⚡</title>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700;800&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<title>ARB SNIPER ⚡ | Terminal</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
-/* ═══════════ DESIGN SYSTEM ═══════════ */
-:root{
-  --bg:#03050b;--bg2:#060a12;--surf:#0a0f18;--surf2:#0f1520;--surf3:#151d28;
-  --b1:#182030;--b2:#1e2a3a;--b3:#283848;
-  --cyan:#00d8ff;--cyan2:#00aacc;
-  --green:#00ff90;--green2:#00cc72;
-  --gold:#ffd000;--gold2:#cc9f00;
-  --red:#ff3352;--red2:#cc1f3d;
-  --purple:#c47eff;--purple2:#8b2cf5;
-  --orange:#ff8c00;--blue:#4fa3ff;
-  --text:#dce8f5;--text2:#8aa0bc;--text3:#4a6480;
-}
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{font-size:14px;scroll-behavior:smooth}
-body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+    :root {
+        --bg:#09090b; --bg-card:#18181b; --border:#27272a; --hover:#27272a;
+        --cyan:#06b6d4; --green:#10b981; --gold:#f59e0b; --red:#ef4444; --purple:#8b5cf6;
+        --text-m:#f4f4f5; --text-s:#a1a1aa;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text-m); padding: 15px; max-width: 900px; margin: auto; }
+    
+    .hdr { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 20px; }
+    .hdr h1 { font-size: 24px; font-weight: 800; background: linear-gradient(90deg, var(--cyan), var(--green)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .hdr .time { font-family: 'JetBrains Mono'; font-size: 12px; color: var(--text-s); }
+    
+    .btn { background: var(--border); color: var(--text-m); border: 1px solid #3f3f46; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px;}
+    .btn:hover { background: #3f3f46; }
+    .btn-green { background: linear-gradient(135deg, #10b981, #059669); border: none; color: white; box-shadow: 0 4px 15px rgba(16,185,129,0.3); }
+    .btn-green:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(16,185,129,0.4); }
+    .btn-red { background: linear-gradient(135deg, #ef4444, #b91c1c); border: none; color: white; }
 
-/* grid + ambient */
-body::before{content:'';position:fixed;inset:0;z-index:0;
-  background-image:linear-gradient(rgba(0,216,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(0,216,255,.018) 1px,transparent 1px);
-  background-size:36px 36px;pointer-events:none}
-body::after{content:'';position:fixed;inset:0;z-index:0;
-  background:radial-gradient(ellipse 65% 50% at 12% 18%,#00d8ff09,transparent 55%),
-             radial-gradient(ellipse 50% 55% at 88% 78%,#00ff9007,transparent 55%),
-             radial-gradient(ellipse 40% 40% at 50% 48%,#c47eff06,transparent 65%);
-  pointer-events:none;animation:amb 14s ease-in-out infinite alternate}
-@keyframes amb{0%{opacity:.5}100%{opacity:1}}
+    .ctrl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+    .ctrl-box { background: var(--bg-card); border: 1px solid var(--border); padding: 12px; border-radius: 10px; }
+    .lbl { font-size: 11px; color: var(--text-s); text-transform: uppercase; font-weight: 800; margin-bottom: 5px; display: block; letter-spacing: 1px; }
+    .inp { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text-m); padding: 8px 12px; border-radius: 6px; font-family: 'JetBrains Mono'; font-weight: 700; }
+    
+    .tabs { display: flex; gap: 5px; background: var(--bg-card); padding: 5px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 20px; }
+    .tab { flex: 1; text-align: center; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: 600; color: var(--text-s); transition: 0.2s; }
+    .tab.active { background: var(--hover); color: var(--text-m); }
+    .pane { display: none; } .pane.active { display: block; animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-.wrap{position:relative;z-index:1;max-width:920px;margin:0 auto;padding:0 13px 90px}
+    /* Key Network UI */
+    .net-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 10px; }
+    .net-card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; display: flex; justify-content: space-between; align-items: center; }
+    .net-k { font-family: 'JetBrains Mono'; font-size: 13px; font-weight: 700; }
+    .net-rem { font-family: 'JetBrains Mono'; font-size: 12px; font-weight: 800; }
+    .s-act { color: var(--cyan); border-color: var(--cyan); background: rgba(6, 182, 212, 0.1); }
+    .s-exh { color: var(--red); opacity: 0.6; }
+    .s-rdy { color: var(--green); }
 
-/* ═══════════ HEADER ═══════════ */
-.hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 0 10px;border-bottom:1px solid var(--b2);margin-bottom:0;gap:10px;flex-wrap:wrap}
-.hdr-brand{display:flex;align-items:center;gap:11px}
-.brand-icon{width:38px;height:38px;background:linear-gradient(135deg,#00d8ff1a,#00ff9010);border:1px solid var(--cyan);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 0 20px #00d8ff22;animation:iconP 3s ease-in-out infinite}
-@keyframes iconP{0%,100%{box-shadow:0 0 20px #00d8ff22}50%{box-shadow:0 0 36px #00d8ff44}}
-.brand-name{font-size:19px;font-weight:800;letter-spacing:.8px;background:linear-gradient(90deg,var(--cyan),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1}
-.brand-sub{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2.5px;color:var(--text3);text-transform:uppercase;margin-top:1px}
-.ticker{display:flex;align-items:center;gap:14px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);flex-wrap:wrap}
-.tk{display:flex;align-items:center;gap:5px}
-.pip{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pip 1.4s ease-in-out infinite}
-@keyframes pip{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.65)}}
-.tv{font-weight:700}.tv.c{color:var(--cyan)}.tv.g{color:var(--green)}.tv.gold{color:var(--gold)}.tv.r{color:var(--red)}
-
-/* ═══════════ CONFIG PANEL ═══════════ */
-.cfg{background:var(--surf);border:1px solid var(--b2);border-radius:16px;padding:18px 20px;margin:13px 0;position:relative;overflow:hidden;animation:fadeD .5s ease both}
-.cfg::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--cyan),var(--green),var(--gold))}
-@keyframes fadeD{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
-.cfg-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
-@media(max-width:560px){.cfg-grid{grid-template-columns:1fr}}
-.cfg-g{display:flex;flex-direction:column;gap:5px}.cfg-g.wide{grid-column:1/-1}
-.lbl{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase}
-.inp{background:var(--surf2);border:1px solid var(--b2);border-radius:9px;padding:9px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--text);outline:none;transition:border-color .2s,box-shadow .2s;width:100%}
-.inp:focus{border-color:var(--cyan);box-shadow:0 0 0 2px #00d8ff16}
-.inp.gold{color:var(--gold)}.inp.gold:focus{border-color:var(--gold);box-shadow:0 0 0 2px #ffd00016}
-.cfg-foot{display:flex;align-items:center;gap:10px;margin-top:13px;flex-wrap:wrap}
-.slider-g{display:flex;align-items:center;gap:10px;flex:1;min-width:180px}
-.slider{flex:1;-webkit-appearance:none;height:4px;border-radius:2px;outline:none;cursor:pointer;background:linear-gradient(90deg,var(--cyan) var(--p,30%),var(--b2) var(--p,30%))}
-.slider::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--bg);border:2px solid var(--cyan);box-shadow:0 0 10px var(--cyan);cursor:pointer;transition:transform .15s}
-.slider::-webkit-slider-thumb:active{transform:scale(1.35)}
-.kelly-v{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:800;color:var(--cyan);text-shadow:0 0 10px var(--cyan);min-width:42px;text-align:right}
-
-/* ═══════════ BUTTONS ═══════════ */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 18px;border-radius:10px;border:1px solid;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s ease;white-space:nowrap;position:relative;overflow:hidden}
-.btn::after{content:'';position:absolute;top:-50%;left:-60%;width:40%;height:200%;background:linear-gradient(105deg,transparent,rgba(255,255,255,.06),transparent);transform:skewX(-20deg);transition:left .5s ease}
-.btn:hover::after{left:130%}
-.btn:disabled{opacity:.35;cursor:not-allowed}
-.btn-c{background:linear-gradient(135deg,#00d8ff16,#00ff9010);border-color:var(--cyan);color:var(--cyan);text-shadow:0 0 10px var(--cyan);box-shadow:0 0 14px #00d8ff10,inset 0 1px 0 #00d8ff1e}
-.btn-c:hover:not(:disabled){background:linear-gradient(135deg,#00d8ff26,#00ff9018);box-shadow:0 0 26px #00d8ff22;transform:translateY(-1px)}
-.btn-r{background:linear-gradient(135deg,#ff335216,#ff8c0010);border-color:var(--red);color:var(--red);text-shadow:0 0 10px var(--red)}
-.btn-r:hover:not(:disabled){background:linear-gradient(135deg,#ff335226,#ff8c0018);transform:translateY(-1px)}
-.btn-gold{background:linear-gradient(135deg,#ffd00016,#ff8c0010);border-color:var(--gold);color:var(--gold);text-shadow:0 0 10px var(--gold)}
-.btn-gold:hover:not(:disabled){background:linear-gradient(135deg,#ffd00026,#ff8c0018);transform:translateY(-1px)}
-.btn-sm{padding:7px 12px;font-size:12px;border-radius:8px}
-
-/* ═══════════ SCAN STATUS ═══════════ */
-.scan-bar{background:var(--surf);border:1px solid var(--b2);border-radius:12px;padding:11px 15px;margin-bottom:13px;display:none;animation:fadeD .3s ease both}
-.scan-bar.on{display:block}
-.scan-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;gap:8px}
-.scan-sport{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--cyan);font-weight:700;letter-spacing:1px}
-.scan-pct{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)}
-.prog-track{height:3px;background:var(--b2);border-radius:2px;overflow:hidden}
-.prog-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--cyan),var(--green));box-shadow:0 0 8px var(--cyan);transition:width .4s ease}
-.scan-log{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-top:7px;max-height:56px;overflow-y:auto;line-height:1.75}
-.ll{animation:fadeIn .3s ease}.lok{color:var(--green)}.lerr{color:var(--red)}.linf{color:var(--cyan)}
-@keyframes fadeIn{from{opacity:0}to{opacity:1}}
-
-/* ═══════════ TABS ═══════════ */
-.tabs{display:flex;gap:3px;background:var(--surf);border:1px solid var(--b1);border-radius:14px;padding:4px;margin-bottom:14px;animation:fadeD .5s .15s ease both}
-.tab{flex:1;text-align:center;padding:9px 5px;font-size:12px;font-weight:700;color:var(--text3);cursor:pointer;border-radius:10px;transition:all .22s;user-select:none;white-space:nowrap}
-.tab:hover{color:var(--text2);background:var(--surf2)}
-.tab.ev.on{color:#000;background:linear-gradient(135deg,#00d8ff,#009ec0);box-shadow:0 2px 14px #00d8ff44}
-.tab.arb.on{color:#000;background:linear-gradient(135deg,#c47eff,#7e22ce);box-shadow:0 2px 14px #c47eff44}
-.tab.calc.on{color:#000;background:linear-gradient(135deg,#ffd000,#ff8c00);box-shadow:0 2px 14px #ffd00044}
-.tab.an.on{color:#000;background:linear-gradient(135deg,#00ff90,#00a865);box-shadow:0 2px 14px #00ff9044}
-.tbadge{display:inline-block;background:rgba(0,0,0,.24);border-radius:8px;padding:1px 6px;font-size:10px;margin-left:3px;font-weight:800}
-.pane{display:none}.pane.on{display:block}
-
-/* ═══════════ CARDS ═══════════ */
-.card{background:var(--surf);border:1px solid var(--b1);border-radius:16px;margin-bottom:13px;overflow:hidden;position:relative;transition:border-color .2s,transform .18s,box-shadow .18s;animation:cardIn .4s ease both}
-.card:hover{border-color:var(--b3);transform:translateY(-2px);box-shadow:0 8px 32px #00000066}
-@keyframes cardIn{from{opacity:0;transform:translateY(13px)}to{opacity:1;transform:translateY(0)}}
-.stripe{height:2px;width:100%;background-size:200%!important;animation:shim 2s linear infinite}
-.st-ev{background:linear-gradient(90deg,var(--cyan),var(--green),var(--cyan))}
-.st-arb{background:linear-gradient(90deg,var(--purple),var(--cyan),var(--purple))}
-.st-gold{background:linear-gradient(90deg,var(--gold),var(--orange),var(--gold))}
-.st-silver{background:linear-gradient(90deg,#94a3b8,#e2e8f0,#94a3b8)}
-.st-bronze{background:linear-gradient(90deg,#b56b27,#e8a870,#b56b27)}
-@keyframes shim{0%{background-position:-200%}100%{background-position:200%}}
-.c-head{display:flex;align-items:flex-start;justify-content:space-between;padding:13px 15px 9px;gap:10px}
-.c-head-l{display:flex;align-items:flex-start;gap:9px;flex:1;min-width:0}
-.spt{font-size:22px;flex-shrink:0;margin-top:1px}
-.mtitle{font-size:14px;font-weight:700;color:var(--text);line-height:1.3;overflow-wrap:break-word}
-.mmeta{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-top:2px;letter-spacing:.5px}
-.ev-badge{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:800;border:1px solid currentColor;border-radius:9px;padding:5px 11px;min-width:76px;text-align:center;background:rgba(0,0,0,.3);flex-shrink:0;line-height:1.1}
-.arb-badge{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
-.arb-pct{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:800}
-.ways{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;border:1px solid;letter-spacing:1px}
-.c-body{padding:0 15px 14px}
-.chip{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 10px;border-radius:14px;border:1px solid;letter-spacing:1px;margin-bottom:9px}
-.chip-ev{background:linear-gradient(135deg,#00d8ff10,#00ff9008);border-color:#00d8ff28;color:var(--cyan)}
-.chip-arb{background:linear-gradient(135deg,#c47eff10,#00d8ff08);border-color:#c47eff28;color:var(--purple)}
-.bet-box{display:flex;align-items:center;justify-content:space-between;background:var(--surf2);border:1px solid var(--b1);border-radius:10px;padding:9px 13px;margin-bottom:9px;gap:8px;flex-wrap:wrap}
-.bet-l{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-.blbl{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--text3)}
-.bsel{font-size:15px;font-weight:800;letter-spacing:.5px}
-.bpt{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text2)}
-.bodds{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--gold);text-shadow:0 0 8px #ffd00055}
-.book-tag{background:linear-gradient(135deg,#ffd00010,#ff8c0008);border:1px solid #ffd00028;color:var(--gold);font-size:11px;font-weight:700;padding:3px 9px;border-radius:7px;white-space:nowrap}
-.mrow{display:flex;gap:9px;margin-bottom:9px}
-.mbox{flex:1;background:var(--surf2);border:1px solid var(--b1);border-radius:10px;padding:9px 11px}
-.mlbl{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text3);display:block;margin-bottom:2px;text-transform:uppercase}
-.mval{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:800;display:block;transition:all .25s}
-.sv{color:var(--gold);text-shadow:0 0 14px #ffd00055}.tv2{color:var(--text2);font-size:17px}.pv{color:var(--green);text-shadow:0 0 14px #00ff9055}
-.crow{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
-.cbar-out{display:flex;align-items:center;gap:6px;flex:1;min-width:140px}
-.ctag{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:800;letter-spacing:1px;min-width:30px}
-.ctrack{flex:1;height:5px;background:var(--b2);border-radius:3px;overflow:hidden}
-.cfill{height:100%;border-radius:3px;animation:fillB .9s ease both}
-@keyframes fillB{from{width:0!important}}
-.cscore{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:800;min-width:22px;text-align:right}
-.clv{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:800;padding:2px 8px;border-radius:7px;border:1px solid;white-space:nowrap}
-.bd-wrap{margin-top:8px;border:1px solid var(--b1);border-radius:9px;overflow:hidden}
-.bd-tbl{width:100%;border-collapse:collapse;font-size:11px}
-.bd-tbl th{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text3);padding:7px 11px;text-align:left;background:var(--surf2);text-transform:uppercase}
-.bd-tbl td{padding:6px 11px;border-top:1px solid var(--b1);color:var(--text2)}
-.bd-tbl tr:hover td{background:var(--surf2)}
-.bk-best td{color:var(--cyan)!important;font-weight:700}
-.legs{background:var(--surf2);border:1px solid var(--b1);border-radius:10px;overflow:hidden;margin-bottom:9px}
-.leg{display:grid;grid-template-columns:1fr auto auto auto;gap:9px;align-items:center;padding:9px 13px;border-bottom:1px solid var(--b1)}
-.leg:last-child{border-bottom:none}
-.lsel{font-size:13px;font-weight:800}
-.lodds{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--gold)}
-.lstake{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;color:var(--cyan);text-shadow:0 0 8px #00d8ff55;transition:all .25s}
-.lbook{font-size:10px;color:var(--text3);background:var(--surf);border:1px solid var(--b2);padding:2px 7px;border-radius:5px;white-space:nowrap}
-.prof-banner{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#00ff900e,#00d8ff06);border:1px solid #00ff9028;border-radius:10px;padding:11px 15px}
-.pb-lbl{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3)}
-.pb-val{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:800;color:var(--green);text-shadow:0 0 18px #00ff9066}
-
-/* ═══════════ EMPTY ═══════════ */
-.empty{text-align:center;padding:56px 20px;background:var(--surf);border:1px dashed var(--b2);border-radius:16px;animation:cardIn .4s ease both}
-.ei{font-size:44px;margin-bottom:12px;opacity:.35;animation:flt 3s ease-in-out infinite}
-@keyframes flt{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-.et{font-size:15px;font-weight:700;color:var(--text2);margin-bottom:5px}
-.es{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);letter-spacing:1px}
-
-/* ═══════════ CALC TAB ═══════════ */
-.calc-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:13px}
-@media(max-width:540px){.calc-grid{grid-template-columns:1fr}}
-.calc-card{background:var(--surf);border:1px solid var(--b2);border-radius:16px;padding:18px;animation:cardIn .4s ease both}
-.cc-title{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:13px;display:flex;align-items:center;gap:6px}
-.cc-title::before{content:'';flex:1;height:1px;background:var(--b2)}
-.cf{margin-bottom:10px}
-.ci{background:var(--surf2);border:1px solid var(--b2);border-radius:8px;padding:8px 11px;font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;color:var(--text);outline:none;transition:border-color .2s,box-shadow .2s;width:100%}
-.ci:focus{border-color:var(--cyan);box-shadow:0 0 0 2px #00d8ff14}
-.rg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px}
-.rb{background:var(--surf2);border:1px solid var(--b1);border-radius:9px;padding:9px 11px}
-.rl{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text3);display:block;margin-bottom:3px}
-.rv{font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:800;display:block}
-.rdiv{grid-column:1/-1;height:1px;background:var(--b1)}
-.full{grid-column:1/-1}
-
-/* ═══════════ ANALYTICS ═══════════ */
-.kpi-row{display:flex;gap:9px;overflow-x:auto;margin-bottom:13px;padding-bottom:2px;scrollbar-width:thin;scrollbar-color:var(--b2) transparent}
-.kpi{background:var(--surf);border:1px solid var(--b2);border-radius:13px;padding:13px 14px;flex:1;min-width:105px;text-align:center;animation:cardIn .4s ease both;transition:all .2s}
-.kpi:hover{border-color:var(--b3);transform:translateY(-2px)}
-.ki{font-family:'JetBrains Mono',monospace;font-size:10px;margin-bottom:4px;opacity:.8}
-.kv{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:800;line-height:1.1;margin-bottom:3px}
-.kl{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace}
-.an-row{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:13px}
-@media(max-width:560px){.an-row{grid-template-columns:1fr}}
-.an-card{background:var(--surf);border:1px solid var(--b1);border-radius:14px;padding:17px;animation:cardIn .4s ease both}
-.an-title{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:13px}
-.hrow{display:flex;align-items:center;gap:7px;margin-bottom:9px}
-.hlbl{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);width:34px;flex-shrink:0}
-.htrack{flex:1;height:12px;background:var(--b2);border-radius:6px;overflow:hidden}
-.hbar{height:100%;border-radius:6px;animation:fillB .9s ease both;min-width:2px}
-.hcnt{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--text2);width:18px;text-align:right}
-.brow{display:flex;align-items:center;gap:7px;margin-bottom:8px}
-.blbl2{font-size:11px;color:var(--text2);width:86px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.btrack{flex:1;height:10px;background:var(--b2);border-radius:5px;overflow:hidden}
-.bfill{height:100%;border-radius:5px;animation:fillB .9s ease both}
-.bcnt{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);min-width:48px;text-align:right}
-.mini-stats{display:flex;border-top:1px solid var(--b1);padding-top:9px;margin-top:9px}
-.ms{flex:1;text-align:center}.ms+.ms{border-left:1px solid var(--b1)}
-.msl{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);display:block;margin-bottom:2px}
-.msv{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:800}
-.donut-wrap{display:flex;align-items:center;justify-content:center;gap:20px;padding:8px 0}
-.donut{width:74px;height:74px;border-radius:50%;flex-shrink:0;background:conic-gradient(var(--cyan) var(--tw,50%),var(--purple) var(--tw,50%));box-shadow:0 0 20px #00d8ff1a;position:relative}
-.donut::after{content:'';position:absolute;inset:15px;background:var(--surf);border-radius:50%}
-.dl{display:flex;align-items:center;gap:7px;margin-bottom:7px}
-.dld{width:9px;height:9px;border-radius:3px;flex-shrink:0}
-.dll{font-size:12px;color:var(--text2);flex:1}
-.dlv{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:800}
-
-/* ═══════════ BANKROLL MODAL ═══════════ */
-.modal{display:none;position:fixed;inset:0;z-index:999;background:rgba(3,5,11,.9);backdrop-filter:blur(8px);align-items:center;justify-content:center}
-.modal.open{display:flex;animation:fadeIn .2s ease}
-.mbox{background:var(--surf);border:1px solid var(--b3);border-radius:20px;padding:28px 24px;width:min(355px,92vw);position:relative;box-shadow:0 0 60px #00d8ff14,0 24px 80px rgba(0,0,0,.75);animation:mIn .3s ease both}
-@keyframes mIn{from{opacity:0;transform:scale(.9)translateY(-10px)}to{opacity:1;transform:scale(1)translateY(0)}}
-.mstripe{position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--cyan),var(--green),var(--gold));border-radius:20px 20px 0 0}
-.mey{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:3px;color:var(--text3);margin-bottom:5px}
-.mttl{font-size:20px;font-weight:800;margin-bottom:19px}
-.mlbl{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);display:block;margin-bottom:7px;text-transform:uppercase}
-.minp-w{position:relative;margin-bottom:15px}
-.mpfx{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--gold);font-size:17px;font-weight:800}
-.minp{width:100%;background:var(--surf2);border:1px solid var(--b2);border-radius:10px;padding:11px 12px 11px 32px;font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--gold);outline:none;transition:border-color .2s,box-shadow .2s}
-.minp:focus{border-color:var(--gold);box-shadow:0 0 0 2px #ffd00018}
-.mbr{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.mnote{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-align:center;margin-top:8px}
-
-/* ═══════════ TELEMETRY ═══════════ */
-.tele{margin-top:34px;padding:12px 17px;background:var(--surf);border:1px solid var(--b1);border-radius:13px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;display:flex;flex-wrap:wrap;gap:7px 18px;align-items:center;justify-content:center;position:relative;overflow:hidden}
-.tele::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--b2),transparent)}
-.tv3{color:var(--cyan);font-weight:700}
-
-/* ═══════════ MISC ═══════════ */
-::-webkit-scrollbar{width:5px;height:5px}
-::-webkit-scrollbar-track{background:var(--bg)}
-::-webkit-scrollbar-thumb{background:var(--b2);border-radius:3px}
-@media(max-width:480px){
-  .brand-name{font-size:16px}.ev-badge{font-size:16px;min-width:66px}.arb-pct{font-size:16px}
-  .leg{grid-template-columns:1fr auto auto}.lbook{display:none}.ticker{display:none}
-}
+    /* Betting Cards */
+    .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 15px; margin-bottom: 15px; position: relative; overflow: hidden; }
+    .card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+    .card.ev::before { background: var(--cyan); } .card.arb::before { background: var(--gold); }
+    .c-hdr { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px dashed var(--border); padding-bottom: 10px; }
+    .c-tag { font-family: 'JetBrains Mono'; font-weight: 800; font-size: 18px; }
+    .hl { color: var(--cyan); } .hl-g { color: var(--gold); }
+    .bd-tbl { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+    .bd-tbl td { padding: 5px; border-bottom: 1px solid var(--border); }
 </style>
 </head>
 <body>
 
-<div class="modal" id="bkModal">
-  <div class="mbox">
-    <div class="mstripe"></div>
-    <div class="mey">Configure</div>
-    <div class="mttl">💰 Edit Bankroll</div>
-    <label class="mlbl">Total Bankroll (₹)</label>
-    <div class="minp-w">
-      <span class="mpfx">₹</span>
-      <input class="minp" id="bkIn" type="number" min="100" step="100" value="1500">
-    </div>
-    <div class="mbr">
-      <button class="btn btn-gold" onclick="saveBK()">💾 Apply</button>
-      <button class="btn btn-c" onclick="closeBK()">Cancel</button>
-    </div>
-    <div class="mnote">Saved in browser · recalculates all Kelly stakes</div>
-  </div>
-</div>
-
-<div class="wrap">
-
 <div class="hdr">
-  <div class="hdr-brand">
-    <div class="brand-icon">⚡</div>
-    <div>
-      <div class="brand-name">ARB SNIPER</div>
-      <div class="brand-sub">Quantitative Edge Terminal</div>
-    </div>
-  </div>
-  <div class="ticker">
-    <div class="tk"><div class="pip"></div><span id="tTime" class="tv c">--:-- IST</span></div>
-    <div class="tk">QUOTA <span id="tQuota" class="tv gold">--</span></div>
-    <div class="tk">EV <span id="tEV" class="tv g">0</span></div>
-    <div class="tk">ARB <span id="tARB" class="tv c">0</span></div>
-    <div class="tk">BURN <span id="tBurn" class="tv r">0</span></div>
-  </div>
+    <h1>⚡ ARB SNIPER</h1>
+    <div class="time">Last Cloud Sweep:<br>06 Mar 2026, 11:15:05 AM IST</div>
 </div>
 
-<div class="cfg">
-  <div class="cfg-grid">
-    <div class="cfg-g wide">
-      <label class="lbl">🔑 API Keys</label>
-      <div id="keyStatus" style="display:flex;align-items:center;gap:9px;background:var(--surf2);border:1px solid var(--b2);border-radius:9px;padding:9px 13px;">
-        <span id="keyDot" style="width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);flex-shrink:0"></span>
-        <span id="keyMsg" style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--green)">Keys injected via GitHub Secrets — ready to scan</span>
-      </div>
+<div class="ctrl-grid">
+    <div class="ctrl-box" style="grid-column: 1 / -1;">
+        <button class="btn btn-green" id="btnStart" onclick="startEngine()">▶ START AUTONOMOUS ENGINE</button>
+        <button class="btn btn-red" id="btnStop" onclick="stopEngine()" style="display:none;">⏹ STOP ENGINE</button>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px;">
+            <label style="font-size:13px; color:var(--text-s); display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" id="autoLoop" checked style="width:16px;height:16px;accent-color:var(--cyan);">
+                Auto-Loop (5 min interval)
+            </label>
+            <span id="scanStatus" style="font-family:'JetBrains Mono'; font-size:12px; color:var(--green); font-weight:700;">SYSTEM IDLE</span>
+        </div>
     </div>
-    <div class="cfg-g">
-      <label class="lbl">💰 Bankroll (₹) &nbsp;<span style="color:var(--text3);cursor:pointer;font-size:10px" onclick="openBK()">✏️</span></label>
-      <input class="inp gold" id="cfgBK" type="number" value="1500" min="100" step="100" oninput="onBKChange()">
+    <div class="ctrl-box">
+        <span class="lbl">Total Bankroll (₹)</span>
+        <input class="inp" type="number" id="cfgBankroll" value="1500" oninput="recalc()">
     </div>
-    <div class="cfg-g">
-      <label class="lbl">📡 Bookmakers</label>
-      <input class="inp" id="cfgBooks" value="pinnacle,onexbet,marathonbet,dafabet,stake,betfair_ex_eu,betway">
+    <div class="ctrl-box">
+        <span class="lbl">Kelly Fraction (%)</span>
+        <input class="inp" type="number" id="cfgKelly" value="30" max="100" oninput="recalc()">
     </div>
-    <div class="cfg-g">
-      <label class="lbl">⚡ Min EV%</label>
-      <input class="inp" id="cfgEV" type="number" value="1.5" step="0.1" min="0">
-    </div>
-    <div class="cfg-g">
-      <label class="lbl">🔒 Min ARB%</label>
-      <input class="inp" id="cfgARB" type="number" value="1.0" step="0.1" min="0">
-    </div>
-  </div>
-  <div class="cfg-foot">
-    <div class="slider-g">
-      <span class="lbl">KELLY</span>
-      <input type="range" class="slider" id="kellyR" min="1" max="100" value="30" oninput="onKelly(this.value)" style="--p:30%">
-      <span class="kelly-v" id="kellyV">30%</span>
-    </div>
-    <button class="btn btn-c" id="btnStart" onclick="startScan()">▶ Start Sweep</button>
-    <button class="btn btn-r"  id="btnStop"  onclick="stopScan()"  style="display:none">⏹ Stop</button>
-    <button class="btn btn-gold btn-sm" onclick="exportCSV()">⬇ CSV</button>
-  </div>
-</div>
-
-<div class="scan-bar" id="scanBar">
-  <div class="scan-top">
-    <span class="scan-sport" id="scanSport">Initializing…</span>
-    <span class="scan-pct"  id="scanPct">0/6</span>
-  </div>
-  <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0"></div></div>
-  <div class="scan-log" id="scanLog"></div>
 </div>
 
 <div class="tabs">
-  <div class="tab ev on"   id="tab-ev"   onclick="switchTab('ev')">⚡ EV <span class="tbadge" id="bEV">0</span></div>
-  <div class="tab arb"     id="tab-arb"  onclick="switchTab('arb')">🔒 ARB <span class="tbadge" id="bARB">0</span></div>
-  <div class="tab calc"    id="tab-calc" onclick="switchTab('calc')">🧮 Calc</div>
-  <div class="tab an"      id="tab-an"   onclick="switchTab('an')">📊 Analytics</div>
+    <div class="tab active" onclick="showPane('ev')">💎 EV (<span id="cntEV">0</span>)</div>
+    <div class="tab" onclick="showPane('arb')">🔒 ARB (<span id="cntARB">0</span>)</div>
+    <div class="tab" onclick="showPane('net')">📡 NETWORK</div>
 </div>
 
-<div class="pane on" id="pane-ev">
-  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-    <button class="btn btn-sm" id="top5Btn" onclick="toggleTop5()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">🔝 Top 5</button>
-    <button class="btn btn-sm" id="sortBtn" onclick="toggleSort()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">↕ Sort EV%</button>
-    <button class="btn btn-sm" id="filterHCBtn" onclick="toggleHC()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">🎯 High Conf</button>
-  </div>
-  <div id="ev-cards"></div>
-</div>
+<div id="pane-ev" class="pane active"><div id="ev-container"></div></div>
+<div id="pane-arb" class="pane"><div id="arb-container"></div></div>
 
-<div class="pane" id="pane-arb">
-  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-    <button class="btn btn-sm" id="arb3Btn" onclick="toggleArb3()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">🔱 3-Way Only</button>
-    <button class="btn btn-sm" id="arbSortBtn" onclick="toggleArbSort()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">↕ Sort ARB%</button>
-  </div>
-  <div id="arb-cards"></div>
-</div>
-
-<div class="pane" id="pane-calc">
-  <div class="calc-grid">
-
-    <div class="calc-card">
-      <div class="cc-title">⚡ EV Calculator</div>
-      <div class="cf"><label class="lbl">Soft Book Odds</label><input class="ci" id="cSoft" type="number" step="0.01" value="2.10" oninput="calcEV()"></div>
-      <div class="cf"><label class="lbl">Pinnacle Side A</label><input class="ci" id="cPinA" type="number" step="0.01" value="1.95" oninput="calcEV()"></div>
-      <div class="cf"><label class="lbl">Pinnacle Side B</label><input class="ci" id="cPinB" type="number" step="0.01" value="2.08" oninput="calcEV()"></div>
-      <div class="rg">
-        <div class="rb"><span class="rl">TRUE ODDS</span><span class="rv" id="rTO" style="color:var(--text2)">--</span></div>
-        <div class="rb"><span class="rl">EV %</span><span class="rv" id="rEV" style="color:var(--cyan)">--</span></div>
-        <div class="rb"><span class="rl">KELLY STAKE</span><span class="rv" id="rKS" style="color:var(--gold)">--</span></div>
-        <div class="rb"><span class="rl">CONFIDENCE</span><span class="rv" id="rCF" style="color:var(--green)">--</span></div>
-      </div>
+<div id="pane-net" class="pane">
+    <div class="ctrl-box">
+        <span class="lbl">API Sequential Matrix</span>
+        <div style="font-size:12px; color:var(--text-s); margin-bottom:10px;">The system automatically fails-over to the next key when a 429 quota limit is reached.</div>
+        <div class="net-grid" id="netGrid">
+            </div>
     </div>
-
-    <div class="calc-card">
-      <div class="cc-title">🔒 ARB Calculator</div>
-      <div class="cf"><label class="lbl">Side A Odds</label><input class="ci" id="cAA" type="number" step="0.01" value="2.15" oninput="calcARB()"></div>
-      <div class="cf"><label class="lbl">Side B Odds</label><input class="ci" id="cAB" type="number" step="0.01" value="2.10" oninput="calcARB()"></div>
-      <div class="cf"><label class="lbl">Side C (3-way, optional)</label><input class="ci" id="cAC" type="number" step="0.01" placeholder="leave blank" oninput="calcARB()"></div>
-      <div class="rg">
-        <div class="rb"><span class="rl">MARGIN</span><span class="rv" id="rAM" style="color:var(--text2)">--</span></div>
-        <div class="rb"><span class="rl">ARB %</span><span class="rv" id="rAP" style="color:var(--purple)">--</span></div>
-        <div class="rb"><span class="rl">STAKE A</span><span class="rv" id="rAS" style="color:var(--cyan)">--</span></div>
-        <div class="rb"><span class="rl">STAKE B</span><span class="rv" id="rAB" style="color:var(--cyan)">--</span></div>
-        <div class="rdiv"></div>
-        <div class="rb full"><span class="rl">GUARANTEED PROFIT</span><span class="rv" id="rAG" style="color:var(--green);font-size:20px">--</span></div>
-      </div>
-    </div>
-
-    <div class="calc-card">
-      <div class="cc-title">💚 Green-Up Calculator</div>
-      <div class="cf"><label class="lbl">Back Stake (₹)</label><input class="ci" id="gBS" type="number" value="500" oninput="calcGU()"></div>
-      <div class="cf"><label class="lbl">Back Odds</label><input class="ci" id="gBO" type="number" step="0.01" value="2.10" oninput="calcGU()"></div>
-      <div class="cf"><label class="lbl">Lay / True Odds</label><input class="ci" id="gLO" type="number" step="0.01" value="1.95" oninput="calcGU()"></div>
-      <div class="rg">
-        <div class="rb"><span class="rl">LAY STAKE</span><span class="rv" id="rGL" style="color:var(--cyan)">--</span></div>
-        <div class="rb"><span class="rl">GREEN PROFIT</span><span class="rv" id="rGP" style="color:var(--green)">--</span></div>
-      </div>
-    </div>
-
-    <div class="calc-card">
-      <div class="cc-title">📐 Kelly Criterion</div>
-      <div class="cf"><label class="lbl">Win Probability (0–1)</label><input class="ci" id="kP" type="number" step="0.01" value="0.55" min="0.01" max="0.99" oninput="calcKelly()"></div>
-      <div class="cf"><label class="lbl">Decimal Odds</label><input class="ci" id="kO" type="number" step="0.01" value="2.10" oninput="calcKelly()"></div>
-      <div class="cf"><label class="lbl">Bankroll (₹)</label><input class="ci" id="kB" type="number" value="1500" oninput="calcKelly()"></div>
-      <div class="rg">
-        <div class="rb"><span class="rl">FULL KELLY %</span><span class="rv" id="rFK" style="color:var(--text2)">--</span></div>
-        <div class="rb"><span class="rl">FRAC KELLY 30%</span><span class="rv" id="rFR" style="color:var(--gold)">--</span></div>
-        <div class="rdiv"></div>
-        <div class="rb full"><span class="rl">RECOMMENDED STAKE</span><span class="rv" id="rKA" style="color:var(--green);font-size:20px">--</span></div>
-      </div>
-    </div>
-
-  </div>
 </div>
 
-<div class="pane" id="pane-an">
-  <div class="kpi-row">
-    <div class="kpi"><div class="ki" style="color:var(--cyan)">⚡ EV</div><div class="kv" id="anTE" style="color:var(--cyan)">0</div><div class="kl">Total Edges</div></div>
-    <div class="kpi"><div class="ki" style="color:var(--green)">AVG</div><div class="kv" id="anAE" style="color:var(--green)">0%</div><div class="kl">Avg EV%</div></div>
-    <div class="kpi"><div class="ki" style="color:var(--gold)">PEAK</div><div class="kv" id="anPE" style="color:var(--gold)">0%</div><div class="kl">Peak EV%</div></div>
-    <div class="kpi"><div class="ki" style="color:var(--purple)">🔒 ARB</div><div class="kv" id="anTA" style="color:var(--purple)">0</div><div class="kl">ARB Opps</div></div>
-    <div class="kpi"><div class="ki" style="color:var(--green)">₹</div><div class="kv" id="anAP" style="color:var(--green)">₹0</div><div class="kl">ARB Profit</div></div>
-    <div class="kpi"><div class="ki" style="color:var(--orange)">ROI</div><div class="kv" id="anROI" style="color:var(--orange)">0%</div><div class="kl">ARB ROI</div></div>
-  </div>
-  <div class="an-row">
-    <div class="an-card"><div class="an-title">⚡ EV Distribution</div><div id="anEH"></div><div class="mini-stats" id="anES"></div></div>
-    <div class="an-card"><div class="an-title">🔒 ARB Distribution</div><div id="anAH"></div><div class="mini-stats" id="anAS"></div></div>
-  </div>
-  <div class="an-row">
-    <div class="an-card"><div class="an-title">⚽ EV by Sport</div><div id="anESP"></div></div>
-    <div class="an-card"><div class="an-title">🔒 ARB by Sport</div><div id="anASP"></div></div>
-  </div>
-  <div class="an-row">
-    <div class="an-card"><div class="an-title">📚 Top EV Bookmakers</div><div id="anEB"></div></div>
-    <div class="an-card"><div class="an-title">🔗 Top ARB Pairs</div><div id="anAPR"></div></div>
-  </div>
-  <div class="an-row">
-    <div class="an-card">
-      <div class="an-title">📐 ARB Structure</div>
-      <div class="donut-wrap">
-        <div class="donut" id="anDonut"></div>
-        <div>
-          <div class="dl"><span class="dld" style="background:var(--cyan)"></span><span class="dll">2-Way</span><span class="dlv" id="an2w" style="color:var(--cyan)">0</span></div>
-          <div class="dl"><span class="dld" style="background:var(--purple)"></span><span class="dll">3-Way</span><span class="dlv" id="an3w" style="color:var(--purple)">0</span></div>
-        </div>
-      </div>
-      <div class="mini-stats" id="anAMeta"></div>
-    </div>
-    <div class="an-card"><div class="an-title">🎯 Confidence Spread</div><div id="anCS"></div></div>
-  </div>
-</div>
+<script>
+const STATE = {
+    evs: [{"pct": 10.394871794871797, "match": "Edmonton Oilers vs Carolina Hurricanes", "time": "2026-03-07T02:00:00Z", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "selection": "Over", "odds": 2.06, "true": 1.8660287081339713, "bookie": "onexbet", "stake": 44.12917271407837, "confidence": 47, "ev_breakdown": [{"bookie": "onexbet", "odds": 2.06, "ev_pct": 10.394871794871797, "is_best": true}, {"bookie": "pinnacle", "odds": 1.81, "ev_pct": 0, "is_best": false}], "clv_pct": null}],
+    arbs: [{"pct": 3.6094207274585344, "match": "Edmonton Oilers vs Carolina Hurricanes", "time": "2026-03-07T02:00:00Z", "sport": "icehockey_nhl", "line": "TOTALS_6.5", "ways": 2, "profit": 56.16867469879503, "s1": "Over", "s1_price": 2.06, "s1_bookie": "onexbet", "stk1": 755.4216867469878, "s2": "Under", "s2_price": 2.09, "s2_bookie": "pinnacle", "stk2": 744.578313253012}],
+    keys: ["4ef677887a0eafc8e8d8439e56f38fbe", "41308dc8cb155421b36bf4e58a0fe50b", "dd7355f3917f77627fa683748e94db34", "5df6c4dcbe6da9ca2cdb1eeff8db6bdf", "c5c52b9e809325a878f4bd924039e127", "0c6838f456658cb5a1c7883bccdee8a2", "2c494c274c8fe8d3e81b780701f6f3b0"],
+    masked: ["4ef6\u2022\u2022\u2022\u20228fbe", "4130\u2022\u2022\u2022\u2022e50b", "dd73\u2022\u2022\u2022\u2022db34", "5df6\u2022\u2022\u2022\u20226bdf", "c5c5\u2022\u2022\u2022\u2022e127", "0c68\u2022\u2022\u2022\u2022e8a2", "2c49\u2022\u2022\u2022\u2022f3b0"],
+    apiState: {"active_index": 2, "stats": {"0": {"remaining": "-2"}, "1": {"remaining": "450"}, "2": {"remaining": "500"}}},
+    activeIdx: 2,
+    isScanning: false,
+    loopTimer: null,
+    caps: {'betway':300,'stake':500,'onexbet':400,'marathonbet':400,'dafabet':350,'betfair_ex_eu':600,'pinnacle':1000}
+};
 
-<div class="tele">
-  <span>🔑 KEY <span class="tv3" id="telKey">#1</span></span>
-  <span>📡 QUOTA <span class="tv3" id="telQ">--/500</span></span>
-  <span>⚡ BURN <span class="tv3" id="telB">0</span></span>
-  <span>🏦 BANKROLL <span class="tv3" id="telBK">₹1500</span></span>
-  <span>⏱ SCAN <span class="tv3" id="telT">--</span></span>
-</div>
-
-</div><script>
-'use strict';
-
-/* ── NTFY PUSH NOTIFICATIONS ── */
-const NTFY_CHANNEL = 'nikunj_arb_alerts_2026';
-
-function sendNtfyAlert(msg, pct, match, type) {
-  const emoji = type === "ARB" ? "🚨" : "📈";
-  fetch('https://ntfy.sh/', {
-    method: 'POST',
-    body: JSON.stringify({
-      topic: NTFY_CHANNEL,
-      message: msg,
-      title: `${emoji} ${pct.toFixed(2)}% ${type} | ${match}`,
-      tags: ["gem", "moneybag"],
-      priority: 5
-    })
-  }).catch(err => console.error("Ntfy Error:", err));
+function showPane(p) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.pane').forEach(t => t.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('pane-'+p).classList.add('active');
 }
 
-/* ── ALERT CACHE (LOCAL STORAGE) ── */
-// Prevents duplicate notifications for 6 hours
-function isDuplicateAlert(alertKey) {
-  let cache = JSON.parse(localStorage.getItem('arb_alert_cache') || '{}');
-  const now = Date.now();
-  
-  // Clean up cache (delete entries older than 6 hours / 21600000 ms)
-  for (let k in cache) {
-    if (now - cache[k] > 21600000) {
-      delete cache[k];
-    }
-  }
-  
-  if (cache[alertKey]) {
-    localStorage.setItem('arb_alert_cache', JSON.stringify(cache));
-    return true; // It is a duplicate
-  }
-  
-  // Not a duplicate, save it and return false
-  cache[alertKey] = now;
-  localStorage.setItem('arb_alert_cache', JSON.stringify(cache));
-  return false;
+function fmt(n) { return '₹' + Math.round(n).toLocaleString('en-IN'); }
+function bkName(k) { const m={'onexbet':'1xBet','pinnacle':'Pinnacle','marathonbet':'Marathon','dafabet':'Dafabet','stake':'Stake.com','betfair_ex_eu':'Betfair','betway':'Betway'}; return m[k]||k; }
+
+function recalc() {
+    const bk = parseFloat(document.getElementById('cfgBankroll').value) || 1500;
+    const kf = (parseFloat(document.getElementById('cfgKelly').value) || 30) / 100;
+    
+    document.querySelectorAll('.ev-stake').forEach(el => {
+        const soft = parseFloat(el.dataset.soft);
+        const trueO = parseFloat(el.dataset.true);
+        const book = el.dataset.book;
+        const b = soft - 1, p = 1 / trueO;
+        let k = ((b * p - (1-p)) / b) * kf;
+        if(k > 0.05) k = 0.05;
+        let s = k > 0 ? Math.max(20, bk * k) : 0;
+        if (STATE.caps[book]) s = Math.min(s, STATE.caps[book]);
+        el.textContent = fmt(s);
+    });
+
+    document.querySelectorAll('.arb-stake').forEach(el => {
+        const margin = parseFloat(el.dataset.margin);
+        const price = parseFloat(el.dataset.price);
+        el.textContent = fmt((bk/margin)/price);
+    });
+    document.querySelectorAll('.arb-profit').forEach(el => {
+        const margin = parseFloat(el.dataset.margin);
+        el.textContent = fmt((bk/margin)-bk);
+    });
 }
 
-/* ── CONSTANTS ── */
-const SPORTS=[
-  {k:'soccer_epl',          l:'⚽ EPL'},
-  {k:'soccer_uefa_champs_league',l:'⚽ UCL'},
-  {k:'basketball_nba',      l:'🏀 NBA'},
-  {k:'icehockey_nhl',       l:'🏒 NHL'},
-  {k:'tennis_atp',          l:'🎾 ATP'},
-  {k:'tennis_wta',          l:'🎾 WTA'},
-];
-const CAPS={betway:300,stake:500,onexbet:400,marathonbet:400,dafabet:350,betfair_ex_eu:600,pinnacle:1000};
-const BKNAMES={onexbet:'1xBet',pinnacle:'Pinnacle',marathonbet:'Marathon',dafabet:'Dafabet',stake:'Stake.com',betfair_ex_eu:'Betfair',betway:'Betway'};
-const SICONS={soccer:'⚽',basketball:'🏀',icehockey:'🏒',tennis:'🎾',baseball:'⚾',football:'🏈'};
-
-/* ── STATE ── */
-let EVS=[],ARBS=[];
-let scanning=false,sportIdx=0,scanT0=null,creditT0=null;
-let quotaRem='--',top5=false,sortOn=false,hcFilter=false,arb3=false,arbSort=false;
-
-/* ── UTILS ── */
-const $=id=>document.getElementById(id);
-const bk=k=>BKNAMES[k]||k.replace(/_/g,' ');
-const si=s=>{for(const[k,v]of Object.entries(SICONS))if(s.includes(k))return v;return'🎯'};
-const fmt=n=>'₹'+Math.round(n).toLocaleString('en-IN');
-const fp=n=>n.toFixed(2)+'%';
-const getBK=()=>parseFloat($('cfgBK').value)||1500;
-const getKF=()=>parseFloat($('kellyR').value)/100;
-const getMinEV=()=>parseFloat($('cfgEV').value)||1.5;
-const getMinARB=()=>parseFloat($('cfgARB').value)||1.0;
-const getBooks=()=>$('cfgBooks').value.split(',').map(s=>s.trim()).filter(Boolean);
-
-function devig(o1,o2){const i1=1/o1,i2=1/o2,m=i1+i2;return[1/(i1/m),1/(i2/m)]}
-function kelly(soft,trueO,bankroll,kf=.30,book=null){
-  const b=soft-1,p=1/trueO,q=1-p;
-  let k=((b*p-q)/b)*kf;
-  if(k<=0)return 0;if(k>.05)k=.05;
-  let s=Math.max(20,bankroll*k);
-  if(book&&CAPS[book])s=Math.min(s,CAPS[book]);
-  return s;
-}
-function conf(soft,trueO){return Math.max(0,Math.min(100,Math.round(Math.abs(1/soft-1/trueO)/(1/trueO)*500)))}
-function IST(){return new Date(Date.now()+5.5*36e5).toLocaleTimeString('en-IN',{hour12:true,timeZone:'UTC'})}
-function fmtIST(iso){try{return new Date(iso).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}catch{return'?'}}
-
-/* ── CLOCK ── */
-setInterval(()=>$('tTime').textContent=IST(),1000);
-
-/* ── KELLY SLIDER ── */
-function onKelly(v){
-  $('kellyV').textContent=v+'%';
-  $('kellyR').style.setProperty('--p',v+'%');
-  recalc();calcEV();
-}
-
-/* ── BANKROLL CHANGES ── */
-function onBKChange(){
-  localStorage.setItem('arb_bk',$('cfgBK').value);
-  $('telBK').textContent=fmt(getBK());
-  recalc();
-}
-function recalc(){
-  const bkv=getBK(),kf=getKF();
-  $('telBK').textContent=fmt(bkv);
-  document.querySelectorAll('.sdyn').forEach(el=>{
-    const s=kelly(parseFloat(el.dataset.soft)||2,parseFloat(el.dataset.true)||1.9,bkv,kf,el.dataset.book||null);
-    el.textContent=fmt(s);
-  });
-  document.querySelectorAll('.ldyn').forEach(el=>{
-    const ratio=bkv/1500;
-    el.textContent=fmt(parseFloat(el.dataset.base)*ratio);
-  });
-}
-
-/* ── BANKROLL MODAL ── */
-function openBK(){$('bkIn').value=getBK();$('bkModal').classList.add('open');setTimeout(()=>$('bkIn').focus(),100)}
-function closeBK(){$('bkModal').classList.remove('open')}
-function saveBK(){
-  const v=parseFloat($('bkIn').value);
-  if(!v||v<100){alert('Enter a valid bankroll (min ₹100)');return}
-  $('cfgBK').value=v;$('kB').value=v;
-  localStorage.setItem('arb_bk',v);
-  onBKChange();closeBK();
-  $('cfgBK').style.color='var(--green)';
-  setTimeout(()=>$('cfgBK').style.color='var(--gold)',700);
-}
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeBK()});
-$('bkModal').addEventListener('click',e=>{if(e.target===$('bkModal'))closeBK()});
-
-/* ── TABS ── */
-function switchTab(t){
-  ['ev','arb','calc','an'].forEach(id=>{
-    $('tab-'+id).classList.remove('on');
-    $('pane-'+id).classList.remove('on');
-  });
-  $('tab-'+t).classList.add('on');
-  $('pane-'+t).classList.add('on');
-  if(t==='an')renderAn();
-}
-
-/* ── SCAN LOG ── */
-function log(msg,cls=''){
-  const el=$('scanLog'),d=document.createElement('div');
-  d.className='ll '+(cls||'');d.textContent='['+IST()+'] '+msg;
-  el.appendChild(d);el.scrollTop=el.scrollHeight;
-}
-
-/* ── INJECTED API KEYS (set by Python from GitHub Secrets) ── */
-const API_KEYS = ["4ef677887a0eafc8e8d8439e56f38fbe", "41308dc8cb155421b36bf4e58a0fe50b", "dd7355f3917f77627fa683748e94db34", "5df6c4dcbe6da9ca2cdb1eeff8db6bdf", "c5c52b9e809325a878f4bd924039e127", "0c6838f456658cb5a1c7883bccdee8a2", "2c494c274c8fe8d3e81b780701f6f3b0"];
-let keyIdx = 0;
-function getKey(){return API_KEYS[keyIdx % Math.max(API_KEYS.length,1)]}
-function rotateKey(){keyIdx++;log('🔄 Rotating to key #'+(keyIdx+1),'linf')}
-
-/* ── START / STOP ── */
-function startScan(){
-  if(!API_KEYS.length){
-    // No keys injected — show a one-time fallback input
-    const k=prompt('No keys injected. Enter your Odds API key to scan:');
-    if(!k)return;
-    API_KEYS.push(k.trim());
-  }
-  EVS=[];ARBS=[];sportIdx=0;scanning=true;scanT0=Date.now();creditT0=null;keyIdx=0;
-  $('btnStart').style.display='none';$('btnStop').style.display='';
-  $('scanBar').classList.add('on');$('scanLog').innerHTML='';
-  $('ev-cards').innerHTML='';$('arb-cards').innerHTML='';
-  updateBadges();log('Sweep initializing… key #1 active','linf');
-  runNext();
-}
-
-function stopScan(){
-  scanning=false;
-  $('btnStart').style.display='';$('btnStop').style.display='none';
-  $('progFill').style.width='100%';
-  log('Sweep stopped.','lerr');
-  $('telT').textContent=((Date.now()-scanT0)/1000).toFixed(1)+'s';
-  if(EVS.length||ARBS.length)renderAn();
-}
-
-/* ── SPORT LOOP ── */
-async function runNext(){
-  if(!scanning||sportIdx>=SPORTS.length){stopScan();log('✅ Complete! EV:'+EVS.length+' ARB:'+ARBS.length,'lok');return}
-  const sp=SPORTS[sportIdx];
-  const pct=Math.round(sportIdx/SPORTS.length*100);
-  $('scanSport').textContent=sp.l;
-  $('scanPct').textContent=(sportIdx+1)+'/'+SPORTS.length;
-  $('progFill').style.width=pct+'%';
-  log('Fetching '+sp.l+'…');
-  try{
-    const key=getKey();
-    const books=getBooks().join(',');
-    const url=`https://api.the-odds-api.com/v4/sports/${sp.k}/odds?apiKey=${key}&regions=eu&bookmakers=${encodeURIComponent(books)}&markets=totals,spreads&oddsFormat=decimal`;
-    const res=await fetch(url);
-    const rem=res.headers.get('x-requests-remaining');
-    const used=res.headers.get('x-requests-used');
-    if(rem){quotaRem=rem;$('tQuota').textContent=rem+'/500';$('telQ').textContent=rem+'/500'}
-    if(used){
-      if(!creditT0)creditT0=parseInt(used)-1;
-      const burn=parseInt(used)-creditT0;
-      $('tBurn').textContent=burn;$('telB').textContent=burn;
-    }
-    if(res.status===401){
-      log('❌ Key #'+(keyIdx+1)+' rejected (401)','lerr');
-      if(keyIdx+1<API_KEYS.length){rotateKey();runNext();return}
-      else{log('❌ All keys exhausted','lerr');stopScan();return}
-    }
-    if(res.status===429){
-      log('⚠ Rate limit on key #'+(keyIdx+1),'lerr');
-      if(keyIdx+1<API_KEYS.length){rotateKey();setTimeout(runNext,500);return}
-      else{log('⚠ All keys rate-limited, waiting 5s…','lerr');await sleep(5000);runNext();return}
-    }
-    if(!res.ok){log('⚠ HTTP '+res.status,'lerr');sportIdx++;setTimeout(runNext,1200);return}
-    const events=await res.json();
-    log('📦 '+events.length+' events (key #'+(keyIdx+1)+')','lok');
-    processEvents(events,sp.k);
-  }catch(e){log('❌ '+e.message,'lerr')}
-  sportIdx++;
-  setTimeout(runNext,1500);
-}
-function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
-
-/* ── MATH ENGINE ── */
-function processEvents(events,sport){
-  const books=getBooks(),minEV=getMinEV(),minARB=getMinARB();
-  const bankroll=getBK(),kf=getKF();
-  events.forEach(event=>{
-    const match=event.home_team+' vs '+event.away_team;
-    const mt=fmtIST(event.commence_time);
-    const bookmakers=event.bookmakers||[];
-    const EL={},AL={};
-    bookmakers.forEach(b=>{
-      if(!books.includes(b.key))return;
-      (b.markets||[]).forEach(m=>{
-        if(!['totals','spreads'].includes(m.key))return;
-        const mk=m.key.toUpperCase();
-        m.outcomes.forEach(o=>{
-          const pt=String(o.point||'0'),name=o.name;
-          let price=o.price;
-          if(b.key==='betfair_ex_eu')price=1+(price-1)*.97;
-          const lk=mk+'_'+pt;
-          if(!EL[lk])EL[lk]={pin:{},best:{},all:{}};
-          if(!AL[lk])AL[lk]={};
-          if(b.key==='pinnacle'){
-            EL[lk].pin[name]=price;
-          }else{
-            if(!EL[lk].best[name]||price>EL[lk].best[name].price)EL[lk].best[name]={price,bookie:b.key};
-            if(!EL[lk].all[name])EL[lk].all[name]={};
-            EL[lk].all[name][b.key]=price;
-          }
-          if(!AL[lk][name]||price>AL[lk][name].price)AL[lk][name]={price,bookie:b.key};
+function buildUI() {
+    document.getElementById('cntEV').textContent = STATE.evs.length;
+    document.getElementById('cntARB').textContent = STATE.arbs.length;
+    
+    let evHtml = '';
+    STATE.evs.forEach(ev => {
+        let rows = '';
+        ev.ev_breakdown.forEach(r => {
+            rows += `<tr style="${r.is_best ? 'color:var(--cyan);font-weight:700;':''}"><td>${bkName(r.bookie)}</td><td>${r.odds.toFixed(3)}</td><td>${r.ev_pct>0?'+':''}${r.ev_pct.toFixed(2)}%</td></tr>`;
         });
-      });
-    });
-    // EV
-    Object.entries(EL).forEach(([lk,d])=>{
-      const sides=Object.keys(d.pin);
-      if(sides.length<2)return;
-      const[s1,s2]=sides;
-      const[t1,t2]=devig(d.pin[s1],d.pin[s2]);
-      [[s1,t1],[s2,t2]].forEach(([side,trueO])=>{
-        if(!d.best[side])return;
-        const sp=d.best[side].price;
-        if(sp<=trueO)return;
-        const evp=((sp/trueO)-1)*100;
-        if(evp<minEV)return;
-        const stake=kelly(sp,trueO,bankroll,kf,d.best[side].bookie);
-        const cf=conf(sp,trueO);
-        const bd=buildBD(d,side,trueO);
-        const ev={pct:evp,match,time:mt,sport,line:lk,sel:side,odds:sp,true:trueO,bookie:d.best[side].bookie,stake,conf:cf,bd};
-        EVS.push(ev);renderEV(ev,EVS.length-1);
         
-        // CHECK CACHE AND SEND NTFY ALERT FOR EV
-        const alertKey = `EV|${match}|${lk}|${side}|${sp.toFixed(2)}`;
-        if (!isDuplicateAlert(alertKey)) {
-            const msg = `💎 💰 📈 ${evp.toFixed(2)}% EV | ${match}
-🏆 ${sport.replace(/_/g, ' ').toUpperCase()}
-📅 ${mt}
-📈 ${lk}
-
-💰 BET EXACTLY: ₹${stake.toFixed(0)}
-👉 ${side.toUpperCase()} @ ${sp.toFixed(2)} on ${bk(d.best[side].bookie)}
-
-🧠 True Odds: ${trueO.toFixed(3)} | Confidence: ${cf}/100`;
-            sendNtfyAlert(msg, evp, match, "EV");
-        }
-      });
+        evHtml += `
+        <div class="card ev">
+            <div class="c-hdr">
+                <div>
+                    <span style="color:var(--text-s);font-size:12px;">${ev.sport.replace(/_/g,' ').toUpperCase()}</span><br>
+                    <strong>${ev.match}</strong>
+                </div>
+                <div class="c-tag hl">${ev.pct.toFixed(2)}%</div>
+            </div>
+            <div style="margin-bottom:12px;">
+                <span style="font-family:'JetBrains Mono'; color:var(--text-s); font-size:11px;">LINE</span><br>
+                <span style="font-weight:700;">${ev.line} &nbsp;👉&nbsp; ${ev.selection.toUpperCase()}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; background:#27272a; padding:10px; border-radius:8px;">
+                <div><span style="font-size:11px; color:var(--text-s);">REC. STAKE</span><br><strong class="ev-stake hl" data-soft="${ev.odds}" data-true="${ev.true}" data-book="${ev.bookie}" style="font-size:18px;">${fmt(ev.stake)}</strong></div>
+                <div style="text-align:right;"><span style="font-size:11px; color:var(--text-s);">BOOKMAKER</span><br><strong class="hl-g" style="font-size:16px;">${bkName(ev.bookie)} @ ${ev.odds.toFixed(2)}</strong></div>
+            </div>
+            <details style="margin-top:10px; font-size:12px; color:var(--text-s); cursor:pointer;"><summary>View Odds Matrix (True: ${ev.true.toFixed(3)})</summary>
+                <table class="bd-tbl">${rows}</table>
+            </details>
+        </div>`;
     });
-    // ARB
-    Object.entries(AL).forEach(([lk,outs])=>{
-      const keys=Object.keys(outs);
-      for(let ways=2;ways<=3;ways++){
-        if(keys.length<ways)continue;
-        const k=keys.slice(0,ways);
-        const margin=k.reduce((s,ki)=>s+1/outs[ki].price,0);
-        if(margin>=1)continue;
-        const pct=(1-margin)*100;
-        if(pct<minARB)continue;
-        const arb={pct,match,time:mt,sport,line:lk,ways,
-          sides:k.map(ki=>({sel:ki,price:outs[ki].price,bookie:outs[ki].bookie,stake:(bankroll/margin)/outs[ki].price})),
-          profit:(bankroll/margin)-bankroll};
-        ARBS.push(arb);renderARB(arb,ARBS.length-1);
+    document.getElementById('ev-container').innerHTML = evHtml || '<div style="text-align:center; padding:30px; color:var(--text-s);">No EV edges detected in current scan.</div>';
+
+    let arbHtml = '';
+    STATE.arbs.forEach(arb => {
+        const margin = 1 - (arb.pct/100);
+        let legs = '';
+        for(let i=1; i<=arb.ways; i++) {
+            let pr = arb['s'+i+'_price'], bk = arb['s'+i+'_bookie'];
+            legs += `<div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <span>${arb['s'+i].toUpperCase()} @ <span class="hl-g">${pr.toFixed(2)}</span> [${bkName(bk)}]</span>
+                <strong class="arb-stake hl" data-margin="${margin}" data-price="${pr}">${fmt(arb['stk'+i])}</strong>
+            </div>`;
+        }
+        arbHtml += `
+        <div class="card arb">
+            <div class="c-hdr">
+                <div><span style="font-size:12px; color:var(--text-s);">${arb.sport.replace(/_/g,' ').toUpperCase()}</span><br><strong>${arb.match}</strong></div>
+                <div class="c-tag hl-g">${arb.pct.toFixed(2)}%</div>
+            </div>
+            <div style="margin-bottom:10px; font-weight:700;">${arb.line} <span style="font-size:10px; background:#3f3f46; padding:2px 6px; border-radius:4px; margin-left:8px;">${arb.ways}-WAY</span></div>
+            <div style="background:#27272a; padding:10px; border-radius:8px; margin-bottom:10px; font-family:'JetBrains Mono'; font-size:13px;">${legs}</div>
+            <div style="text-align:right; font-size:12px; color:var(--text-s);">GUARANTEED PROFIT: <strong class="arb-profit" style="color:var(--green); font-size:18px;" data-margin="${margin}">${fmt(arb.profit)}</strong></div>
+        </div>`;
+    });
+    document.getElementById('arb-container').innerHTML = arbHtml || '<div style="text-align:center; padding:30px; color:var(--text-s);">No Arbitrage locks detected.</div>';
+
+    renderNetwork();
+    recalc();
+}
+
+function renderNetwork() {
+    let netHtml = '';
+    STATE.masked.forEach((mKey, idx) => {
+        let statusClass = "s-rdy", statusText = "STANDBY";
+        let rem = STATE.apiState.stats[idx] ? STATE.apiState.stats[idx].remaining : 500;
         
-        // CHECK CACHE AND SEND NTFY ALERT FOR ARB
-        const alertKey = `ARB|${match}|${lk}|${pct.toFixed(2)}`;
-        if (!isDuplicateAlert(alertKey)) {
-            let msg = `💎 💰 🚨 ${pct.toFixed(2)}% ARB | ${match}
-🏆 ${sport.replace(/_/g, ' ').toUpperCase()}
-📅 ${mt}
-📈 ${lk}
-
-`;
-            arb.sides.forEach(s => {
-                msg += `🔵 ₹${s.stake.toFixed(0)} on ${s.sel.toUpperCase()} @ ${s.price.toFixed(2)} [${bk(s.bookie)}]
-`;
-            });
-            msg += `
-✨ Profit: ₹${arb.profit.toFixed(0)}`;
-            sendNtfyAlert(msg, pct, match, "ARB");
-        }
-      }
+        if (idx === STATE.activeIdx) { statusClass = "s-act"; statusText = "ACTIVE NOW"; }
+        else if (rem <= 0) { statusClass = "s-exh"; statusText = "EXHAUSTED"; }
+        
+        netHtml += `
+        <div class="net-card ${statusClass}">
+            <div>
+                <div style="font-size:10px; color:var(--text-s); margin-bottom:2px;">KEY #${idx+1} &nbsp;[${statusText}]</div>
+                <div class="net-k">${mKey}</div>
+            </div>
+            <div class="net-rem">${rem}/500</div>
+        </div>`;
     });
-    $('tEV').textContent=EVS.length;$('tARB').textContent=ARBS.length;
-    updateBadges();
-  });
+    document.getElementById('netGrid').innerHTML = netHtml;
 }
 
-function buildBD(d,side,trueO){
-  const rows=[];
-  if(d.pin[side])rows.push({bookie:'pinnacle',odds:d.pin[side],ev:0,best:false});
-  const all=d.all[side]||{};
-  let bEV=-999,bBk=null;
-  Object.entries(all).forEach(([bk,odds])=>{const e=((odds/trueO)-1)*100;rows.push({bookie:bk,odds,ev:e,best:false});if(e>bEV){bEV=e;bBk=bk}});
-  rows.forEach(r=>{if(r.bookie===bBk)r.best=true});
-  return rows;
+function startEngine() {
+    STATE.isScanning = true;
+    document.getElementById('btnStart').style.display = 'none';
+    document.getElementById('btnStop').style.display = '';
+    executeSweep();
 }
 
-/* ── RENDER EV ── */
-function renderEV(ev,idx){
-  const c=$('ev-cards');
-  if(c.querySelector('.empty'))c.innerHTML='';
-  const eColor=ev.pct>=10?'var(--red)':ev.pct>=5?'var(--gold)':'var(--green)';
-  const stripe=idx===0?'st-gold':idx===1?'st-silver':idx===2?'st-bronze':'st-ev';
-  const cColor=ev.conf>=70?'var(--green)':ev.conf>=40?'var(--gold)':'var(--red)';
-  const cLbl=ev.conf>=70?'HIGH':ev.conf>=40?'MED':'LOW';
-  let bd='';
-  if(ev.bd&&ev.bd.length){
-    const rows=ev.bd.map(r=>`<tr class="${r.best?'bk-best':''}"><td>${bk(r.bookie)}</td><td>${r.odds.toFixed(3)}</td><td>${r.ev>=0?'+':''}${r.ev.toFixed(2)}%</td></tr>`).join('');
-    bd=`<div class="bd-wrap"><table class="bd-tbl"><thead><tr><th>Book</th><th>Odds</th><th>EV%</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-  }
-  const card=document.createElement('div');
-  card.className='card ev-card';card.style.animationDelay=(idx*.05)+'s';card.dataset.pct=ev.pct;card.dataset.conf=ev.conf;
-  card.innerHTML=`<div class="stripe ${stripe}"></div>
-    <div class="c-head">
-      <div class="c-head-l"><span class="spt">${si(ev.sport)}</span><div><div class="mtitle">${ev.match}</div><div class="mmeta">${ev.sport.replace(/_/g,' ').toUpperCase()} · ${ev.time}</div></div></div>
-      <div class="ev-badge" style="color:${eColor};border-color:${eColor}44;text-shadow:0 0 12px ${eColor}88">${fp(ev.pct)}</div>
-    </div>
-    <div class="c-body">
-      <div class="chip chip-ev">${ev.line}</div>
-      <div class="bet-box">
-        <div class="bet-l"><span class="blbl">BET</span><span class="bsel">${ev.sel.toUpperCase()}</span><span class="bpt">@ ${ev.line.split('_')[1]||''}</span><span class="bodds">× ${ev.odds.toFixed(2)}</span></div>
-        <span class="book-tag">${bk(ev.bookie)}</span>
-      </div>
-      <div class="mrow">
-        <div class="mbox"><span class="mlbl">KELLY STAKE</span>
-          <span class="mval sv sdyn" data-soft="${ev.odds}" data-true="${ev.true}" data-book="${ev.bookie}">${fmt(ev.stake)}</span></div>
-        <div class="mbox"><span class="mlbl">TRUE ODDS</span><span class="mval tv2">${ev.true.toFixed(3)}</span></div>
-      </div>
-      <div class="crow"><span class="mlbl" style="font-size:8px">CONF</span>
-        <div class="cbar-out"><span class="ctag" style="color:${cColor}">${cLbl}</span>
-          <div class="ctrack"><div class="cfill" style="width:${ev.conf}%;background:${cColor};box-shadow:0 0 8px ${cColor}66"></div></div>
-          <span class="cscore" style="color:${cColor}">${ev.conf}</span>
-        </div>
-      </div>
-      ${bd}
-    </div>`;
-  c.appendChild(card);applyFilters();
+function stopEngine() {
+    STATE.isScanning = false;
+    clearTimeout(STATE.loopTimer);
+    document.getElementById('btnStart').style.display = '';
+    document.getElementById('btnStop').style.display = 'none';
+    document.getElementById('scanStatus').textContent = "SYSTEM IDLE";
+    document.getElementById('scanStatus').style.color = "var(--text-s)";
 }
 
-/* ── RENDER ARB ── */
-function renderARB(arb,idx){
-  const c=$('arb-cards');
-  if(c.querySelector('.empty'))c.innerHTML='';
-  const wc=arb.ways===2?'var(--cyan)':'var(--purple)';
-  const legs=arb.sides.map(s=>`<div class="leg">
-    <span class="lsel">${s.sel.toUpperCase()}</span>
-    <span class="lodds">@ ${s.price.toFixed(2)}</span>
-    <span class="lstake ldyn" data-base="${s.stake.toFixed(2)}">${fmt(s.stake)}</span>
-    <span class="lbook">${bk(s.bookie)}</span>
-  </div>`).join('');
-  const card=document.createElement('div');
-  card.className='card arb-card';card.style.animationDelay=(idx*.05)+'s';card.dataset.pct=arb.pct;card.dataset.ways=arb.ways;
-  card.innerHTML=`<div class="stripe st-arb"></div>
-    <div class="c-head">
-      <div class="c-head-l"><span class="spt">${si(arb.sport)}</span><div><div class="mtitle">${arb.match}</div><div class="mmeta">${arb.sport.replace(/_/g,' ').toUpperCase()} · ${arb.time}</div></div></div>
-      <div class="arb-badge">
-        <span class="arb-pct" style="color:${wc};font-family:'JetBrains Mono',monospace">${fp(arb.pct)}</span>
-        <span class="ways" style="color:${wc};border-color:${wc}44;background:${wc}14">${arb.ways}W</span>
-      </div>
-    </div>
-    <div class="c-body">
-      <div class="chip chip-arb">${arb.line}</div>
-      <div class="legs">${legs}</div>
-      <div class="prof-banner"><span class="pb-lbl">GUARANTEED PROFIT</span><span class="pb-val">${fmt(arb.profit)}</span></div>
-    </div>`;
-  c.appendChild(card);applyArbFilters();
+async function executeSweep() {
+    if (!STATE.isScanning) return;
+    document.getElementById('scanStatus').textContent = "🔄 SWEEP IN PROGRESS...";
+    document.getElementById('scanStatus').style.color = "var(--cyan)";
+    
+    let pat = localStorage.getItem('gh_dispatch_token');
+    if (!pat) {
+        pat = prompt("Enter your GitHub PAT (ghp_...) to authorize Auto-Loop sweeps:");
+        if (!pat) { stopEngine(); return; }
+        localStorage.setItem('gh_dispatch_token', pat);
+    }
+    
+    try {
+        let res = await fetch('https://api.github.com/repos/nikunj7711/arb-sniper/actions/workflows/sniper.yml/dispatches', {
+            method: 'POST',
+            headers: { 'Accept': 'application/vnd.github.v3+json', 'Authorization': 'token ' + pat, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ref: 'main' })
+        });
+        
+        if(res.ok) {
+            document.getElementById('scanStatus').textContent = "☁️ CLOUD ENGINE FIRED. WAITING 45s...";
+            document.getElementById('scanStatus').style.color = "var(--gold)";
+            
+            STATE.loopTimer = setTimeout(() => {
+                if(STATE.isScanning) {
+                    if (document.getElementById('autoLoop').checked) {
+                        sessionStorage.setItem('auto_resume', 'true');
+                    }
+                    window.location.reload(true);
+                }
+            }, 45000);
+            
+        } else {
+            alert("Authorization failed. Resetting token.");
+            localStorage.removeItem('gh_dispatch_token');
+            stopEngine();
+        }
+    } catch (e) {
+        console.error(e); stopEngine();
+    }
 }
 
-/* ── BADGES ── */
-function updateBadges(){$('bEV').textContent=EVS.length;$('bARB').textContent=ARBS.length}
+window.onload = () => {
+    buildUI();
+    if (sessionStorage.getItem('auto_resume') === 'true') {
+        document.getElementById('btnStart').style.display = 'none';
+        document.getElementById('btnStop').style.display = '';
+        document.getElementById('scanStatus').textContent = "⏳ STANDBY (5 MINUTE TIMEOUT)";
+        document.getElementById('scanStatus').style.color = "var(--gold)";
+        STATE.isScanning = true;
+        
+        STATE.loopTimer = setTimeout(() => {
+            executeSweep();
+        }, 300000); 
+    }
+};
 
-/* ── INIT EMPTY ── */
-function initEmpty(){
-  $('ev-cards').innerHTML=`<div class="empty"><div class="ei">📡</div><div class="et">No EV edges yet</div><div class="es">Configure your key and tap Start Sweep</div></div>`;
-  $('arb-cards').innerHTML=`<div class="empty"><div class="ei">🔒</div><div class="et">No arbitrage windows</div><div class="es">All sports will be scanned on sweep</div></div>`;
-}
-initEmpty();
-
-/* ── EV FILTERS ── */
-function applyFilters(){
-  const cards=[...$('ev-cards').querySelectorAll('.ev-card')];
-  cards.forEach((c,i)=>{
-    let hide=false;
-    if(top5&&i>=5)hide=true;
-    if(hcFilter&&parseFloat(c.dataset.conf)<60)hide=true;
-    c.style.display=hide?'none':'';
-  });
-}
-function toggleTop5(){
-  top5=!top5;
-  $('top5Btn').style.borderColor=top5?'var(--cyan)':'var(--b2)';
-  $('top5Btn').style.color=top5?'var(--cyan)':'var(--text2)';
-  applyFilters();
-}
-function toggleSort(){
-  sortOn=!sortOn;
-  $('sortBtn').style.borderColor=sortOn?'var(--gold)':'var(--b2)';
-  $('sortBtn').style.color=sortOn?'var(--gold)':'var(--text2)';
-  const c=$('ev-cards');
-  const cards=[...c.querySelectorAll('.ev-card')];
-  if(sortOn)cards.sort((a,b)=>parseFloat(b.dataset.pct)-parseFloat(a.dataset.pct));
-  cards.forEach(card=>c.appendChild(card));
-}
-function toggleHC(){
-  hcFilter=!hcFilter;
-  $('filterHCBtn').style.borderColor=hcFilter?'var(--green)':'var(--b2)';
-  $('filterHCBtn').style.color=hcFilter?'var(--green)':'var(--text2)';
-  applyFilters();
-}
-
-/* ── ARB FILTERS ── */
-function applyArbFilters(){
-  const cards=[...$('arb-cards').querySelectorAll('.arb-card')];
-  cards.forEach((c,i)=>{
-    let hide=false;
-    if(arb3&&parseInt(c.dataset.ways)!==3)hide=true;
-    c.style.display=hide?'none':'';
-  });
-}
-function toggleArb3(){
-  arb3=!arb3;
-  $('arb3Btn').style.borderColor=arb3?'var(--purple)':'var(--b2)';
-  $('arb3Btn').style.color=arb3?'var(--purple)':'var(--text2)';
-  applyArbFilters();
-}
-function toggleArbSort(){
-  arbSort=!arbSort;
-  $('arbSortBtn').style.borderColor=arbSort?'var(--gold)':'var(--b2)';
-  $('arbSortBtn').style.color=arbSort?'var(--gold)':'var(--text2)';
-  const c=$('arb-cards');
-  const cards=[...c.querySelectorAll('.arb-card')];
-  if(arbSort)cards.sort((a,b)=>parseFloat(b.dataset.pct)-parseFloat(a.dataset.pct));
-  cards.forEach(card=>c.appendChild(card));
-}
-
-/* ── CSV EXPORT ── */
-function exportCSV(){
-  let rows=[['Type','Match','Sport','Line','Selection','Odds','TrueOdds','EV%/ARB%','Stake','Bookmaker','Confidence']];
-  EVS.forEach(e=>rows.push(['EV',e.match,e.sport,e.line,e.sel,e.odds.toFixed(3),e.true.toFixed(3),e.pct.toFixed(2),e.stake.toFixed(0),bk(e.bookie),e.conf]));
-  ARBS.forEach(a=>rows.push(['ARB',a.match,a.sport,a.line,a.sides.map(s=>s.sel).join('/'),a.sides.map(s=>s.price.toFixed(2)).join('/'), '',a.pct.toFixed(2),a.sides.reduce((s,x)=>s+x.stake,0).toFixed(0),a.sides.map(s=>bk(s.bookie)).join('+'),'']));
-  const csv=rows.map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n');
-  const bl=new Blob([csv],{type:'text/csv'});
-  const u=URL.createObjectURL(bl);
-  const a=document.createElement('a');a.href=u;a.download='arb_sniper_'+Date.now()+'.csv';a.click();
-  URL.revokeObjectURL(u);
-}
-
-/* ══════════ CALCULATORS ══════════ */
-function calcEV(){
-  const soft=parseFloat($('cSoft').value)||0,pA=parseFloat($('cPinA').value)||0,pB=parseFloat($('cPinB').value)||0;
-  if(!soft||!pA||!pB||pA<=1||pB<=1){rst(['rTO','rEV','rKS','rCF']);return}
-  const[t1]=devig(pA,pB);
-  const evp=((soft/t1)-1)*100;
-  const stake=kelly(soft,t1,getBK(),getKF());
-  const cf=conf(soft,t1);
-  $('rTO').textContent=t1.toFixed(3);
-  $('rEV').textContent=(evp>=0?'+':'')+evp.toFixed(2)+'%';$('rEV').style.color=evp>=0?'var(--green)':'var(--red)';
-  $('rKS').textContent=stake>0?fmt(stake):'No edge';
-  const cc=cf>=70?'var(--green)':cf>=40?'var(--gold)':'var(--red)';
-  $('rCF').textContent=cf+'/100';$('rCF').style.color=cc;
-}
-function calcARB(){
-  const A=parseFloat($('cAA').value)||0,B=parseFloat($('cAB').value)||0;
-  const Cv=$('cAC').value.trim();const C=Cv?parseFloat(Cv):0;
-  if(!A||!B||A<=1||B<=1){rst(['rAM','rAP','rAS','rAB','rAG']);return}
-  const sides=C>1?[A,B,C]:[A,B];
-  const margin=sides.reduce((s,o)=>s+1/o,0);
-  const bkv=getBK(),pct=(1-margin)*100;
-  $('rAM').textContent=margin.toFixed(4);$('rAM').style.color=margin<1?'var(--green)':'var(--red)';
-  $('rAP').textContent=pct.toFixed(3)+'%';$('rAP').style.color=pct>0?'var(--green)':'var(--red)';
-  $('rAS').textContent=margin<1?fmt((bkv/margin)/A):'--';
-  $('rAB').textContent=margin<1?fmt((bkv/margin)/B):'--';
-  $('rAG').textContent=margin<1?fmt((bkv/margin)-bkv):'No ARB';$('rAG').style.color=margin<1?'var(--green)':'var(--red)';
-}
-function calcGU(){
-  const stake=parseFloat($('gBS').value)||0,back=parseFloat($('gBO').value)||0,lay=parseFloat($('gLO').value)||0;
-  if(!stake||!back||!lay||back<=1||lay<=1){rst(['rGL','rGP']);return}
-  const ls=(stake*back)/lay,p=ls-stake;
-  $('rGL').textContent=fmt(ls);
-  $('rGP').textContent=(p>=0?'+':'')+fmt(p);$('rGP').style.color=p>=0?'var(--green)':'var(--red)';
-}
-function calcKelly(){
-  const p=parseFloat($('kP').value)||0,o=parseFloat($('kO').value)||0,bkv=parseFloat($('kB').value)||1500;
-  if(!p||!o||p<=0||p>=1||o<=1){rst(['rFK','rFR','rKA']);return}
-  const b=o-1,q=1-p,full=((b*p-q)/b);
-  const frac=full*.30;
-  $('rFK').textContent=(full*100).toFixed(2)+'%';
-  $('rFR').textContent=(frac*100).toFixed(2)+'%';
-  const stake=frac>0?Math.max(20,Math.min(bkv*frac,bkv*.05)):0;
-  $('rKA').textContent=stake>0?fmt(stake):'No edge';$('rKA').style.color=stake>0?'var(--green)':'var(--red)';
-}
-function rst(ids){ids.forEach(id=>{$(id).textContent='--';$(id).style.color=''})}
-calcEV();calcARB();calcGU();calcKelly();
-
-/* ══════════ ANALYTICS ══════════ */
-function renderAn(){
-  const evs=EVS,arbs=ARBS;
-  const totP=arbs.reduce((s,a)=>s+a.profit,0);
-  const totS=arbs.reduce((s,a)=>s+a.sides.reduce((x,y)=>x+y.stake,0),0);
-  const roi=totS>0?(totP/totS*100):0;
-  const avgEV=evs.length?evs.reduce((s,e)=>s+e.pct,0)/evs.length:0;
-  const pkEV=evs.length?Math.max(...evs.map(e=>e.pct)):0;
-  const avgARB=arbs.length?arbs.reduce((s,a)=>s+a.pct,0)/arbs.length:0;
-  const pkARB=arbs.length?Math.max(...arbs.map(a=>a.pct)):0;
-  $('anTE').textContent=evs.length;$('anAE').textContent=avgEV.toFixed(2)+'%';$('anPE').textContent=pkEV.toFixed(2)+'%';
-  $('anTA').textContent=arbs.length;$('anAP').textContent=fmt(totP);$('anROI').textContent=roi.toFixed(2)+'%';
-  // EV hist
-  const eh=[{l:'0–2%',c:evs.filter(e=>e.pct<2).length,g:'linear-gradient(90deg,#4fa3ff,#00d8ff)'},
-    {l:'2–5%',c:evs.filter(e=>e.pct>=2&&e.pct<5).length,g:'linear-gradient(90deg,#00ff90,#00d8ff)'},
-    {l:'5–10%',c:evs.filter(e=>e.pct>=5&&e.pct<10).length,g:'linear-gradient(90deg,#ffd000,#ff8c00)'},
-    {l:'10%+',c:evs.filter(e=>e.pct>=10).length,g:'linear-gradient(90deg,#ff3352,#ff6b35)'}];
-  hist('anEH',eh);
-  $('anES').innerHTML=ms('AVG','var(--green)',avgEV.toFixed(2)+'%')+ms('PEAK','var(--gold)',pkEV.toFixed(2)+'%')+ms('COUNT','var(--cyan)',evs.length);
-  // ARB hist
-  const ah=[{l:'0–1%',c:arbs.filter(a=>a.pct<1).length,g:'linear-gradient(90deg,#64748b,#94a3b8)'},
-    {l:'1–2%',c:arbs.filter(a=>a.pct>=1&&a.pct<2).length,g:'linear-gradient(90deg,#c47eff,#7e22ce)'},
-    {l:'2–5%',c:arbs.filter(a=>a.pct>=2&&a.pct<5).length,g:'linear-gradient(90deg,#00d8ff,#c47eff)'},
-    {l:'5%+',c:arbs.filter(a=>a.pct>=5).length,g:'linear-gradient(90deg,#00ff90,#00d8ff)'}];
-  hist('anAH',ah);
-  $('anAS').innerHTML=ms('AVG','var(--purple)',avgARB.toFixed(2)+'%')+ms('PEAK','var(--cyan)',pkARB.toFixed(2)+'%')+ms('COUNT','var(--green)',arbs.length);
-  // EV by sport
-  bars('anESP',groupBy(evs,e=>sportFmt(e.sport)),'linear-gradient(90deg,var(--cyan),var(--green))',v=>v.length,v=>v.length+' | avg '+(v.reduce((s,e)=>s+e.pct,0)/v.length).toFixed(1)+'%');
-  bars('anASP',groupBy(arbs,a=>sportFmt(a.sport)),'linear-gradient(90deg,var(--purple),var(--cyan))',v=>v.length,v=>v.length);
-  // EV bookmakers
-  barsColor('anEB',groupBy(evs,e=>bk(e.bookie)),['var(--cyan)','var(--green)','var(--gold)','var(--purple)','var(--red)'],v=>v.length,v=>v.length+' | avg '+(v.reduce((s,e)=>s+e.pct,0)/v.length).toFixed(1)+'%');
-  // ARB pairs
-  const pm={};arbs.forEach(a=>{const p=a.sides.map(s=>bk(s.bookie)).join(' + ');pm[p]=(pm[p]||0)+1});
-  const ps=Object.entries(pm).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  const maxP=ps[0]?ps[0][1]:1;
-  $('anAPR').innerHTML=ps.map(([p,c])=>`<div class="brow"><span class="blbl2" style="font-size:10px">${p}</span><div class="btrack"><div class="bfill" style="width:${Math.round(c/maxP*100)}%;background:linear-gradient(90deg,var(--purple),var(--cyan))"></div></div><span class="bcnt" style="color:var(--purple)">${c}</span></div>`).join('')||empty2();
-  // Donut
-  const tw=arbs.filter(a=>a.ways===2).length,th=arbs.filter(a=>a.ways===3).length,tot=Math.max(tw+th,1);
-  $('anDonut').style.setProperty('--tw',Math.round(tw/tot*100)+'%');
-  $('an2w').textContent=tw;$('an3w').textContent=th;
-  $('anAMeta').innerHTML=ms('STAKE','var(--gold)',fmt(totS))+ms('PROFIT','var(--green)',fmt(totP))+ms('ROI','var(--orange)',roi.toFixed(2)+'%');
-  // Confidence
-  const cb=[{l:'0–29',c:evs.filter(e=>e.conf<30).length,cl:'var(--red)'},
-    {l:'30–59',c:evs.filter(e=>e.conf>=30&&e.conf<60).length,cl:'var(--gold)'},
-    {l:'60–79',c:evs.filter(e=>e.conf>=60&&e.conf<80).length,cl:'var(--cyan)'},
-    {l:'80+',c:evs.filter(e=>e.conf>=80).length,cl:'var(--green)'}];
-  const mc=Math.max(...cb.map(b=>b.c),1);
-  const hc=evs.filter(e=>e.conf>=60).length,hcP=evs.length?Math.round(hc/evs.length*100):0;
-  $('anCS').innerHTML=cb.map(b=>`<div class="hrow"><span class="hlbl">${b.l}</span><div class="htrack"><div class="hbar" style="width:${Math.round(b.c/mc*100)}%;background:${b.cl};box-shadow:0 0 6px ${b.cl}55"></div></div><span class="hcnt" style="color:${b.cl}">${b.c}</span></div>`).join('')+
-    `<div class="mini-stats" style="margin-top:10px;border-top:1px solid var(--b1);padding-top:9px;">${ms('HIGH CONF','var(--green)',hcP+'%')}${ms('SCORED','var(--cyan)',evs.length)}</div>`;
-}
-function ms(l,c,v){return`<div class="ms"><span class="msl">${l}</span><span class="msv" style="color:${c}">${v}</span></div>`}
-function sportFmt(s){return s.replace(/_/g,' ').split(' ').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ')}
-function groupBy(arr,fn){const m={};arr.forEach(x=>{const k=fn(x);(m[k]=m[k]||[]).push(x)});return Object.entries(m).sort((a,b)=>b[1].length-a[1].length).slice(0,5)}
-function hist(id,buckets){const max=Math.max(...buckets.map(b=>b.c),1);$(id).innerHTML=buckets.map(b=>`<div class="hrow"><span class="hlbl">${b.l}</span><div class="htrack"><div class="hbar" style="width:${Math.round(b.c/max*100)}%;background:${b.g}"></div></div><span class="hcnt">${b.c}</span></div>`).join('')}
-function bars(id,entries,grad,vFn,lFn){
-  if(!entries.length){$(id).innerHTML=empty2();return}
-  const max=Math.max(...entries.map(([,v])=>vFn(v)),1);
-  $(id).innerHTML=entries.map(([k,v])=>`<div class="brow"><span class="blbl2">${k}</span><div class="btrack"><div class="bfill" style="width:${Math.round(vFn(v)/max*100)}%;background:${grad}"></div></div><span class="bcnt">${lFn(v)}</span></div>`).join('')
-}
-function barsColor(id,entries,cols,vFn,lFn){
-  if(!entries.length){$(id).innerHTML=empty2();return}
-  const max=Math.max(...entries.map(([,v])=>vFn(v)),1);
-  $(id).innerHTML=entries.map(([k,v],i)=>{const c=cols[i%cols.length];return`<div class="brow"><span class="blbl2" style="color:${c}">${k}</span><div class="btrack"><div class="bfill" style="width:${Math.round(vFn(v)/max*100)}%;background:${c}"></div></div><span class="bcnt" style="color:${c}">${lFn(v)}</span></div>`}).join('')
-}
-function empty2(){return'<div style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--text3);padding:10px 0">No data yet</div>'}
-
-/* ── INIT ── */
-(()=>{
-  const bkv=localStorage.getItem('arb_bk');
-  if(bkv){$('cfgBK').value=bkv;$('kB').value=bkv;$('telBK').textContent=fmt(parseFloat(bkv))}
-  // Show key status in header indicator
-  if(API_KEYS.length===0){
-    $('keyDot').style.background='var(--red)';
-    $('keyDot').style.boxShadow='0 0 8px var(--red)';
-    $('keyMsg').style.color='var(--red)';
-    $('keyMsg').textContent='No keys injected — deploy via GitHub Actions or enter key manually on scan';
-  } else {
-    const plural=API_KEYS.length>1?' keys':' key';
-    $('keyMsg').textContent=API_KEYS.length+plural+' injected via GitHub Secrets — ready ✓';
-    $('telKey').textContent=API_KEYS.length+' key'+(API_KEYS.length>1?'s':'');
-  }
-})();
-$('cfgBK').addEventListener('change',()=>{localStorage.setItem('arb_bk',$('cfgBK').value);$('kB').value=$('cfgBK').value});
 </script>
 </body>
 </html>
