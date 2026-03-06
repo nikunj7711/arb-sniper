@@ -2,8 +2,8 @@ name: Arb Sniper Bot
 
 on:
   schedule:
-    - cron: '30 4-18 * * *'
-  workflow_dispatch:
+    - cron: '0 * * * *' # Runs at the top of every hour automatically
+  workflow_dispatch: # Allows manual button clicks from GitHub
 
 permissions:
   contents: write
@@ -19,15 +19,15 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Run Sniper & Generate Dashboard
+      - name: Execute Cloud Scan & Build Terminal
         env:
           ODDS_API_KEYS: ${{ secrets.ODDS_API_KEYS }}
         run: python arb_sniper.py
 
-      - name: Publish Dashboard
+      - name: Save Neural Memory & Publish
         run: |
           git config --global user.name "Arb Sniper Bot"
           git config --global user.email "bot@arbsniper.com"
-          git add index.html
-          git commit -m "Update dashboard [$(date '+%Y-%m-%d %H:%M IST')]" || exit 0
+          git add index.html *.json
+          git commit -m "Auto-Sweep & State Save [$(date '+%Y-%m-%d %H:%M IST')]" || exit 0
           git push
