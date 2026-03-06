@@ -10,8 +10,8 @@ API_KEYS = [k.strip() for k in _raw_keys.split(',') if k.strip()]
 
 NTFY_CHANNEL = 'nikunj_arb_alerts_2026'
 TOTAL_BANKROLL = 1500
-MIN_EV_THRESHOLD = 1.5
-MIN_ARB_THRESHOLD = 1.0
+MIN_EV_THRESHOLD = 0.0
+MIN_ARB_THRESHOLD = 0.0
 
 MY_BOOKIES = 'pinnacle,onexbet,marathonbet,dafabet,stake,betfair_ex_eu,betway'
 TARGET_SPORTS = ['soccer_epl', 'soccer_uefa_champs_league', 'basketball_nba', 'icehockey_nhl', 'tennis_atp', 'tennis_wta']
