@@ -1,1214 +1,698 @@
-# Writes the complete index.html SPA
-import os, json
+import requests
+import time
+import os
+import json
+import threading
+from datetime import datetime, timezone, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# ── KEY INJECTION ──
-# Reads comma-separated keys from GitHub Secret ODDS_API_KEYS
-# Injects them directly into the JS so the browser never prompts for input
-_raw_keys = os.getenv('ODDS_API_KEYS', '')
-_keys_list = [k.strip() for k in _raw_keys.split(',') if k.strip()]
-# Serialise as a JS array literal, e.g. ["key1","key2"]
-INJECTED_KEYS_JS = json.dumps(_keys_list)
+# ==========================================
+#  CONFIGURATION
+# ==========================================
+api_keys_env = os.getenv('ODDS_API_KEYS', '')
+API_KEYS = api_keys_env.split(',') if api_keys_env else []
 
-HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate">
-<title>ARB SNIPER ⚡</title>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700;800&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
-<style>
-/* ═══════════ DESIGN SYSTEM ═══════════ */
-:root{
-  --bg:#03050b;--bg2:#060a12;--surf:#0a0f18;--surf2:#0f1520;--surf3:#151d28;
-  --b1:#182030;--b2:#1e2a3a;--b3:#283848;
-  --cyan:#00d8ff;--cyan2:#00aacc;
-  --green:#00ff90;--green2:#00cc72;
-  --gold:#ffd000;--gold2:#cc9f00;
-  --red:#ff3352;--red2:#cc1f3d;
-  --purple:#c47eff;--purple2:#8b2cf5;
-  --orange:#ff8c00;--blue:#4fa3ff;
-  --text:#dce8f5;--text2:#8aa0bc;--text3:#4a6480;
+NTFY_CHANNEL = 'nikunj_arb_alerts_2026'
+TOTAL_BANKROLL = 1500
+
+MIN_EV_THRESHOLD = 1.5  
+MIN_ARB_THRESHOLD = 1.0
+
+MY_BOOKIES = 'pinnacle,onexbet,marathonbet,dafabet,stake,betfair_ex_eu,betway'
+
+TARGET_SPORTS = [
+    'soccer_epl', 'soccer_uefa_champs_league',
+    'basketball_nba', 'icehockey_nhl',
+    'tennis_atp', 'tennis_wta'
+]
+
+BOOK_CAPS = {
+    'betway': 300,
+    'stake': 500,
+    'onexbet': 1000,
+    'marathonbet': 500,
+    'dafabet': 400,
+    'betfair_ex_eu': 2000,
+    'pinnacle': 2000
 }
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{font-size:14px;scroll-behavior:smooth}
-body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 
-/* grid + ambient */
-body::before{content:'';position:fixed;inset:0;z-index:0;
-  background-image:linear-gradient(rgba(0,216,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(0,216,255,.018) 1px,transparent 1px);
-  background-size:36px 36px;pointer-events:none}
-body::after{content:'';position:fixed;inset:0;z-index:0;
-  background:radial-gradient(ellipse 65% 50% at 12% 18%,#00d8ff09,transparent 55%),
-             radial-gradient(ellipse 50% 55% at 88% 78%,#00ff9007,transparent 55%),
-             radial-gradient(ellipse 40% 40% at 50% 48%,#c47eff06,transparent 65%);
-  pointer-events:none;animation:amb 14s ease-in-out infinite alternate}
-@keyframes amb{0%{opacity:.5}100%{opacity:1}}
+current_key_index = 0
+requests_remaining = "Unknown"
+requests_used_total = "Unknown"
+scan_starting_used = None
 
-.wrap{position:relative;z-index:1;max-width:920px;margin:0 auto;padding:0 13px 90px}
+api_lock = threading.Lock()
+cache_lock = threading.Lock()
 
-/* ═══════════ HEADER ═══════════ */
-.hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 0 10px;border-bottom:1px solid var(--b2);margin-bottom:0;gap:10px;flex-wrap:wrap}
-.hdr-brand{display:flex;align-items:center;gap:11px}
-.brand-icon{width:38px;height:38px;background:linear-gradient(135deg,#00d8ff1a,#00ff9010);border:1px solid var(--cyan);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 0 20px #00d8ff22;animation:iconP 3s ease-in-out infinite}
-@keyframes iconP{0%,100%{box-shadow:0 0 20px #00d8ff22}50%{box-shadow:0 0 36px #00d8ff44}}
-.brand-name{font-size:19px;font-weight:800;letter-spacing:.8px;background:linear-gradient(90deg,var(--cyan),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1}
-.brand-sub{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2.5px;color:var(--text3);text-transform:uppercase;margin-top:1px}
-.ticker{display:flex;align-items:center;gap:14px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);flex-wrap:wrap}
-.tk{display:flex;align-items:center;gap:5px}
-.pip{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pip 1.4s ease-in-out infinite}
-@keyframes pip{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.65)}}
-.tv{font-weight:700}.tv.c{color:var(--cyan)}.tv.g{color:var(--green)}.tv.gold{color:var(--gold)}.tv.r{color:var(--red)}
+# ==========================================
+#  STATE & CACHE HANDLERS
+# ==========================================
+def load_json(filepath, default):
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f: return json.load(f)
+        except: return default
+    return default
 
-/* ═══════════ CONFIG PANEL ═══════════ */
-.cfg{background:var(--surf);border:1px solid var(--b2);border-radius:16px;padding:18px 20px;margin:13px 0;position:relative;overflow:hidden;animation:fadeD .5s ease both}
-.cfg::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--cyan),var(--green),var(--gold))}
-@keyframes fadeD{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
-.cfg-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
-@media(max-width:560px){.cfg-grid{grid-template-columns:1fr}}
-.cfg-g{display:flex;flex-direction:column;gap:5px}.cfg-g.wide{grid-column:1/-1}
-.lbl{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase}
-.inp{background:var(--surf2);border:1px solid var(--b2);border-radius:9px;padding:9px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--text);outline:none;transition:border-color .2s,box-shadow .2s;width:100%}
-.inp:focus{border-color:var(--cyan);box-shadow:0 0 0 2px #00d8ff16}
-.inp.gold{color:var(--gold)}.inp.gold:focus{border-color:var(--gold);box-shadow:0 0 0 2px #ffd00016}
-.cfg-foot{display:flex;align-items:center;gap:10px;margin-top:13px;flex-wrap:wrap}
-.slider-g{display:flex;align-items:center;gap:10px;flex:1;min-width:180px}
-.slider{flex:1;-webkit-appearance:none;height:4px;border-radius:2px;outline:none;cursor:pointer;background:linear-gradient(90deg,var(--cyan) var(--p,30%),var(--b2) var(--p,30%))}
-.slider::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--bg);border:2px solid var(--cyan);box-shadow:0 0 10px var(--cyan);cursor:pointer;transition:transform .15s}
-.slider::-webkit-slider-thumb:active{transform:scale(1.35)}
-.kelly-v{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:800;color:var(--cyan);text-shadow:0 0 10px var(--cyan);min-width:42px;text-align:right}
+def save_json(filepath, data):
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f: json.dump(data, f, indent=4)
+    except: pass
 
-/* ═══════════ BUTTONS ═══════════ */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 18px;border-radius:10px;border:1px solid;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s ease;white-space:nowrap;position:relative;overflow:hidden}
-.btn::after{content:'';position:absolute;top:-50%;left:-60%;width:40%;height:200%;background:linear-gradient(105deg,transparent,rgba(255,255,255,.06),transparent);transform:skewX(-20deg);transition:left .5s ease}
-.btn:hover::after{left:130%}
-.btn:disabled{opacity:.35;cursor:not-allowed}
-.btn-c{background:linear-gradient(135deg,#00d8ff16,#00ff9010);border-color:var(--cyan);color:var(--cyan);text-shadow:0 0 10px var(--cyan);box-shadow:0 0 14px #00d8ff10,inset 0 1px 0 #00d8ff1e}
-.btn-c:hover:not(:disabled){background:linear-gradient(135deg,#00d8ff26,#00ff9018);box-shadow:0 0 26px #00d8ff22;transform:translateY(-1px)}
-.btn-r{background:linear-gradient(135deg,#ff335216,#ff8c0010);border-color:var(--red);color:var(--red);text-shadow:0 0 10px var(--red)}
-.btn-r:hover:not(:disabled){background:linear-gradient(135deg,#ff335226,#ff8c0018);transform:translateY(-1px)}
-.btn-gold{background:linear-gradient(135deg,#ffd00016,#ff8c0010);border-color:var(--gold);color:var(--gold);text-shadow:0 0 10px var(--gold)}
-.btn-gold:hover:not(:disabled){background:linear-gradient(135deg,#ffd00026,#ff8c0018);transform:translateY(-1px)}
-.btn-sm{padding:7px 12px;font-size:12px;border-radius:8px}
+def check_alert_cache(match, line, selection, odds):
+    with cache_lock:
+        cache = load_json('alert_cache.json', {})
+        now_ts = time.time()
+        # Cleanup older than 6 hours
+        cache = {k: v for k, v in cache.items() if now_ts - v < 6*3600}
+        alert_key = f"{match}_{line}_{selection}_{odds}"
+        if alert_key in cache:
+            save_json('alert_cache.json', cache)
+            return True
+        cache[alert_key] = now_ts
+        save_json('alert_cache.json', cache)
+        return False
 
-/* ═══════════ SCAN STATUS ═══════════ */
-.scan-bar{background:var(--surf);border:1px solid var(--b2);border-radius:12px;padding:11px 15px;margin-bottom:13px;display:none;animation:fadeD .3s ease both}
-.scan-bar.on{display:block}
-.scan-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;gap:8px}
-.scan-sport{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--cyan);font-weight:700;letter-spacing:1px}
-.scan-pct{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)}
-.prog-track{height:3px;background:var(--b2);border-radius:2px;overflow:hidden}
-.prog-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--cyan),var(--green));box-shadow:0 0 8px var(--cyan);transition:width .4s ease}
-.scan-log{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-top:7px;max-height:56px;overflow-y:auto;line-height:1.75}
-.ll{animation:fadeIn .3s ease}.lok{color:var(--green)}.lerr{color:var(--red)}.linf{color:var(--cyan)}
-@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+def update_bankroll_state(evs, arbs):
+    ist_now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+    today_str = ist_now.strftime('%Y-%m-%d')
+    state = load_json('bankroll_state.json', {})
+    
+    if state.get('date') != today_str:
+        state = {'date': today_str, 'starting_bankroll': TOTAL_BANKROLL, 'total_stakes': 0, 'theoretical_profit': 0, 'ev_exposure': 0}
 
-/* ═══════════ TABS ═══════════ */
-.tabs{display:flex;gap:3px;background:var(--surf);border:1px solid var(--b1);border-radius:14px;padding:4px;margin-bottom:14px;animation:fadeD .5s .15s ease both}
-.tab{flex:1;text-align:center;padding:9px 5px;font-size:12px;font-weight:700;color:var(--text3);cursor:pointer;border-radius:10px;transition:all .22s;user-select:none;white-space:nowrap}
-.tab:hover{color:var(--text2);background:var(--surf2)}
-.tab.ev.on{color:#000;background:linear-gradient(135deg,#00d8ff,#009ec0);box-shadow:0 2px 14px #00d8ff44}
-.tab.arb.on{color:#000;background:linear-gradient(135deg,#c47eff,#7e22ce);box-shadow:0 2px 14px #c47eff44}
-.tab.calc.on{color:#000;background:linear-gradient(135deg,#ffd000,#ff8c00);box-shadow:0 2px 14px #ffd00044}
-.tab.an.on{color:#000;background:linear-gradient(135deg,#00ff90,#00a865);box-shadow:0 2px 14px #00ff9044}
-.tab.net.on{color:#000;background:linear-gradient(135deg,#c47eff,#4fa3ff);box-shadow:0 2px 14px #c47eff44}
-.tbadge{display:inline-block;background:rgba(0,0,0,.24);border-radius:8px;padding:1px 6px;font-size:10px;margin-left:3px;font-weight:800}
-.pane{display:none}.pane.on{display:block}
+    for ev in evs:
+        state['total_stakes'] += ev['stake']
+        state['ev_exposure'] += ev['stake']
+        state['theoretical_profit'] += ev['green_profit']
 
-/* ═══════════ CARDS ═══════════ */
-.card{background:var(--surf);border:1px solid var(--b1);border-radius:16px;margin-bottom:13px;overflow:hidden;position:relative;transition:border-color .2s,transform .18s,box-shadow .18s;animation:cardIn .4s ease both}
-.card:hover{border-color:var(--b3);transform:translateY(-2px);box-shadow:0 8px 32px #00000066}
-@keyframes cardIn{from{opacity:0;transform:translateY(13px)}to{opacity:1;transform:translateY(0)}}
-.stripe{height:2px;width:100%;background-size:200%!important;animation:shim 2s linear infinite}
-.st-ev{background:linear-gradient(90deg,var(--cyan),var(--green),var(--cyan))}
-.st-arb{background:linear-gradient(90deg,var(--purple),var(--cyan),var(--purple))}
-.st-gold{background:linear-gradient(90deg,var(--gold),var(--orange),var(--gold))}
-.st-silver{background:linear-gradient(90deg,#94a3b8,#e2e8f0,#94a3b8)}
-.st-bronze{background:linear-gradient(90deg,#b56b27,#e8a870,#b56b27)}
-@keyframes shim{0%{background-position:-200%}100%{background-position:200%}}
-.c-head{display:flex;align-items:flex-start;justify-content:space-between;padding:13px 15px 9px;gap:10px}
-.c-head-l{display:flex;align-items:flex-start;gap:9px;flex:1;min-width:0}
-.spt{font-size:22px;flex-shrink:0;margin-top:1px}
-.mtitle{font-size:14px;font-weight:700;color:var(--text);line-height:1.3;overflow-wrap:break-word}
-.mmeta{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-top:2px;letter-spacing:.5px}
-.ev-badge{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:800;border:1px solid currentColor;border-radius:9px;padding:5px 11px;min-width:76px;text-align:center;background:rgba(0,0,0,.3);flex-shrink:0;line-height:1.1}
-.arb-badge{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
-.arb-pct{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:800}
-.ways{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;border:1px solid;letter-spacing:1px}
-.c-body{padding:0 15px 14px}
-.chip{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 10px;border-radius:14px;border:1px solid;letter-spacing:1px;margin-bottom:9px}
-.chip-ev{background:linear-gradient(135deg,#00d8ff10,#00ff9008);border-color:#00d8ff28;color:var(--cyan)}
-.chip-arb{background:linear-gradient(135deg,#c47eff10,#00d8ff08);border-color:#c47eff28;color:var(--purple)}
-.bet-box{display:flex;align-items:center;justify-content:space-between;background:var(--surf2);border:1px solid var(--b1);border-radius:10px;padding:9px 13px;margin-bottom:9px;gap:8px;flex-wrap:wrap}
-.bet-l{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-.blbl{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--text3)}
-.bsel{font-size:15px;font-weight:800;letter-spacing:.5px}
-.bpt{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text2)}
-.bodds{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--gold);text-shadow:0 0 8px #ffd00055}
-.book-tag{background:linear-gradient(135deg,#ffd00010,#ff8c0008);border:1px solid #ffd00028;color:var(--gold);font-size:11px;font-weight:700;padding:3px 9px;border-radius:7px;white-space:nowrap}
-.mrow{display:flex;gap:9px;margin-bottom:9px}
-.mbox{flex:1;background:var(--surf2);border:1px solid var(--b1);border-radius:10px;padding:9px 11px}
-.mlbl{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text3);display:block;margin-bottom:2px;text-transform:uppercase}
-.mval{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:800;display:block;transition:all .25s}
-.sv{color:var(--gold);text-shadow:0 0 14px #ffd00055}.tv2{color:var(--text2);font-size:17px}.pv{color:var(--green);text-shadow:0 0 14px #00ff9055}
-.crow{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
-.cbar-out{display:flex;align-items:center;gap:6px;flex:1;min-width:140px}
-.ctag{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:800;letter-spacing:1px;min-width:30px}
-.ctrack{flex:1;height:5px;background:var(--b2);border-radius:3px;overflow:hidden}
-.cfill{height:100%;border-radius:3px;animation:fillB .9s ease both}
-@keyframes fillB{from{width:0!important}}
-.cscore{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:800;min-width:22px;text-align:right}
-.clv{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:800;padding:2px 8px;border-radius:7px;border:1px solid;white-space:nowrap}
-.bd-wrap{margin-top:8px;border:1px solid var(--b1);border-radius:9px;overflow:hidden}
-.bd-tbl{width:100%;border-collapse:collapse;font-size:11px}
-.bd-tbl th{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text3);padding:7px 11px;text-align:left;background:var(--surf2);text-transform:uppercase}
-.bd-tbl td{padding:6px 11px;border-top:1px solid var(--b1);color:var(--text2)}
-.bd-tbl tr:hover td{background:var(--surf2)}
-.bk-best td{color:var(--cyan)!important;font-weight:700}
-.legs{background:var(--surf2);border:1px solid var(--b1);border-radius:10px;overflow:hidden;margin-bottom:9px}
-.leg{display:grid;grid-template-columns:1fr auto auto auto;gap:9px;align-items:center;padding:9px 13px;border-bottom:1px solid var(--b1)}
-.leg:last-child{border-bottom:none}
-.lsel{font-size:13px;font-weight:800}
-.lodds{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--gold)}
-.lstake{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;color:var(--cyan);text-shadow:0 0 8px #00d8ff55;transition:all .25s}
-.lbook{font-size:10px;color:var(--text3);background:var(--surf);border:1px solid var(--b2);padding:2px 7px;border-radius:5px;white-space:nowrap}
-.prof-banner{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#00ff900e,#00d8ff06);border:1px solid #00ff9028;border-radius:10px;padding:11px 15px}
-.pb-lbl{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3)}
-.pb-val{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:800;color:var(--green);text-shadow:0 0 18px #00ff9066}
+    for arb in arbs:
+        if arb.get('type') == '2-way':
+            state['total_stakes'] += arb['stk1'] + arb['stk2']
+        elif arb.get('type') == '3-way':
+            state['total_stakes'] += arb['stk1'] + arb['stk2'] + arb['stk3']
+        state['theoretical_profit'] += arb['profit']
 
-/* ═══════════ EMPTY ═══════════ */
-.empty{text-align:center;padding:56px 20px;background:var(--surf);border:1px dashed var(--b2);border-radius:16px;animation:cardIn .4s ease both}
-.ei{font-size:44px;margin-bottom:12px;opacity:.35;animation:flt 3s ease-in-out infinite}
-@keyframes flt{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-.et{font-size:15px;font-weight:700;color:var(--text2);margin-bottom:5px}
-.es{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);letter-spacing:1px}
+    save_json('bankroll_state.json', state)
+    return state
 
-/* ═══════════ CALC TAB ═══════════ */
-.calc-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:13px}
-@media(max-width:540px){.calc-grid{grid-template-columns:1fr}}
-.calc-card{background:var(--surf);border:1px solid var(--b2);border-radius:16px;padding:18px;animation:cardIn .4s ease both}
-.cc-title{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:13px;display:flex;align-items:center;gap:6px}
-.cc-title::before{content:'';flex:1;height:1px;background:var(--b2)}
-.cf{margin-bottom:10px}
-.ci{background:var(--surf2);border:1px solid var(--b2);border-radius:8px;padding:8px 11px;font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;color:var(--text);outline:none;transition:border-color .2s,box-shadow .2s;width:100%}
-.ci:focus{border-color:var(--cyan);box-shadow:0 0 0 2px #00d8ff14}
-.rg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px}
-.rb{background:var(--surf2);border:1px solid var(--b1);border-radius:9px;padding:9px 11px}
-.rl{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text3);display:block;margin-bottom:3px}
-.rv{font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:800;display:block}
-.rdiv{grid-column:1/-1;height:1px;background:var(--b1)}
-.full{grid-column:1/-1}
+# ==========================================
+#  CORE FUNCTIONS
+# ==========================================
+def get_active_api_key(): 
+    return API_KEYS[current_key_index]
 
-/* ═══════════ ANALYTICS ═══════════ */
-.kpi-row{display:flex;gap:9px;overflow-x:auto;margin-bottom:13px;padding-bottom:2px;scrollbar-width:thin;scrollbar-color:var(--b2) transparent}
-.kpi{background:var(--surf);border:1px solid var(--b2);border-radius:13px;padding:13px 14px;flex:1;min-width:105px;text-align:center;animation:cardIn .4s ease both;transition:all .2s}
-.kpi:hover{border-color:var(--b3);transform:translateY(-2px)}
-.ki{font-family:'JetBrains Mono',monospace;font-size:10px;margin-bottom:4px;opacity:.8}
-.kv{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:800;line-height:1.1;margin-bottom:3px}
-.kl{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace}
-.an-row{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:13px}
-@media(max-width:560px){.an-row{grid-template-columns:1fr}}
-.an-card{background:var(--surf);border:1px solid var(--b1);border-radius:14px;padding:17px;animation:cardIn .4s ease both}
-.an-title{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:13px}
-.hrow{display:flex;align-items:center;gap:7px;margin-bottom:9px}
-.hlbl{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);width:34px;flex-shrink:0}
-.htrack{flex:1;height:12px;background:var(--b2);border-radius:6px;overflow:hidden}
-.hbar{height:100%;border-radius:6px;animation:fillB .9s ease both;min-width:2px}
-.hcnt{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--text2);width:18px;text-align:right}
-.brow{display:flex;align-items:center;gap:7px;margin-bottom:8px}
-.blbl2{font-size:11px;color:var(--text2);width:86px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.btrack{flex:1;height:10px;background:var(--b2);border-radius:5px;overflow:hidden}
-.bfill{height:100%;border-radius:5px;animation:fillB .9s ease both}
-.bcnt{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);min-width:48px;text-align:right}
-.mini-stats{display:flex;border-top:1px solid var(--b1);padding-top:9px;margin-top:9px}
-.ms{flex:1;text-align:center}.ms+.ms{border-left:1px solid var(--b1)}
-.msl{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--text3);display:block;margin-bottom:2px}
-.msv{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:800}
-.donut-wrap{display:flex;align-items:center;justify-content:center;gap:20px;padding:8px 0}
-.donut{width:74px;height:74px;border-radius:50%;flex-shrink:0;background:conic-gradient(var(--cyan) var(--tw,50%),var(--purple) var(--tw,50%));box-shadow:0 0 20px #00d8ff1a;position:relative}
-.donut::after{content:'';position:absolute;inset:15px;background:var(--surf);border-radius:50%}
-.dl{display:flex;align-items:center;gap:7px;margin-bottom:7px}
-.dld{width:9px;height:9px;border-radius:3px;flex-shrink:0}
-.dll{font-size:12px;color:var(--text2);flex:1}
-.dlv{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:800}
+def rotate_api_key():
+    global current_key_index, scan_starting_used
+    current_key_index += 1
+    if current_key_index >= len(API_KEYS):
+        print(" CRITICAL ERROR: All API keys exhausted!")
+        return False
+    print(f" Quota reached! Switched to API Key #{current_key_index + 1}")
+    scan_starting_used = None
+    return True
 
-/* ═══════════ BANKROLL MODAL ═══════════ */
-.modal{display:none;position:fixed;inset:0;z-index:999;background:rgba(3,5,11,.9);backdrop-filter:blur(8px);align-items:center;justify-content:center}
-.modal.open{display:flex;animation:fadeIn .2s ease}
-.mbox{background:var(--surf);border:1px solid var(--b3);border-radius:20px;padding:28px 24px;width:min(355px,92vw);position:relative;box-shadow:0 0 60px #00d8ff14,0 24px 80px rgba(0,0,0,.75);animation:mIn .3s ease both}
-@keyframes mIn{from{opacity:0;transform:scale(.9)translateY(-10px)}to{opacity:1;transform:scale(1)translateY(0)}}
-.mstripe{position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--cyan),var(--green),var(--gold));border-radius:20px 20px 0 0}
-.mey{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:3px;color:var(--text3);margin-bottom:5px}
-.mttl{font-size:20px;font-weight:800;margin-bottom:19px}
-.mlbl{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);display:block;margin-bottom:7px;text-transform:uppercase}
-.minp-w{position:relative;margin-bottom:15px}
-.mpfx{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--gold);font-size:17px;font-weight:800}
-.minp{width:100%;background:var(--surf2);border:1px solid var(--b2);border-radius:10px;padding:11px 12px 11px 32px;font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--gold);outline:none;transition:border-color .2s,box-shadow .2s}
-.minp:focus{border-color:var(--gold);box-shadow:0 0 0 2px #ffd00018}
-.mbr{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.mnote{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-align:center;margin-top:8px}
+def send_phone_alert(message, percent, match_name, alert_type):
+    try:
+        emoji = "" if alert_type == "ARB" else ""
+        payload = {
+            "topic": NTFY_CHANNEL, "message": message,
+            "title": f"{emoji} {percent:.2f}% {alert_type} | {match_name}",
+            "tags": ["gem", "moneybag"], "priority": 5
+        }
+        requests.post("https://ntfy.sh/", json=payload, timeout=10)
+    except: pass
 
-/* ═══════════ TELEMETRY ═══════════ */
-.tele{margin-top:34px;padding:12px 17px;background:var(--surf);border:1px solid var(--b1);border-radius:13px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;display:flex;flex-wrap:wrap;gap:7px 18px;align-items:center;justify-content:center;position:relative;overflow:hidden}
-.tele::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--b2),transparent)}
-.tv3{color:var(--cyan);font-weight:700}
+def format_time_ist(iso_string):
+    try:
+        dt_utc = datetime.strptime(iso_string, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        return dt_utc.astimezone(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p")
+    except: return "Unknown Time"
 
-/* ═══════════ MISC ═══════════ */
-::-webkit-scrollbar{width:5px;height:5px}
-::-webkit-scrollbar-track{background:var(--bg)}
-::-webkit-scrollbar-thumb{background:var(--b2);border-radius:3px}
-@media(max-width:480px){
-  .brand-name{font-size:16px}.ev-badge{font-size:16px;min-width:66px}.arb-pct{font-size:16px}
-  .leg{grid-template-columns:1fr auto auto}.lbook{display:none}.ticker{display:none}
-}
-</style>
-</head>
-<body>
+def display_bookie(api_key):
+    mapping = {'onexbet': '1xBet/Melbet', 'pinnacle': 'Pinnacle', 'marathonbet': 'Marathonbet', 'dafabet': 'Dafabet', 'stake': 'Stake.com', 'betfair_ex_eu': 'Betfair Exchange', 'betway': 'Betway'}
+    return mapping.get(api_key, api_key.title())
 
-<!-- BANKROLL MODAL -->
-<div class="modal" id="bkModal">
-  <div class="mbox">
-    <div class="mstripe"></div>
-    <div class="mey">Configure</div>
-    <div class="mttl">💰 Edit Bankroll</div>
-    <label class="mlbl">Total Bankroll (₹)</label>
-    <div class="minp-w">
-      <span class="mpfx">₹</span>
-      <input class="minp" id="bkIn" type="number" min="100" step="100" value="1500">
-    </div>
-    <div class="mbr">
-      <button class="btn btn-gold" onclick="saveBK()">💾 Apply</button>
-      <button class="btn btn-c" onclick="closeBK()">Cancel</button>
-    </div>
-    <div class="mnote">Saved in browser · recalculates all Kelly stakes</div>
-  </div>
-</div>
+def remove_vig(*odds):
+    margin = sum(1/o for o in odds)
+    return tuple(1 / ((1/o) / margin) for o in odds)
 
-<div class="wrap">
+def calculate_kelly(soft_odds, true_odds, bankroll, bookie=None):
+    b = soft_odds - 1.0
+    p = 1.0 / true_odds
+    q = 1.0 - p
+    safe_kelly = ((b * p - q) / b) * 0.30
+    if safe_kelly <= 0: return 0
+    if safe_kelly > 0.05: safe_kelly = 0.05
+    stake = max(20, bankroll * safe_kelly)
+    if bookie and bookie in BOOK_CAPS:
+        stake = min(stake, BOOK_CAPS[bookie])
+    return stake
 
-<!-- HEADER -->
-<div class="hdr">
-  <div class="hdr-brand">
-    <div class="brand-icon">⚡</div>
-    <div>
-      <div class="brand-name">ARB SNIPER</div>
-      <div class="brand-sub">Quantitative Edge Terminal</div>
-    </div>
-  </div>
-  <div class="ticker">
-    <div class="tk"><div class="pip"></div><span id="tTime" class="tv c">--:-- IST</span></div>
-    <div class="tk">QUOTA <span id="tQuota" class="tv gold">--</span></div>
-    <div class="tk">EV <span id="tEV" class="tv g">0</span></div>
-    <div class="tk">ARB <span id="tARB" class="tv c">0</span></div>
-    <div class="tk">BURN <span id="tBurn" class="tv r">0</span></div>
-  </div>
-</div>
+def calculate_green_up(back_stake, back_odds, lay_odds):
+    target_lay_stake = (back_stake * back_odds) / lay_odds
+    guaranteed_profit = target_lay_stake - back_stake
+    return target_lay_stake, guaranteed_profit
 
-<!-- CONFIG -->
-<div class="cfg">
-  <div class="cfg-grid">
-    <div class="cfg-g wide">
-      <label class="lbl">🔑 API Keys</label>
-      <div id="keyStatus" style="display:flex;align-items:center;gap:9px;background:var(--surf2);border:1px solid var(--b2);border-radius:9px;padding:9px 13px;">
-        <span id="keyDot" style="width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);flex-shrink:0"></span>
-        <span id="keyMsg" style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--green)">Keys injected via GitHub Secrets — ready to scan</span>
-      </div>
-    </div>
-    <div class="cfg-g">
-      <label class="lbl">💰 Bankroll (₹) &nbsp;<span style="color:var(--text3);cursor:pointer;font-size:10px" onclick="openBK()">✏️</span></label>
-      <input class="inp gold" id="cfgBK" type="number" value="1500" min="100" step="100" oninput="onBKChange()">
-    </div>
-    <div class="cfg-g">
-      <label class="lbl">📡 Bookmakers</label>
-      <input class="inp" id="cfgBooks" value="pinnacle,onexbet,marathonbet,dafabet,stake,betfair_ex_eu,betway">
-    </div>
-    <div class="cfg-g">
-      <label class="lbl">⚡ Min EV%</label>
-      <input class="inp" id="cfgEV" type="number" value="1.5" step="0.1" min="0">
-    </div>
-    <div class="cfg-g">
-      <label class="lbl">🔒 Min ARB%</label>
-      <input class="inp" id="cfgARB" type="number" value="1.0" step="0.1" min="0">
-    </div>
-    <div class="cfg-g wide">
-      <label class="lbl">🔔 NTFY Channel (push alerts → phone)</label>
-      <input class="inp" id="cfgNtfy" value="nikunj_arb_alerts_2026" placeholder="your_ntfy_channel_name">
-    </div>
-  </div>
-  <div class="cfg-foot">
-    <div class="slider-g">
-      <span class="lbl">KELLY</span>
-      <input type="range" class="slider" id="kellyR" min="1" max="100" value="30" oninput="onKelly(this.value)" style="--p:30%">
-      <span class="kelly-v" id="kellyV">30%</span>
-    </div>
-    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;user-select:none">
-      <input type="checkbox" id="autoLoop" style="width:14px;height:14px;accent-color:var(--cyan);cursor:pointer">
-      AUTO-LOOP
-    </label>
-    <span id="loopCountdown" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--gold);display:none;min-width:70px"></span>
-    <button class="btn btn-c" id="btnStart" onclick="startScan()">▶ Start Sweep</button>
-    <button class="btn btn-r"  id="btnStop"  onclick="stopScan()"  style="display:none">⏹ Stop</button>
-    <button class="btn btn-gold btn-sm" onclick="exportCSV()">⬇ CSV</button>
-  </div>
-</div>
+def extract_hybrid_data(bookmakers_list, target_bookies):
+    ev_lines = {}; arb_lines = {}
+    for bookie in bookmakers_list:
+        b_name = bookie['key']
+        if b_name not in target_bookies: continue
+        for market in bookie.get('markets', []):
+            if market['key'] in ['totals', 'spreads', 'h2h']:
+                m_type = market['key'].upper()
+                for outcome in market['outcomes']:
+                    point = str(outcome.get('point', '0')) if m_type != 'H2H' else '0'
+                    name = outcome['name']
+                    price = outcome['price']
+                    if b_name == 'betfair_ex_eu': price = 1 + (price - 1) * 0.97
+                    line_key = f"{m_type}_{point}"
+                    
+                    if line_key not in ev_lines: ev_lines[line_key] = {'pinnacle': {}, 'softs': {}}
+                    if b_name == 'pinnacle': ev_lines[line_key]['pinnacle'][name] = price
+                    else:
+                        if name not in ev_lines[line_key]['softs']: ev_lines[line_key]['softs'][name] = {}
+                        ev_lines[line_key]['softs'][name][b_name] = price
+                            
+                    if line_key not in arb_lines: arb_lines[line_key] = {}
+                    if name not in arb_lines[line_key] or price > arb_lines[line_key][name]['price']:
+                        arb_lines[line_key][name] = {'price': price, 'bookie': b_name}
+    return ev_lines, arb_lines
 
-<!-- SCAN STATUS -->
-<div class="scan-bar" id="scanBar">
-  <div class="scan-top">
-    <span class="scan-sport" id="scanSport">Initializing…</span>
-    <span class="scan-pct"  id="scanPct">0/6</span>
-  </div>
-  <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0"></div></div>
-  <div class="scan-log" id="scanLog"></div>
-</div>
+def evaluate_markets(ev_lines, arb_lines, match_name, match_time, sport, history_map):
+    found_evs, found_arbs = [], []
+    
+    for line_key, data in ev_lines.items():
+        pinny, softs = data['pinnacle'], data.get('softs', {})
+        
+        true_probs = {}
+        if len(pinny) == 2:
+            s1, s2 = list(pinny.keys())
+            t1, t2 = remove_vig(pinny[s1], pinny[s2])
+            true_probs = {s1: 1/t1, s2: 1/t2}
+        elif len(pinny) == 3:
+            s1, s2, s3 = list(pinny.keys())
+            t1, t2, t3 = remove_vig(pinny[s1], pinny[s2], pinny[s3])
+            true_probs = {s1: 1/t1, s2: 1/t2, s3: 1/t3}
 
-<!-- TABS -->
-<div class="tabs">
-  <div class="tab ev on"   id="tab-ev"   onclick="switchTab('ev')">⚡ EV <span class="tbadge" id="bEV">0</span></div>
-  <div class="tab arb"     id="tab-arb"  onclick="switchTab('arb')">🔒 ARB <span class="tbadge" id="bARB">0</span></div>
-  <div class="tab calc"    id="tab-calc" onclick="switchTab('calc')">🧮 Calc</div>
-  <div class="tab an"      id="tab-an"   onclick="switchTab('an')">📊 Analytics</div>
-  <div class="tab net"     id="tab-net"  onclick="switchTab('net')">📡 Network</div>
-</div>
+        for side, true_prob in true_probs.items():
+            true_odds = 1 / true_prob
+            if side in softs:
+                best_bookie = None
+                best_price = 0
+                breakdown = {}
+                
+                for b_name, price in softs[side].items():
+                    ev_for_book = ((price / true_odds) - 1) * 100
+                    breakdown[b_name] = {'price': price, 'ev': ev_for_book}
+                    if price > best_price:
+                        best_price = price
+                        best_bookie = b_name
 
-<!-- EV PANE -->
-<div class="pane on" id="pane-ev">
-  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-    <button class="btn btn-sm" id="top5Btn" onclick="toggleTop5()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">🔝 Top 5</button>
-    <button class="btn btn-sm" id="sortBtn" onclick="toggleSort()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">↕ Sort EV%</button>
-    <button class="btn btn-sm" id="filterHCBtn" onclick="toggleHC()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">🎯 High Conf</button>
-  </div>
-  <div id="ev-cards"></div>
-</div>
+                if best_price > true_odds:
+                    ev_pct = ((best_price / true_odds) - 1) * 100
+                    if ev_pct >= MIN_EV_THRESHOLD:
+                        stake = calculate_kelly(best_price, true_odds, TOTAL_BANKROLL, best_bookie)
+                        t_lay, g_profit = calculate_green_up(stake, best_price, true_odds)
+                        
+                        diff = abs(true_prob - (1.0/best_price))
+                        confidence = max(0.0, 100.0 - (diff * 1000))
+                        
+                        clv = None
+                        past_odds = history_map.get((match_name, line_key, side))
+                        if past_odds:
+                            clv = ((past_odds / true_odds) - 1) * 100
 
-<!-- ARB PANE -->
-<div class="pane" id="pane-arb">
-  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-    <button class="btn btn-sm" id="arb3Btn" onclick="toggleArb3()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">🔱 3-Way Only</button>
-    <button class="btn btn-sm" id="arbSortBtn" onclick="toggleArbSort()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">↕ Sort ARB%</button>
-  </div>
-  <div id="arb-cards"></div>
-</div>
+                        found_evs.append({
+                            'pct': ev_pct, 'match': match_name, 'time': match_time, 'sport': sport,
+                            'line': line_key, 'selection': side, 'odds': best_price,
+                            'true': true_odds, 'bookie': best_bookie,
+                            'stake': stake, 'target_lay': t_lay, 'green_profit': g_profit,
+                            'breakdown': breakdown, 'confidence': confidence, 'clv': clv
+                        })
 
-<!-- CALC PANE -->
-<div class="pane" id="pane-calc">
-  <div class="calc-grid">
+    for line_key, outcomes in arb_lines.items():
+        keys = list(outcomes.keys())
+        if len(keys) == 2:
+            k1, k2 = keys
+            margin = (1 / outcomes[k1]['price']) + (1 / outcomes[k2]['price'])
+            if margin < 1.0:
+                arb_pct = (1 - margin) * 100
+                if arb_pct >= MIN_ARB_THRESHOLD:
+                    found_arbs.append({
+                        'type': '2-way', 'pct': arb_pct, 'match': match_name, 'time': match_time, 'sport': sport, 'line': line_key,
+                        's1': k1, 's1_data': outcomes[k1], 's2': k2, 's2_data': outcomes[k2],
+                        'stk1': (TOTAL_BANKROLL / margin) / outcomes[k1]['price'],
+                        'stk2': (TOTAL_BANKROLL / margin) / outcomes[k2]['price'],
+                        'profit': (TOTAL_BANKROLL / margin) - TOTAL_BANKROLL
+                    })
+        elif len(keys) == 3:
+            k1, k2, k3 = keys
+            margin = (1 / outcomes[k1]['price']) + (1 / outcomes[k2]['price']) + (1 / outcomes[k3]['price'])
+            if margin < 1.0:
+                arb_pct = (1 - margin) * 100
+                if arb_pct >= MIN_ARB_THRESHOLD:
+                    found_arbs.append({
+                        'type': '3-way', 'pct': arb_pct, 'match': match_name, 'time': match_time, 'sport': sport, 'line': line_key,
+                        's1': k1, 's1_data': outcomes[k1], 's2': k2, 's2_data': outcomes[k2], 's3': k3, 's3_data': outcomes[k3],
+                        'stk1': (TOTAL_BANKROLL / margin) / outcomes[k1]['price'],
+                        'stk2': (TOTAL_BANKROLL / margin) / outcomes[k2]['price'],
+                        'stk3': (TOTAL_BANKROLL / margin) / outcomes[k3]['price'],
+                        'profit': (TOTAL_BANKROLL / margin) - TOTAL_BANKROLL
+                    })
+                    
+    return found_evs, found_arbs
 
-    <div class="calc-card">
-      <div class="cc-title">⚡ EV Calculator</div>
-      <div class="cf"><label class="lbl">Soft Book Odds</label><input class="ci" id="cSoft" type="number" step="0.01" value="2.10" oninput="calcEV()"></div>
-      <div class="cf"><label class="lbl">Pinnacle Side A</label><input class="ci" id="cPinA" type="number" step="0.01" value="1.95" oninput="calcEV()"></div>
-      <div class="cf"><label class="lbl">Pinnacle Side B</label><input class="ci" id="cPinB" type="number" step="0.01" value="2.08" oninput="calcEV()"></div>
-      <div class="rg">
-        <div class="rb"><span class="rl">TRUE ODDS</span><span class="rv" id="rTO" style="color:var(--text2)">--</span></div>
-        <div class="rb"><span class="rl">EV %</span><span class="rv" id="rEV" style="color:var(--cyan)">--</span></div>
-        <div class="rb"><span class="rl">KELLY STAKE</span><span class="rv" id="rKS" style="color:var(--gold)">--</span></div>
-        <div class="rb"><span class="rl">CONFIDENCE</span><span class="rv" id="rCF" style="color:var(--green)">--</span></div>
-      </div>
-    </div>
+def fetch_odds_with_retry(url, params):
+    global requests_remaining, requests_used_total, scan_starting_used
+    while True:
+        with api_lock:
+            if not API_KEYS: return None
+            active_key = get_active_api_key()
+            
+        params['apiKey'] = active_key
+        try:
+            res = requests.get(url, params=params, timeout=15)
+        except:
+            return None
+        
+        with api_lock:
+            if 'x-requests-remaining' in res.headers: requests_remaining = res.headers['x-requests-remaining']
+            if 'x-requests-used' in res.headers:
+                requests_used_total = res.headers['x-requests-used']
+                if scan_starting_used is None: scan_starting_used = int(requests_used_total) - 2
 
-    <div class="calc-card">
-      <div class="cc-title">🔒 ARB Calculator</div>
-      <div class="cf"><label class="lbl">Side A Odds</label><input class="ci" id="cAA" type="number" step="0.01" value="2.15" oninput="calcARB()"></div>
-      <div class="cf"><label class="lbl">Side B Odds</label><input class="ci" id="cAB" type="number" step="0.01" value="2.10" oninput="calcARB()"></div>
-      <div class="cf"><label class="lbl">Side C (3-way, optional)</label><input class="ci" id="cAC" type="number" step="0.01" placeholder="leave blank" oninput="calcARB()"></div>
-      <div class="rg">
-        <div class="rb"><span class="rl">MARGIN</span><span class="rv" id="rAM" style="color:var(--text2)">--</span></div>
-        <div class="rb"><span class="rl">ARB %</span><span class="rv" id="rAP" style="color:var(--purple)">--</span></div>
-        <div class="rb"><span class="rl">STAKE A</span><span class="rv" id="rAS" style="color:var(--cyan)">--</span></div>
-        <div class="rb"><span class="rl">STAKE B</span><span class="rv" id="rAB" style="color:var(--cyan)">--</span></div>
-        <div class="rdiv"></div>
-        <div class="rb full"><span class="rl">GUARANTEED PROFIT</span><span class="rv" id="rAG" style="color:var(--green);font-size:20px">--</span></div>
-      </div>
-    </div>
+        if res.status_code == 401:
+            with api_lock:
+                if rotate_api_key(): continue
+                else: return None
+        elif res.status_code == 429:
+            if 'quota' in res.json().get('message', '').lower():
+                with api_lock:
+                    if rotate_api_key(): continue
+                    else: return None
+            else: time.sleep(2); continue
+        elif res.status_code == 200: return res.json()
+        else: return None
 
-    <div class="calc-card">
-      <div class="cc-title">💚 Green-Up Calculator</div>
-      <div class="cf"><label class="lbl">Back Stake (₹)</label><input class="ci" id="gBS" type="number" value="500" oninput="calcGU()"></div>
-      <div class="cf"><label class="lbl">Back Odds</label><input class="ci" id="gBO" type="number" step="0.01" value="2.10" oninput="calcGU()"></div>
-      <div class="cf"><label class="lbl">Lay / True Odds</label><input class="ci" id="gLO" type="number" step="0.01" value="1.95" oninput="calcGU()"></div>
-      <div class="rg">
-        <div class="rb"><span class="rl">LAY STAKE</span><span class="rv" id="rGL" style="color:var(--cyan)">--</span></div>
-        <div class="rb"><span class="rl">GREEN PROFIT</span><span class="rv" id="rGP" style="color:var(--green)">--</span></div>
-      </div>
-    </div>
-
-    <div class="calc-card">
-      <div class="cc-title">📐 Kelly Criterion</div>
-      <div class="cf"><label class="lbl">Win Probability (0–1)</label><input class="ci" id="kP" type="number" step="0.01" value="0.55" min="0.01" max="0.99" oninput="calcKelly()"></div>
-      <div class="cf"><label class="lbl">Decimal Odds</label><input class="ci" id="kO" type="number" step="0.01" value="2.10" oninput="calcKelly()"></div>
-      <div class="cf"><label class="lbl">Bankroll (₹)</label><input class="ci" id="kB" type="number" value="1500" oninput="calcKelly()"></div>
-      <div class="rg">
-        <div class="rb"><span class="rl">FULL KELLY %</span><span class="rv" id="rFK" style="color:var(--text2)">--</span></div>
-        <div class="rb"><span class="rl">FRAC KELLY 30%</span><span class="rv" id="rFR" style="color:var(--gold)">--</span></div>
-        <div class="rdiv"></div>
-        <div class="rb full"><span class="rl">RECOMMENDED STAKE</span><span class="rv" id="rKA" style="color:var(--green);font-size:20px">--</span></div>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-<!-- ANALYTICS PANE -->
-<div class="pane" id="pane-an">
-  <div class="kpi-row">
-    <div class="kpi"><div class="ki" style="color:var(--cyan)">⚡ EV</div><div class="kv" id="anTE" style="color:var(--cyan)">0</div><div class="kl">Total Edges</div></div>
-    <div class="kpi"><div class="ki" style="color:var(--green)">AVG</div><div class="kv" id="anAE" style="color:var(--green)">0%</div><div class="kl">Avg EV%</div></div>
-    <div class="kpi"><div class="ki" style="color:var(--gold)">PEAK</div><div class="kv" id="anPE" style="color:var(--gold)">0%</div><div class="kl">Peak EV%</div></div>
-    <div class="kpi"><div class="ki" style="color:var(--purple)">🔒 ARB</div><div class="kv" id="anTA" style="color:var(--purple)">0</div><div class="kl">ARB Opps</div></div>
-    <div class="kpi"><div class="ki" style="color:var(--green)">₹</div><div class="kv" id="anAP" style="color:var(--green)">₹0</div><div class="kl">ARB Profit</div></div>
-    <div class="kpi"><div class="ki" style="color:var(--orange)">ROI</div><div class="kv" id="anROI" style="color:var(--orange)">0%</div><div class="kl">ARB ROI</div></div>
-  </div>
-  <div class="an-row">
-    <div class="an-card"><div class="an-title">⚡ EV Distribution</div><div id="anEH"></div><div class="mini-stats" id="anES"></div></div>
-    <div class="an-card"><div class="an-title">🔒 ARB Distribution</div><div id="anAH"></div><div class="mini-stats" id="anAS"></div></div>
-  </div>
-  <div class="an-row">
-    <div class="an-card"><div class="an-title">⚽ EV by Sport</div><div id="anESP"></div></div>
-    <div class="an-card"><div class="an-title">🔒 ARB by Sport</div><div id="anASP"></div></div>
-  </div>
-  <div class="an-row">
-    <div class="an-card"><div class="an-title">📚 Top EV Bookmakers</div><div id="anEB"></div></div>
-    <div class="an-card"><div class="an-title">🔗 Top ARB Pairs</div><div id="anAPR"></div></div>
-  </div>
-  <div class="an-row">
-    <div class="an-card">
-      <div class="an-title">📐 ARB Structure</div>
-      <div class="donut-wrap">
-        <div class="donut" id="anDonut"></div>
-        <div>
-          <div class="dl"><span class="dld" style="background:var(--cyan)"></span><span class="dll">2-Way</span><span class="dlv" id="an2w" style="color:var(--cyan)">0</span></div>
-          <div class="dl"><span class="dld" style="background:var(--purple)"></span><span class="dll">3-Way</span><span class="dlv" id="an3w" style="color:var(--purple)">0</span></div>
+# ==========================================
+#  HTML GENERATION (JAVASCRIPT DRIVEN)
+# ==========================================
+def generate_web_dashboard(evs, arbs, current_time, bankroll_state):
+    evs.sort(key=lambda x: x['pct'], reverse=True)
+    arbs.sort(key=lambda x: x['pct'], reverse=True)
+    
+    credits_burned = int(requests_used_total) - scan_starting_used if scan_starting_used is not None and str(requests_used_total).isdigit() else "Unknown"
+    
+    html_template = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+        <meta http-equiv="Pragma" content="no-cache">
+        <meta http-equiv="Expires" content="0">
+        <title>Arb Sniper Live Dashboard</title>
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0d1117; color: #c9d1d9; margin: 0; padding: 15px; max-width: 800px; margin: auto; }
+            h1 { color: #58a6ff; text-align: center; font-size: 26px; margin-bottom: 5px; }
+            .time { text-align: center; color: #8b949e; font-size: 14px; margin-bottom: 20px; font-weight: bold; }
+            
+            .btn-run { background-color: #238636; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 20px; }
+            .btn-run:active { background-color: #2ea043; }
+            
+            .controls-panel { background: #161b22; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #30363d; display: flex; flex-wrap: wrap; gap: 15px; align-items: center; justify-content: space-between;}
+            .slider-container { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 250px; }
+            .btn-secondary { background: #21262d; border: 1px solid #363b42; color: #c9d1d9; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+            .btn-secondary:hover { background: #30363d; }
+            
+            .tabs { display: flex; border-bottom: 1px solid #30363d; margin-bottom: 20px; }
+            .tab { flex: 1; text-align: center; padding: 12px; cursor: pointer; font-size: 16px; font-weight: bold; color: #8b949e; }
+            .tab.active { color: #ffffff; border-bottom: 3px solid #58a6ff; background-color: #161b22; }
+            .tab-content { display: none; }
+            .tab-content.active { display: block; }
+            
+            .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 20px; font-size: 15px; line-height: 1.6; }
+            .card-header { font-weight: bold; font-size: 16px; margin-bottom: 12px; border-bottom: 1px dashed #30363d; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+            .detail-block { margin-bottom: 12px; }
+            .highlight { color: #ffffff; font-weight: bold; }
+            .highlight-stake { color: #e3b341; font-weight: bold; }
+            .profit-highlight { color: #e3b341; font-weight: bold; font-size: 16px; }
+            
+            .badge { padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+            .conf-high { background: #238636; color: white;}
+            .conf-med { background: #d29922; color: white;}
+            .conf-low { background: #da3633; color: white;}
+            
+            table.breakdown { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+            table.breakdown th, table.breakdown td { border: 1px solid #30363d; padding: 5px; text-align: left; color:#c9d1d9; }
+            table.breakdown th { background: #21262d; color: #8b949e; }
+            
+            .empty-state { text-align: center; color: #8b949e; padding: 30px; font-style: italic; background-color: #161b22; border-radius: 8px; border: 1px dashed #30363d; }
+            .telemetry { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #30363d; font-size: 12px; color: #484f58; line-height: 1.6; }
+            
+            details summary { cursor: pointer; color: #58a6ff; margin-top: 8px; font-size: 13px; font-weight: bold; }
+            details summary:hover { text-decoration: underline; }
+        </style>
+    </head>
+    <body>
+        <h1> Arb Sniper Terminal</h1>
+        <div class="time">Last Sweep: __TIME__</div>
+        
+        <button class="btn-run" onclick="triggerScan()"> Launch Cloud Scan Now</button>
+        
+        <div class="controls-panel">
+            <div class="slider-container">
+                <label for="kelly-slider">Kelly Fraction: <span id="kelly-val" class="highlight">30</span>%</label>
+                <input type="range" id="kelly-slider" min="0" max="100" value="30" oninput="document.getElementById('kelly-val').innerText = this.value; renderData();" style="flex:1;">
+            </div>
+            <div>
+                <input type="checkbox" id="top5-toggle" onchange="renderData()"> <label for="top5-toggle">Top 5 Only</label>
+            </div>
+            <button class="btn-secondary" onclick="exportCSV()">Export CSV</button>
         </div>
-      </div>
-      <div class="mini-stats" id="anAMeta"></div>
-    </div>
-    <div class="an-card"><div class="an-title">🎯 Confidence Spread</div><div id="anCS"></div></div>
-  </div>
-</div>
-
-<!-- NETWORK PANE -->
-<div class="pane" id="pane-net">
-  <div style="margin-bottom:13px">
-    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:11px">📡 API Key Sequential Matrix</div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:13px">Keys are used in order. On a 429 or 401, the engine automatically fails over to the next key. All quota data updates live during each sweep.</div>
-    <div id="netGrid" style="display:flex;flex-direction:column;gap:9px"></div>
-  </div>
-  <div style="background:var(--surf);border:1px solid var(--b1);border-radius:14px;padding:17px">
-    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:11px">⏱ Auto-Loop Status</div>
-    <div id="loopStatus" style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text2)">Auto-Loop is OFF — enable the checkbox and start a sweep to activate.</div>
-    <div style="margin-top:11px;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--text3)">LOOP INTERVAL: 5 MIN · CACHE TTL: 6 HRS · SESSION PERSISTS ACROSS RELOADS</div>
-  </div>
-</div>
-
-<!-- TELEMETRY -->
-<div class="tele">
-  <span>🔑 KEYS <span class="tv3" id="telKey">#1</span></span>
-  <span>📡 QUOTA <span class="tv3" id="telQ">--/500</span></span>
-  <span>⚡ BURN <span class="tv3" id="telB">0</span></span>
-  <span>🏦 BANKROLL <span class="tv3" id="telBK">₹1500</span></span>
-  <span>🔔 ALERTS <span class="tv3" id="telAlerts">0</span></span>
-  <span>⏱ SCAN <span class="tv3" id="telT">--</span></span>
-</div>
-
-</div><!-- /wrap -->
-
-<script>
-'use strict';
-/* ── NTFY PUSH ALERTS ── */
-function getNtfyCh(){return document.getElementById('cfgNtfy').value.trim()||'arb_sniper_alerts'}
-var alertCount=0;
-function sendNtfy(title,body){
-  var ch=getNtfyCh();if(!ch)return;
-  fetch('https://ntfy.sh/'+ch,{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({topic:ch,title:title,message:body,tags:['gem','moneybag'],priority:5})
-  }).catch(function(e){console.warn('ntfy:',e.message)});
-}
-/* ── ALERT DEDUP CACHE (6h TTL stored in localStorage) ── */
-function isDupe(key){
-  var raw=localStorage.getItem('arb_alert_cache')||'{}';
-  var cache=JSON.parse(raw);
-  var now=Date.now();
-  Object.keys(cache).forEach(function(k){if(now-cache[k]>21600000)delete cache[k]});
-  if(cache[key]){localStorage.setItem('arb_alert_cache',JSON.stringify(cache));return true}
-  cache[key]=now;localStorage.setItem('arb_alert_cache',JSON.stringify(cache));return false;
-}
-function fireEVAlert(ev){
-  var key='EV|'+ev.match+'|'+ev.line+'|'+ev.sel+'|'+ev.odds.toFixed(2);
-  if(isDupe(key))return;
-  alertCount++;$('telAlerts').textContent=alertCount;
-  var title='📈 '+ev.pct.toFixed(2)+'% EV — '+ev.match;
-  var body=ev.sport.replace(/_/g,' ').toUpperCase()+' · '+ev.time
-    +'\n\n💰 BET: '+ev.sel.toUpperCase()+' @ '+ev.odds.toFixed(2)+' on '+bk(ev.bookie)
-    +'\n📐 Kelly Stake: '+fmt(ev.stake)
-    +'\n🧠 True Odds: '+ev.true.toFixed(3)+' | Conf: '+ev.conf+'/100';
-  sendNtfy(title,body);
-}
-function fireARBAlert(arb){
-  var key='ARB|'+arb.match+'|'+arb.line+'|'+arb.pct.toFixed(2);
-  if(isDupe(key))return;
-  alertCount++;$('telAlerts').textContent=alertCount;
-  var title='🚨 '+arb.pct.toFixed(2)+'% ARB — '+arb.match;
-  var body=arb.sport.replace(/_/g,' ').toUpperCase()+' · '+arb.time+'\n';
-  arb.sides.forEach(function(s){body+='\n🔵 '+fmt(s.stake)+' on '+s.sel.toUpperCase()+' @ '+s.price.toFixed(2)+' ['+bk(s.bookie)+']'});
-  body+='\n\n✅ Guaranteed profit: '+fmt(arb.profit);
-  sendNtfy(title,body);
-}
-
-/* ── CONSTANTS ── */
-const SPORTS=[
-  {k:'soccer_epl',          l:'⚽ EPL'},
-  {k:'soccer_uefa_champs_league',l:'⚽ UCL'},
-  {k:'basketball_nba',      l:'🏀 NBA'},
-  {k:'icehockey_nhl',       l:'🏒 NHL'},
-  {k:'tennis_atp',          l:'🎾 ATP'},
-  {k:'tennis_wta',          l:'🎾 WTA'},
-];
-const CAPS={betway:300,stake:500,onexbet:400,marathonbet:400,dafabet:350,betfair_ex_eu:600,pinnacle:1000};
-const BKNAMES={onexbet:'1xBet',pinnacle:'Pinnacle',marathonbet:'Marathon',dafabet:'Dafabet',stake:'Stake.com',betfair_ex_eu:'Betfair',betway:'Betway'};
-const SICONS={soccer:'⚽',basketball:'🏀',icehockey:'🏒',tennis:'🎾',baseball:'⚾',football:'🏈'};
-
-/* ── STATE ── */
-let EVS=[],ARBS=[];
-let scanning=false,sportIdx=0,scanT0=null,creditT0=null;
-let quotaRem='--',top5=false,sortOn=false,hcFilter=false,arb3=false,arbSort=false;
-
-/* ── UTILS ── */
-const $=id=>document.getElementById(id);
-const bk=k=>BKNAMES[k]||k.replace(/_/g,' ');
-const si=s=>{for(const[k,v]of Object.entries(SICONS))if(s.includes(k))return v;return'🎯'};
-const fmt=n=>'₹'+Math.round(n).toLocaleString('en-IN');
-const fp=n=>n.toFixed(2)+'%';
-const getBK=()=>parseFloat($('cfgBK').value)||1500;
-const getKF=()=>parseFloat($('kellyR').value)/100;
-const getMinEV=()=>parseFloat($('cfgEV').value)||1.5;
-const getMinARB=()=>parseFloat($('cfgARB').value)||1.0;
-const getBooks=()=>$('cfgBooks').value.split(',').map(s=>s.trim()).filter(Boolean);
-
-function devig(o1,o2){const i1=1/o1,i2=1/o2,m=i1+i2;return[1/(i1/m),1/(i2/m)]}
-function kelly(soft,trueO,bankroll,kf=.30,book=null){
-  const b=soft-1,p=1/trueO,q=1-p;
-  let k=((b*p-q)/b)*kf;
-  if(k<=0)return 0;if(k>.05)k=.05;
-  let s=Math.max(20,bankroll*k);
-  if(book&&CAPS[book])s=Math.min(s,CAPS[book]);
-  return s;
-}
-function conf(soft,trueO){return Math.max(0,Math.min(100,Math.round(Math.abs(1/soft-1/trueO)/(1/trueO)*500)))}
-function IST(){return new Date(Date.now()+5.5*36e5).toLocaleTimeString('en-IN',{hour12:true,timeZone:'UTC'})}
-function fmtIST(iso){try{return new Date(iso).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true})}catch{return'?'}}
-
-/* ── CLOCK ── */
-setInterval(()=>$('tTime').textContent=IST(),1000);
-
-/* ── KELLY SLIDER ── */
-function onKelly(v){
-  $('kellyV').textContent=v+'%';
-  $('kellyR').style.setProperty('--p',v+'%');
-  recalc();calcEV();
-}
-
-/* ── BANKROLL CHANGES ── */
-function onBKChange(){
-  localStorage.setItem('arb_bk',$('cfgBK').value);
-  $('telBK').textContent=fmt(getBK());
-  recalc();
-}
-function recalc(){
-  const bkv=getBK(),kf=getKF();
-  $('telBK').textContent=fmt(bkv);
-  document.querySelectorAll('.sdyn').forEach(el=>{
-    const s=kelly(parseFloat(el.dataset.soft)||2,parseFloat(el.dataset.true)||1.9,bkv,kf,el.dataset.book||null);
-    el.textContent=fmt(s);
-  });
-  document.querySelectorAll('.ldyn').forEach(el=>{
-    const ratio=bkv/1500;
-    el.textContent=fmt(parseFloat(el.dataset.base)*ratio);
-  });
-}
-
-/* ── BANKROLL MODAL ── */
-function openBK(){$('bkIn').value=getBK();$('bkModal').classList.add('open');setTimeout(()=>$('bkIn').focus(),100)}
-function closeBK(){$('bkModal').classList.remove('open')}
-function saveBK(){
-  const v=parseFloat($('bkIn').value);
-  if(!v||v<100){alert('Enter a valid bankroll (min ₹100)');return}
-  $('cfgBK').value=v;$('kB').value=v;
-  localStorage.setItem('arb_bk',v);
-  onBKChange();closeBK();
-  $('cfgBK').style.color='var(--green)';
-  setTimeout(()=>$('cfgBK').style.color='var(--gold)',700);
-}
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeBK()});
-$('bkModal').addEventListener('click',e=>{if(e.target===$('bkModal'))closeBK()});
-
-/* ── TABS ── */
-function switchTab(t){
-  ['ev','arb','calc','an','net'].forEach(id=>{
-    $('tab-'+id).classList.remove('on');
-    $('pane-'+id).classList.remove('on');
-  });
-  $('tab-'+t).classList.add('on');
-  $('pane-'+t).classList.add('on');
-  if(t==='an')renderAn();
-  if(t==='net')renderNetwork();
-}
-
-/* ── SCAN LOG ── */
-function log(msg,cls=''){
-  const el=$('scanLog'),d=document.createElement('div');
-  d.className='ll '+(cls||'');d.textContent='['+IST()+'] '+msg;
-  el.appendChild(d);el.scrollTop=el.scrollHeight;
-}
-
-/* ── INJECTED API KEYS (set by Python from GitHub Secrets) ── */
-const API_KEYS = __INJECTED_KEYS__;
-let keyIdx = 0;
-function getKey(){return API_KEYS[keyIdx % Math.max(API_KEYS.length,1)]}
-function rotateKey(){keyQuota[keyIdx]=0;keyIdx++;log('🔄 Rotating to key #'+(keyIdx+1),'linf');renderNetwork()}
-
-/* ── START / STOP ── */
-function startScan(){
-  if(!API_KEYS.length){
-    // No keys injected — show a one-time fallback input
-    const k=prompt('No keys injected. Enter your Odds API key to scan:');
-    if(!k)return;
-    API_KEYS.push(k.trim());
-  }
-  EVS=[];ARBS=[];sportIdx=0;scanning=true;scanT0=Date.now();creditT0=null;keyIdx=0;
-  $('btnStart').style.display='none';$('btnStop').style.display='';
-  $('scanBar').classList.add('on');$('scanLog').innerHTML='';
-  $('ev-cards').innerHTML='';$('arb-cards').innerHTML='';
-  updateBadges();log('Sweep initializing… key #1 active','linf');
-  runNext();
-}}
-function stopScan(){
-  scanning=false;
-  if(window._loopTick){clearInterval(window._loopTick);window._loopTick=null}
-  $('loopCountdown').style.display='none';$('loopCountdown').textContent='';
-  $('btnStart').style.display='';$('btnStop').style.display='none';
-  $('progFill').style.width='100%';
-  log('Sweep stopped.','lerr');
-  $('telT').textContent=((Date.now()-scanT0)/1000).toFixed(1)+'s';
-  if(EVS.length||ARBS.length)renderAn();
-  renderNetwork();
-
-  // ── AUTO-LOOP ──
-  if($('autoLoop').checked && EVS.length+ARBS.length>=0){
-    sessionStorage.setItem('auto_resume','true');
-    let secs=300; // 5 minutes
-    $('loopCountdown').style.display='';
-    const tick=setInterval(()=>{
-      secs--;
-      const m=Math.floor(secs/60),s=String(secs%60).padStart(2,'0');
-      $('loopCountdown').textContent='⏳ '+m+':'+s;
-      if(secs<=0){
-        clearInterval(tick);
-        $('loopCountdown').textContent='';
-        $('loopCountdown').style.display='none';
-        startScan();
-      }
-    },1000);
-    // Store interval handle so stopScan can cancel it
-    window._loopTick=tick;
-    log('🔄 Auto-Loop armed — next sweep in 5 min','linf');
-  } else {
-    sessionStorage.removeItem('auto_resume');
-    $('loopCountdown').style.display='none';
-  }
-}
-
-/* ── SPORT LOOP ── */
-async function runNext(){
-  if(!scanning||sportIdx>=SPORTS.length){stopScan();log('✅ Complete! EV:'+EVS.length+' ARB:'+ARBS.length,'lok');return}
-  const sp=SPORTS[sportIdx];
-  const pct=Math.round(sportIdx/SPORTS.length*100);
-  $('scanSport').textContent=sp.l;
-  $('scanPct').textContent=(sportIdx+1)+'/'+SPORTS.length;
-  $('progFill').style.width=pct+'%';
-  log('Fetching '+sp.l+'…');
-  try{
-    const key=getKey();
-    const books=getBooks().join(',');
-    const url=`https://api.the-odds-api.com/v4/sports/${sp.k}/odds?apiKey=${key}&regions=eu&bookmakers=${encodeURIComponent(books)}&markets=totals,spreads&oddsFormat=decimal`;
-    const res=await fetch(url);
-    const rem=res.headers.get('x-requests-remaining');
-    const used=res.headers.get('x-requests-used');
-    if(rem){quotaRem=rem;$('tQuota').textContent=rem+'/500';$('telQ').textContent=rem+'/500';keyQuota[keyIdx]=parseInt(rem)}
-    if(used){
-      if(!creditT0)creditT0=parseInt(used)-1;
-      const burn=parseInt(used)-creditT0;
-      $('tBurn').textContent=burn;$('telB').textContent=burn;
-    }
-    if(res.status===401){
-      log('❌ Key #'+(keyIdx+1)+' rejected (401)','lerr');
-      if(keyIdx+1<API_KEYS.length){rotateKey();runNext();return}
-      else{log('❌ All keys exhausted','lerr');stopScan();return}
-    }
-    if(res.status===429){
-      log('⚠ Rate limit on key #'+(keyIdx+1),'lerr');
-      if(keyIdx+1<API_KEYS.length){rotateKey();setTimeout(runNext,500);return}
-      else{log('⚠ All keys rate-limited, waiting 5s…','lerr');await sleep(5000);runNext();return}
-    }
-    if(!res.ok){log('⚠ HTTP '+res.status,'lerr');sportIdx++;setTimeout(runNext,1200);return}
-    const events=await res.json();
-    log('📦 '+events.length+' events (key #'+(keyIdx+1)+')','lok');
-    processEvents(events,sp.k);
-  }catch(e){log('❌ '+e.message,'lerr')}
-  sportIdx++;
-  setTimeout(runNext,1500);
-}
-function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
-
-/* ── MATH ENGINE ── */
-function processEvents(events,sport){
-  const books=getBooks(),minEV=getMinEV(),minARB=getMinARB();
-  const bankroll=getBK(),kf=getKF();
-  events.forEach(event=>{
-    const match=event.home_team+' vs '+event.away_team;
-    const mt=fmtIST(event.commence_time);
-    const bookmakers=event.bookmakers||[];
-    const EL={},AL={};
-    bookmakers.forEach(b=>{
-      if(!books.includes(b.key))return;
-      (b.markets||[]).forEach(m=>{
-        if(!['totals','spreads'].includes(m.key))return;
-        const mk=m.key.toUpperCase();
-        m.outcomes.forEach(o=>{
-          const pt=String(o.point||'0'),name=o.name;
-          let price=o.price;
-          if(b.key==='betfair_ex_eu')price=1+(price-1)*.97;
-          const lk=mk+'_'+pt;
-          if(!EL[lk])EL[lk]={pin:{},best:{},all:{}};
-          if(!AL[lk])AL[lk]={};
-          if(b.key==='pinnacle'){
-            EL[lk].pin[name]=price;
-          }else{
-            if(!EL[lk].best[name]||price>EL[lk].best[name].price)EL[lk].best[name]={price,bookie:b.key};
-            if(!EL[lk].all[name])EL[lk].all[name]={};
-            EL[lk].all[name][b.key]=price;
-          }
-          if(!AL[lk][name]||price>AL[lk][name].price)AL[lk][name]={price,bookie:b.key};
-        });
-      });
-    });
-    // EV
-    Object.entries(EL).forEach(([lk,d])=>{
-      const sides=Object.keys(d.pin);
-      if(sides.length<2)return;
-      const[s1,s2]=sides;
-      const[t1,t2]=devig(d.pin[s1],d.pin[s2]);
-      [[s1,t1],[s2,t2]].forEach(([side,trueO])=>{
-        if(!d.best[side])return;
-        const sp=d.best[side].price;
-        if(sp<=trueO)return;
-        const evp=((sp/trueO)-1)*100;
-        if(evp<minEV)return;
-        const stake=kelly(sp,trueO,bankroll,kf,d.best[side].bookie);
-        const cf=conf(sp,trueO);
-        const bd=buildBD(d,side,trueO);
-        const ev={pct:evp,match,time:mt,sport,line:lk,sel:side,odds:sp,true:trueO,bookie:d.best[side].bookie,stake,conf:cf,bd};
-        EVS.push(ev);renderEV(ev,EVS.length-1);
-        fireEVAlert(ev);
-      });
-    });
-    // ARB
-    Object.entries(AL).forEach(([lk,outs])=>{
-      const keys=Object.keys(outs);
-      for(let ways=2;ways<=3;ways++){
-        if(keys.length<ways)continue;
-        const k=keys.slice(0,ways);
-        const margin=k.reduce((s,ki)=>s+1/outs[ki].price,0);
-        if(margin>=1)continue;
-        const pct=(1-margin)*100;
-        if(pct<minARB)continue;
-        const arb={pct,match,time:mt,sport,line:lk,ways,
-          sides:k.map(ki=>({sel:ki,price:outs[ki].price,bookie:outs[ki].bookie,stake:(bankroll/margin)/outs[ki].price})),
-          profit:(bankroll/margin)-bankroll};
-        ARBS.push(arb);renderARB(arb,ARBS.length-1);
-        fireARBAlert(arb);
-      }
-    });
-    $('tEV').textContent=EVS.length;$('tARB').textContent=ARBS.length;
-    updateBadges();
-  });
-}
-
-function buildBD(d,side,trueO){
-  const rows=[];
-  if(d.pin[side])rows.push({bookie:'pinnacle',odds:d.pin[side],ev:0,best:false});
-  const all=d.all[side]||{};
-  let bEV=-999,bBk=null;
-  Object.entries(all).forEach(([bk,odds])=>{const e=((odds/trueO)-1)*100;rows.push({bookie:bk,odds,ev:e,best:false});if(e>bEV){bEV=e;bBk=bk}});
-  rows.forEach(r=>{if(r.bookie===bBk)r.best=true});
-  return rows;
-}
-
-/* ── RENDER EV ── */
-function renderEV(ev,idx){
-  const c=$('ev-cards');
-  if(c.querySelector('.empty'))c.innerHTML='';
-  const eColor=ev.pct>=10?'var(--red)':ev.pct>=5?'var(--gold)':'var(--green)';
-  const stripe=idx===0?'st-gold':idx===1?'st-silver':idx===2?'st-bronze':'st-ev';
-  const cColor=ev.conf>=70?'var(--green)':ev.conf>=40?'var(--gold)':'var(--red)';
-  const cLbl=ev.conf>=70?'HIGH':ev.conf>=40?'MED':'LOW';
-  let bd='';
-  if(ev.bd&&ev.bd.length){
-    const rows=ev.bd.map(r=>`<tr class="${r.best?'bk-best':''}"><td>${bk(r.bookie)}</td><td>${r.odds.toFixed(3)}</td><td>${r.ev>=0?'+':''}${r.ev.toFixed(2)}%</td></tr>`).join('');
-    bd=`<div class="bd-wrap"><table class="bd-tbl"><thead><tr><th>Book</th><th>Odds</th><th>EV%</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-  }
-  const card=document.createElement('div');
-  card.className='card ev-card';card.style.animationDelay=(idx*.05)+'s';card.dataset.pct=ev.pct;card.dataset.conf=ev.conf;
-  card.innerHTML=`<div class="stripe ${stripe}"></div>
-    <div class="c-head">
-      <div class="c-head-l"><span class="spt">${si(ev.sport)}</span><div><div class="mtitle">${ev.match}</div><div class="mmeta">${ev.sport.replace(/_/g,' ').toUpperCase()} · ${ev.time}</div></div></div>
-      <div class="ev-badge" style="color:${eColor};border-color:${eColor}44;text-shadow:0 0 12px ${eColor}88">${fp(ev.pct)}</div>
-    </div>
-    <div class="c-body">
-      <div class="chip chip-ev">${ev.line}</div>
-      <div class="bet-box">
-        <div class="bet-l"><span class="blbl">BET</span><span class="bsel">${ev.sel.toUpperCase()}</span><span class="bpt">@ ${ev.line.split('_')[1]||''}</span><span class="bodds">× ${ev.odds.toFixed(2)}</span></div>
-        <span class="book-tag">${bk(ev.bookie)}</span>
-      </div>
-      <div class="mrow">
-        <div class="mbox"><span class="mlbl">KELLY STAKE</span>
-          <span class="mval sv sdyn" data-soft="${ev.odds}" data-true="${ev.true}" data-book="${ev.bookie}">${fmt(ev.stake)}</span></div>
-        <div class="mbox"><span class="mlbl">TRUE ODDS</span><span class="mval tv2">${ev.true.toFixed(3)}</span></div>
-      </div>
-      <div class="crow"><span class="mlbl" style="font-size:8px">CONF</span>
-        <div class="cbar-out"><span class="ctag" style="color:${cColor}">${cLbl}</span>
-          <div class="ctrack"><div class="cfill" style="width:${ev.conf}%;background:${cColor};box-shadow:0 0 8px ${cColor}66"></div></div>
-          <span class="cscore" style="color:${cColor}">${ev.conf}</span>
+        
+        <div class="tabs">
+            <div class="tab active" id="tab-ev" onclick="switchTab('ev')"> EV Edges (<span id="ev-count">0</span>)</div>
+            <div class="tab" id="tab-arb" onclick="switchTab('arb')"> Arbitrage (<span id="arb-count">0</span>)</div>
+            <div class="tab" id="tab-analytics" onclick="switchTab('analytics')"> Analytics </div>
         </div>
-      </div>
-      ${bd}
-    </div>`;
-  c.appendChild(card);applyFilters();
-}
-
-/* ── RENDER ARB ── */
-function renderARB(arb,idx){
-  const c=$('arb-cards');
-  if(c.querySelector('.empty'))c.innerHTML='';
-  const wc=arb.ways===2?'var(--cyan)':'var(--purple)';
-  const legs=arb.sides.map(s=>`<div class="leg">
-    <span class="lsel">${s.sel.toUpperCase()}</span>
-    <span class="lodds">@ ${s.price.toFixed(2)}</span>
-    <span class="lstake ldyn" data-base="${s.stake.toFixed(2)}">${fmt(s.stake)}</span>
-    <span class="lbook">${bk(s.bookie)}</span>
-  </div>`).join('');
-  const card=document.createElement('div');
-  card.className='card arb-card';card.style.animationDelay=(idx*.05)+'s';card.dataset.pct=arb.pct;card.dataset.ways=arb.ways;
-  card.innerHTML=`<div class="stripe st-arb"></div>
-    <div class="c-head">
-      <div class="c-head-l"><span class="spt">${si(arb.sport)}</span><div><div class="mtitle">${arb.match}</div><div class="mmeta">${arb.sport.replace(/_/g,' ').toUpperCase()} · ${arb.time}</div></div></div>
-      <div class="arb-badge">
-        <span class="arb-pct" style="color:${wc};font-family:'JetBrains Mono',monospace">${fp(arb.pct)}</span>
-        <span class="ways" style="color:${wc};border-color:${wc}44;background:${wc}14">${arb.ways}W</span>
-      </div>
-    </div>
-    <div class="c-body">
-      <div class="chip chip-arb">${arb.line}</div>
-      <div class="legs">${legs}</div>
-      <div class="prof-banner"><span class="pb-lbl">GUARANTEED PROFIT</span><span class="pb-val">${fmt(arb.profit)}</span></div>
-    </div>`;
-  c.appendChild(card);applyArbFilters();
-}
-
-/* ── BADGES ── */
-function updateBadges(){$('bEV').textContent=EVS.length;$('bARB').textContent=ARBS.length}
-
-/* ── NETWORK RENDER ── */
-const keyQuota={};  // live quota per key index, updated during sweeps
-function renderNetwork(){
-  const grid=$('netGrid');
-  if(!grid)return;
-  if(!API_KEYS.length){
-    grid.innerHTML='<div style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--red);padding:10px 0">No API keys injected. Deploy via GitHub Actions with ODDS_API_KEYS secret set.</div>';
-    return;
-  }
-  grid.innerHTML=API_KEYS.map((k,i)=>{
-    const masked=k.length>10?k.slice(0,4)+'••••'+k.slice(-4):'••••';
-    const rem=keyQuota[i]!==undefined?keyQuota[i]:'?';
-    const isActive=i===keyIdx;
-    const isExhausted=keyQuota[i]===0;
-    const statusColor=isActive?'var(--cyan)':isExhausted?'var(--red)':'var(--green)';
-    const statusLabel=isActive?'ACTIVE':'STANDBY';
-    const statusBg=isActive?'#00d8ff14':isExhausted?'#ff335214':'#00ff9008';
-    const barW=rem==='?'?50:Math.round((parseInt(rem)/500)*100);
-    return `<div style="background:${statusBg};border:1px solid ${statusColor}44;border-radius:12px;padding:13px 15px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-      <div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:2px;color:${statusColor};margin-bottom:4px">KEY #${i+1} · ${statusLabel}</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--text)">${masked}</div>
-      </div>
-      <div style="text-align:right;min-width:90px">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-bottom:5px">QUOTA REMAINING</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:800;color:${statusColor}">${rem}/500</div>
-        <div style="height:3px;background:var(--b2);border-radius:2px;margin-top:5px;overflow:hidden">
-          <div style="height:100%;width:${barW}%;background:${statusColor};border-radius:2px;transition:width .5s ease"></div>
+        
+        <div id="content-ev" class="tab-content active"></div>
+        <div id="content-arb" class="tab-content"></div>
+        <div id="content-analytics" class="tab-content"></div>
+        
+        <div class="telemetry">
+            <strong>SYSTEM TELEMETRY</strong><br>
+            __TELEMETRY_DATA__
         </div>
-      </div>
-    </div>`;
-  }).join('');
 
-  // Update loop status text
-  const ls=$('loopStatus');
-  if(ls){
-    const loopOn=$('autoLoop')&&$('autoLoop').checked;
-    ls.textContent=loopOn
-      ?'Auto-Loop is ACTIVE — after each sweep completes, a 5-minute cooldown fires the next sweep automatically.'
-      :'Auto-Loop is OFF — enable the checkbox next to Start Sweep to activate.';
-    ls.style.color=loopOn?'var(--cyan)':'var(--text2)';
-  }
-}
+        <script>
+            const evData = __EV_DATA__;
+            const arbData = __ARB_DATA__;
+            const bookCaps = __BOOK_CAPS__;
+            const brState = __BR_STATE__;
+            const totalBankroll = __BANKROLL__;
 
-/* ── INIT EMPTY ── */
-function initEmpty(){
-  $('ev-cards').innerHTML=`<div class="empty"><div class="ei">📡</div><div class="et">No EV edges yet</div><div class="es">Configure your key and tap Start Sweep</div></div>`;
-  $('arb-cards').innerHTML=`<div class="empty"><div class="ei">🔒</div><div class="et">No arbitrage windows</div><div class="es">All sports will be scanned on sweep</div></div>`;
-}
-initEmpty();
+            function displayBookie(api_key) {
+                const mapping = {'onexbet': '1xBet/Melbet', 'pinnacle': 'Pinnacle', 'marathonbet': 'Marathonbet', 'dafabet': 'Dafabet', 'stake': 'Stake.com', 'betfair_ex_eu': 'Betfair Exchange', 'betway': 'Betway'};
+                return mapping[api_key] || (api_key.charAt(0).toUpperCase() + api_key.slice(1));
+            }
 
-/* ── EV FILTERS ── */
-function applyFilters(){
-  const cards=[...$('ev-cards').querySelectorAll('.ev-card')];
-  cards.forEach((c,i)=>{
-    let hide=false;
-    if(top5&&i>=5)hide=true;
-    if(hcFilter&&parseFloat(c.dataset.conf)<60)hide=true;
-    c.style.display=hide?'none':'';
-  });
-}
-function toggleTop5(){
-  top5=!top5;
-  $('top5Btn').style.borderColor=top5?'var(--cyan)':'var(--b2)';
-  $('top5Btn').style.color=top5?'var(--cyan)':'var(--text2)';
-  applyFilters();
-}
-function toggleSort(){
-  sortOn=!sortOn;
-  $('sortBtn').style.borderColor=sortOn?'var(--gold)':'var(--b2)';
-  $('sortBtn').style.color=sortOn?'var(--gold)':'var(--text2)';
-  const c=$('ev-cards');
-  const cards=[...c.querySelectorAll('.ev-card')];
-  if(sortOn)cards.sort((a,b)=>parseFloat(b.dataset.pct)-parseFloat(a.dataset.pct));
-  cards.forEach(card=>c.appendChild(card));
-}
-function toggleHC(){
-  hcFilter=!hcFilter;
-  $('filterHCBtn').style.borderColor=hcFilter?'var(--green)':'var(--b2)';
-  $('filterHCBtn').style.color=hcFilter?'var(--green)':'var(--text2)';
-  applyFilters();
-}
+            function switchTab(tab) {
+                document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+                document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+                document.getElementById('content-' + tab).classList.add('active');
+                document.getElementById('tab-' + tab).classList.add('active');
+            }
 
-/* ── ARB FILTERS ── */
-function applyArbFilters(){
-  const cards=[...$('arb-cards').querySelectorAll('.arb-card')];
-  cards.forEach((c,i)=>{
-    let hide=false;
-    if(arb3&&parseInt(c.dataset.ways)!==3)hide=true;
-    c.style.display=hide?'none':'';
-  });
-}
-function toggleArb3(){
-  arb3=!arb3;
-  $('arb3Btn').style.borderColor=arb3?'var(--purple)':'var(--b2)';
-  $('arb3Btn').style.color=arb3?'var(--purple)':'var(--text2)';
-  applyArbFilters();
-}
-function toggleArbSort(){
-  arbSort=!arbSort;
-  $('arbSortBtn').style.borderColor=arbSort?'var(--gold)':'var(--b2)';
-  $('arbSortBtn').style.color=arbSort?'var(--gold)':'var(--text2)';
-  const c=$('arb-cards');
-  const cards=[...c.querySelectorAll('.arb-card')];
-  if(arbSort)cards.sort((a,b)=>parseFloat(b.dataset.pct)-parseFloat(a.dataset.pct));
-  cards.forEach(card=>c.appendChild(card));
-}
+            function renderData() {
+                let isTop5 = document.getElementById('top5-toggle').checked;
+                let sliderVal = parseInt(document.getElementById('kelly-slider').value) / 100;
+                
+                let evLimit = isTop5 ? 5 : evData.length;
+                let arbLimit = isTop5 ? 5 : arbData.length;
+                
+                document.getElementById('ev-count').innerText = evData.length;
+                document.getElementById('arb-count').innerText = arbData.length;
 
-/* ── CSV EXPORT ── */
-function exportCSV(){
-  let rows=[['Type','Match','Sport','Line','Selection','Odds','TrueOdds','EV%/ARB%','Stake','Bookmaker','Confidence']];
-  EVS.forEach(e=>rows.push(['EV',e.match,e.sport,e.line,e.sel,e.odds.toFixed(3),e.true.toFixed(3),e.pct.toFixed(2),e.stake.toFixed(0),bk(e.bookie),e.conf]));
-  ARBS.forEach(a=>rows.push(['ARB',a.match,a.sport,a.line,a.sides.map(s=>s.sel).join('/'),a.sides.map(s=>s.price.toFixed(2)).join('/'), '',a.pct.toFixed(2),a.sides.reduce((s,x)=>s+x.stake,0).toFixed(0),a.sides.map(s=>bk(s.bookie)).join('+'),'']));
-  const csv=rows.map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\\n');
-  const bl=new Blob([csv],{type:'text/csv'});
-  const u=URL.createObjectURL(bl);
-  const a=document.createElement('a');a.href=u;a.download='arb_sniper_'+Date.now()+'.csv';a.click();
-  URL.revokeObjectURL(u);
-}
+                // --- EV RENDER ---
+                let evHtml = '';
+                for(let i=0; i<Math.min(evLimit, evData.length); i++) {
+                    let ev = evData[i];
+                    let true_prob = 1 / ev.true;
+                    let b = ev.odds - 1.0;
+                    
+                    let raw_k = ((b * true_prob - (1-true_prob)) / b) * sliderVal;
+                    let max_k = (0.05 / 0.30) * sliderVal; // Proportional upper limit check
+                    if (raw_k > max_k) raw_k = max_k;
+                    
+                    let stake = Math.max(20, totalBankroll * raw_k);
+                    if (raw_k <= 0) stake = 0;
+                    let cap = bookCaps[ev.bookie] || 1000;
+                    stake = Math.min(stake, cap);
 
-/* ══════════ CALCULATORS ══════════ */
-function calcEV(){
-  const soft=parseFloat($('cSoft').value)||0,pA=parseFloat($('cPinA').value)||0,pB=parseFloat($('cPinB').value)||0;
-  if(!soft||!pA||!pB||pA<=1||pB<=1){rst(['rTO','rEV','rKS','rCF']);return}
-  const[t1]=devig(pA,pB);
-  const evp=((soft/t1)-1)*100;
-  const stake=kelly(soft,t1,getBK(),getKF());
-  const cf=conf(soft,t1);
-  $('rTO').textContent=t1.toFixed(3);
-  $('rEV').textContent=(evp>=0?'+':'')+evp.toFixed(2)+'%';$('rEV').style.color=evp>=0?'var(--green)':'var(--red)';
-  $('rKS').textContent=stake>0?fmt(stake):'No edge';
-  const cc=cf>=70?'var(--green)':cf>=40?'var(--gold)':'var(--red)';
-  $('rCF').textContent=cf+'/100';$('rCF').style.color=cc;
-}
-function calcARB(){
-  const A=parseFloat($('cAA').value)||0,B=parseFloat($('cAB').value)||0;
-  const Cv=$('cAC').value.trim();const C=Cv?parseFloat(Cv):0;
-  if(!A||!B||A<=1||B<=1){rst(['rAM','rAP','rAS','rAB','rAG']);return}
-  const sides=C>1?[A,B,C]:[A,B];
-  const margin=sides.reduce((s,o)=>s+1/o,0);
-  const bkv=getBK(),pct=(1-margin)*100;
-  $('rAM').textContent=margin.toFixed(4);$('rAM').style.color=margin<1?'var(--green)':'var(--red)';
-  $('rAP').textContent=pct.toFixed(3)+'%';$('rAP').style.color=pct>0?'var(--green)':'var(--red)';
-  $('rAS').textContent=margin<1?fmt((bkv/margin)/A):'--';
-  $('rAB').textContent=margin<1?fmt((bkv/margin)/B):'--';
-  $('rAG').textContent=margin<1?fmt((bkv/margin)-bkv):'No ARB';$('rAG').style.color=margin<1?'var(--green)':'var(--red)';
-}
-function calcGU(){
-  const stake=parseFloat($('gBS').value)||0,back=parseFloat($('gBO').value)||0,lay=parseFloat($('gLO').value)||0;
-  if(!stake||!back||!lay||back<=1||lay<=1){rst(['rGL','rGP']);return}
-  const ls=(stake*back)/lay,p=ls-stake;
-  $('rGL').textContent=fmt(ls);
-  $('rGP').textContent=(p>=0?'+':'')+fmt(p);$('rGP').style.color=p>=0?'var(--green)':'var(--red)';
-}
-function calcKelly(){
-  const p=parseFloat($('kP').value)||0,o=parseFloat($('kO').value)||0,bkv=parseFloat($('kB').value)||1500;
-  if(!p||!o||p<=0||p>=1||o<=1){rst(['rFK','rFR','rKA']);return}
-  const b=o-1,q=1-p,full=((b*p-q)/b);
-  const frac=full*.30;
-  $('rFK').textContent=(full*100).toFixed(2)+'%';
-  $('rFR').textContent=(frac*100).toFixed(2)+'%';
-  const stake=frac>0?Math.max(20,Math.min(bkv*frac,bkv*.05)):0;
-  $('rKA').textContent=stake>0?fmt(stake):'No edge';$('rKA').style.color=stake>0?'var(--green)':'var(--red)';
-}
-function rst(ids){ids.forEach(id=>{$(id).textContent='--';$(id).style.color=''})}
-calcEV();calcARB();calcGU();calcKelly();
+                    let confClass = ev.confidence >= 75 ? 'conf-high' : (ev.confidence >= 50 ? 'conf-med' : 'conf-low');
 
-/* ══════════ ANALYTICS ══════════ */
-function renderAn(){
-  const evs=EVS,arbs=ARBS;
-  const totP=arbs.reduce((s,a)=>s+a.profit,0);
-  const totS=arbs.reduce((s,a)=>s+a.sides.reduce((x,y)=>x+y.stake,0),0);
-  const roi=totS>0?(totP/totS*100):0;
-  const avgEV=evs.length?evs.reduce((s,e)=>s+e.pct,0)/evs.length:0;
-  const pkEV=evs.length?Math.max(...evs.map(e=>e.pct)):0;
-  const avgARB=arbs.length?arbs.reduce((s,a)=>s+a.pct,0)/arbs.length:0;
-  const pkARB=arbs.length?Math.max(...arbs.map(a=>a.pct)):0;
-  $('anTE').textContent=evs.length;$('anAE').textContent=avgEV.toFixed(2)+'%';$('anPE').textContent=pkEV.toFixed(2)+'%';
-  $('anTA').textContent=arbs.length;$('anAP').textContent=fmt(totP);$('anROI').textContent=roi.toFixed(2)+'%';
-  // EV hist
-  const eh=[{l:'0–2%',c:evs.filter(e=>e.pct<2).length,g:'linear-gradient(90deg,#4fa3ff,#00d8ff)'},
-    {l:'2–5%',c:evs.filter(e=>e.pct>=2&&e.pct<5).length,g:'linear-gradient(90deg,#00ff90,#00d8ff)'},
-    {l:'5–10%',c:evs.filter(e=>e.pct>=5&&e.pct<10).length,g:'linear-gradient(90deg,#ffd000,#ff8c00)'},
-    {l:'10%+',c:evs.filter(e=>e.pct>=10).length,g:'linear-gradient(90deg,#ff3352,#ff6b35)'}];
-  hist('anEH',eh);
-  $('anES').innerHTML=ms('AVG','var(--green)',avgEV.toFixed(2)+'%')+ms('PEAK','var(--gold)',pkEV.toFixed(2)+'%')+ms('COUNT','var(--cyan)',evs.length);
-  // ARB hist
-  const ah=[{l:'0–1%',c:arbs.filter(a=>a.pct<1).length,g:'linear-gradient(90deg,#64748b,#94a3b8)'},
-    {l:'1–2%',c:arbs.filter(a=>a.pct>=1&&a.pct<2).length,g:'linear-gradient(90deg,#c47eff,#7e22ce)'},
-    {l:'2–5%',c:arbs.filter(a=>a.pct>=2&&a.pct<5).length,g:'linear-gradient(90deg,#00d8ff,#c47eff)'},
-    {l:'5%+',c:arbs.filter(a=>a.pct>=5).length,g:'linear-gradient(90deg,#00ff90,#00d8ff)'}];
-  hist('anAH',ah);
-  $('anAS').innerHTML=ms('AVG','var(--purple)',avgARB.toFixed(2)+'%')+ms('PEAK','var(--cyan)',pkARB.toFixed(2)+'%')+ms('COUNT','var(--green)',arbs.length);
-  // EV by sport
-  bars('anESP',groupBy(evs,e=>sportFmt(e.sport)),'linear-gradient(90deg,var(--cyan),var(--green))',v=>v.length,v=>v.length+' | avg '+(v.reduce((s,e)=>s+e.pct,0)/v.length).toFixed(1)+'%');
-  bars('anASP',groupBy(arbs,a=>sportFmt(a.sport)),'linear-gradient(90deg,var(--purple),var(--cyan))',v=>v.length,v=>v.length);
-  // EV bookmakers
-  barsColor('anEB',groupBy(evs,e=>bk(e.bookie)),['var(--cyan)','var(--green)','var(--gold)','var(--purple)','var(--red)'],v=>v.length,v=>v.length+' | avg '+(v.reduce((s,e)=>s+e.pct,0)/v.length).toFixed(1)+'%');
-  // ARB pairs
-  const pm={};arbs.forEach(a=>{const p=a.sides.map(s=>bk(s.bookie)).join(' + ');pm[p]=(pm[p]||0)+1});
-  const ps=Object.entries(pm).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  const maxP=ps[0]?ps[0][1]:1;
-  $('anAPR').innerHTML=ps.map(([p,c])=>`<div class="brow"><span class="blbl2" style="font-size:10px">${p}</span><div class="btrack"><div class="bfill" style="width:${Math.round(c/maxP*100)}%;background:linear-gradient(90deg,var(--purple),var(--cyan))"></div></div><span class="bcnt" style="color:var(--purple)">${c}</span></div>`).join('')||empty2();
-  // Donut
-  const tw=arbs.filter(a=>a.ways===2).length,th=arbs.filter(a=>a.ways===3).length,tot=Math.max(tw+th,1);
-  $('anDonut').style.setProperty('--tw',Math.round(tw/tot*100)+'%');
-  $('an2w').textContent=tw;$('an3w').textContent=th;
-  $('anAMeta').innerHTML=ms('STAKE','var(--gold)',fmt(totS))+ms('PROFIT','var(--green)',fmt(totP))+ms('ROI','var(--orange)',roi.toFixed(2)+'%');
-  // Confidence
-  const cb=[{l:'0–29',c:evs.filter(e=>e.conf<30).length,cl:'var(--red)'},
-    {l:'30–59',c:evs.filter(e=>e.conf>=30&&e.conf<60).length,cl:'var(--gold)'},
-    {l:'60–79',c:evs.filter(e=>e.conf>=60&&e.conf<80).length,cl:'var(--cyan)'},
-    {l:'80+',c:evs.filter(e=>e.conf>=80).length,cl:'var(--green)'}];
-  const mc=Math.max(...cb.map(b=>b.c),1);
-  const hc=evs.filter(e=>e.conf>=60).length,hcP=evs.length?Math.round(hc/evs.length*100):0;
-  $('anCS').innerHTML=cb.map(b=>`<div class="hrow"><span class="hlbl">${b.l}</span><div class="htrack"><div class="hbar" style="width:${Math.round(b.c/mc*100)}%;background:${b.cl};box-shadow:0 0 6px ${b.cl}55"></div></div><span class="hcnt" style="color:${b.cl}">${b.c}</span></div>`).join('')+
-    `<div class="mini-stats" style="margin-top:10px;border-top:1px solid var(--b1);padding-top:9px;">${ms('HIGH CONF','var(--green)',hcP+'%')}${ms('SCORED','var(--cyan)',evs.length)}</div>`;
-}
-function ms(l,c,v){return`<div class="ms"><span class="msl">${l}</span><span class="msv" style="color:${c}">${v}</span></div>`}
-function sportFmt(s){return s.replace(/_/g,' ').split(' ').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ')}
-function groupBy(arr,fn){const m={};arr.forEach(x=>{const k=fn(x);(m[k]=m[k]||[]).push(x)});return Object.entries(m).sort((a,b)=>b[1].length-a[1].length).slice(0,5)}
-function hist(id,buckets){const max=Math.max(...buckets.map(b=>b.c),1);$(id).innerHTML=buckets.map(b=>`<div class="hrow"><span class="hlbl">${b.l}</span><div class="htrack"><div class="hbar" style="width:${Math.round(b.c/max*100)}%;background:${b.g}"></div></div><span class="hcnt">${b.c}</span></div>`).join('')}
-function bars(id,entries,grad,vFn,lFn){
-  if(!entries.length){$(id).innerHTML=empty2();return}
-  const max=Math.max(...entries.map(([,v])=>vFn(v)),1);
-  $(id).innerHTML=entries.map(([k,v])=>`<div class="brow"><span class="blbl2">${k}</span><div class="btrack"><div class="bfill" style="width:${Math.round(vFn(v)/max*100)}%;background:${grad}"></div></div><span class="bcnt">${lFn(v)}</span></div>`).join('')
-}
-function barsColor(id,entries,cols,vFn,lFn){
-  if(!entries.length){$(id).innerHTML=empty2();return}
-  const max=Math.max(...entries.map(([,v])=>vFn(v)),1);
-  $(id).innerHTML=entries.map(([k,v],i)=>{const c=cols[i%cols.length];return`<div class="brow"><span class="blbl2" style="color:${c}">${k}</span><div class="btrack"><div class="bfill" style="width:${Math.round(vFn(v)/max*100)}%;background:${c}"></div></div><span class="bcnt" style="color:${c}">${lFn(v)}</span></div>`}).join('')
-}
-function empty2(){return'<div style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--text3);padding:10px 0">No data yet</div>'}
+                    let bdHtml = '<table class="breakdown"><tr><th>Bookmaker</th><th>Odds</th><th>EV%</th></tr>';
+                    let sortedBreakdown = Object.entries(ev.breakdown).sort((a,b) => b[1].ev - a[1].ev);
+                    for(let [bk, bd] of sortedBreakdown) {
+                        let hl = bk === ev.bookie ? 'style="background:#2ea04333;"' : '';
+                        bdHtml += `<tr ${hl}><td>${displayBookie(bk)}</td><td>${bd.price.toFixed(2)}</td><td>${bd.ev.toFixed(2)}%</td></tr>`;
+                    }
+                    bdHtml += '</table>';
 
-/* ── INIT ── */
-(()=>{
-  const bkv=localStorage.getItem('arb_bk');
-  if(bkv){$('cfgBK').value=bkv;$('kB').value=bkv;$('telBK').textContent=fmt(parseFloat(bkv))}
-  const ntfy=localStorage.getItem('arb_ntfy');
-  if(ntfy)$('cfgNtfy').value=ntfy;
-  // Restore auto-loop preference
-  const loopPref=localStorage.getItem('arb_autoloop');
-  if(loopPref==='1')$('autoLoop').checked=true;
+                    let clvStr = ev.clv !== null ? `<br>Historical CLV: <span class="highlight">${ev.clv.toFixed(2)}%</span>` : '';
 
-  // Show key status
-  if(API_KEYS.length===0){
-    $('keyDot').style.background='var(--red)';
-    $('keyDot').style.boxShadow='0 0 8px var(--red)';
-    $('keyMsg').style.color='var(--red)';
-    $('keyMsg').textContent='No keys injected — deploy via GitHub Actions or enter key manually on scan';
-  } else {
-    const plural=API_KEYS.length>1?' keys':' key';
-    $('keyMsg').textContent=API_KEYS.length+plural+' injected via GitHub Secrets — ready ✓';
-    $('telKey').textContent=API_KEYS.length+' key'+(API_KEYS.length>1?'s':'');
-  }
+                    evHtml += `
+                    <div class="card">
+                        <div class="card-header"> 
+                            <span><span class="highlight">${ev.pct.toFixed(2)}% EV</span> | ${ev.match}</span>
+                            <span class="badge ${confClass}">Conf: ${ev.confidence.toFixed(0)}</span>
+                        </div>
+                        <div class="detail-block">
+                            ${ev.sport.replace('_', ' ').toUpperCase()}<br>
+                            ${ev.time}<br>
+                            <span class="highlight">${ev.line}</span>${clvStr}
+                        </div>
+                        <div class="detail-block">
+                            BET EXACTLY: <span class="highlight-stake">₹${stake.toFixed(0)}</span> (Cap: ₹${cap})<br>
+                            <span class="highlight">${ev.selection.toUpperCase()} ${(ev.line.split('_')[1] || '').replace('0', '')} @ ${ev.odds.toFixed(2)}</span> on ${displayBookie(ev.bookie)}
+                        </div>
+                        <div>
+                            True Odds: ${ev.true.toFixed(2)}
+                            <details><summary>View Odds Breakdown</summary>${bdHtml}</details>
+                        </div>
+                    </div>`;
+                }
+                document.getElementById('content-ev').innerHTML = evHtml || '<div class="empty-state"> No massive EV edges found right now.</div>';
 
-  renderNetwork();
+                // --- ARB RENDER ---
+                let arbHtml = '';
+                for(let i=0; i<Math.min(arbLimit, arbData.length); i++) {
+                    let arb = arbData[i];
+                    let is3way = arb.type === '3-way';
+                    
+                    let stks = `
+                        <span class="highlight-stake">₹${arb.stk1.toFixed(0)}</span> on <span class="highlight">${arb.s1.toUpperCase()} @ ${arb.s1_data.price.toFixed(2)}</span> [${displayBookie(arb.s1_data.bookie)}]<br>
+                        <span class="highlight-stake">₹${arb.stk2.toFixed(0)}</span> on <span class="highlight">${arb.s2.toUpperCase()} @ ${arb.s2_data.price.toFixed(2)}</span> [${displayBookie(arb.s2_data.bookie)}]
+                    `;
+                    if(is3way) {
+                        stks += `<br><span class="highlight-stake">₹${arb.stk3.toFixed(0)}</span> on <span class="highlight">${arb.s3.toUpperCase()} @ ${arb.s3_data.price.toFixed(2)}</span> [${displayBookie(arb.s3_data.bookie)}]`;
+                    }
+                    
+                    arbHtml += `
+                    <div class="card">
+                        <div class="card-header"> 
+                            <span><span class="highlight">${arb.pct.toFixed(2)}% ARB</span> | ${arb.match}</span>
+                            <span class="badge" style="background:#484f58;">${is3way ? '3-Way' : '2-Way'}</span>
+                        </div>
+                        <div class="detail-block">
+                            ${arb.sport.replace('_', ' ').toUpperCase()}<br>
+                            ${arb.time}<br>
+                            <span class="highlight">${arb.line}</span>
+                        </div>
+                        <div class="detail-block">${stks}</div>
+                        <div>Profit: <span class="profit-highlight">₹${arb.profit.toFixed(0)}</span></div>
+                    </div>`;
+                }
+                document.getElementById('content-arb').innerHTML = arbHtml || '<div class="empty-state"> No Arbitrage opportunities found right now.</div>';
 
-  // ── SESSION AUTO-RESUME ──
-  // If we were mid-loop and the page was reloaded, wait 5 min then fire next sweep
-  if(sessionStorage.getItem('auto_resume')==='true' && $('autoLoop').checked){
-    log('🔄 Session resumed — next sweep in 5 min','linf');
-    $('loopCountdown').style.display='';
-    let secs=300;
-    const tick=setInterval(()=>{
-      secs--;
-      const m=Math.floor(secs/60),s=String(secs%60).padStart(2,'0');
-      $('loopCountdown').textContent='⏳ '+m+':'+s;
-      if(secs<=0){
-        clearInterval(tick);
-        $('loopCountdown').textContent='';
-        $('loopCountdown').style.display='none';
-        startScan();
-      }
-    },1000);
-    window._loopTick=tick;
-  }
-})();
+                // --- ANALYTICS RENDER ---
+                let buckets = {'0-2%':0, '2-5%':0, '5-10%':0, '10%+':0};
+                let sumEv = 0, maxEv = 0;
+                evData.forEach(ev => {
+                    sumEv += ev.pct;
+                    if(ev.pct > maxEv) maxEv = ev.pct;
+                    if(ev.pct < 2) buckets['0-2%']++;
+                    else if(ev.pct < 5) buckets['2-5%']++;
+                    else if(ev.pct < 10) buckets['5-10%']++;
+                    else buckets['10%+']++;
+                });
+                let avgEv = evData.length ? (sumEv / evData.length).toFixed(2) : 0;
 
-$('autoLoop').addEventListener('change',()=>localStorage.setItem('arb_autoloop',$('autoLoop').checked?'1':'0'));
-$('cfgBK').addEventListener('change',()=>{localStorage.setItem('arb_bk',$('cfgBK').value);$('kB').value=$('cfgBK').value});
-$('cfgNtfy').addEventListener('change',()=>localStorage.setItem('arb_ntfy',$('cfgNtfy').value));
-</script>
-</body>
-</html>"""
+                let anaHtml = `
+                <div class="card">
+                    <div class="card-header">Daily Bankroll Tracking</div>
+                    <table class="breakdown" style="border:none;">
+                        <tr><td style="border:none;">Tracking Date:</td><td style="border:none;"><span class="highlight">${brState.date || 'N/A'}</span></td></tr>
+                        <tr><td style="border:none;">Starting Bankroll:</td><td style="border:none;"><span class="highlight">₹${brState.starting_bankroll || 0}</span></td></tr>
+                        <tr><td style="border:none;">Total Stakes Rec:</td><td style="border:none;"><span class="highlight-stake">₹${(brState.total_stakes || 0).toFixed(0)}</span></td></tr>
+                        <tr><td style="border:none;">EV Exposure:</td><td style="border:none;"><span class="highlight">₹${(brState.ev_exposure || 0).toFixed(0)}</span></td></tr>
+                        <tr><td style="border:none;">Theoretical Arb Profit:</td><td style="border:none;"><span class="profit-highlight">₹${(brState.theoretical_profit || 0).toFixed(0)}</span></td></tr>
+                    </table>
+                </div>
+                <div class="card">
+                    <div class="card-header">Current Scan EV Distribution</div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom: 10px;">
+                        <div>Average EV: <span class="highlight">${avgEv}%</span></div>
+                        <div>Highest EV: <span class="highlight">${maxEv.toFixed(2)}%</span></div>
+                    </div>
+                    <table class="breakdown">
+                        <tr><th>Bucket Bracket</th><th>Edge Count</th></tr>
+                        <tr><td>0.0% - 2.0%</td><td>${buckets['0-2%']}</td></tr>
+                        <tr><td>2.0% - 5.0%</td><td>${buckets['2-5%']}</td></tr>
+                        <tr><td>5.0% - 10.0%</td><td>${buckets['5-10%']}</td></tr>
+                        <tr><td>10.0%+</td><td>${buckets['10%+']}</td></tr>
+                    </table>
+                </div>`;
+                document.getElementById('content-analytics').innerHTML = anaHtml;
+            }
 
-with open("index.html", "w", encoding="utf-8") as f:
-    # Inject the real key array from GitHub Secrets into the placeholder
-    f.write(HTML.replace('__INJECTED_KEYS__', INJECTED_KEYS_JS))
+            function exportCSV() {
+                let csv = "Type,Match,Sport,Time,Line,Selection,Odds,Bookmaker,EV/ARB %,Stake,Profit\n";
+                evData.forEach(ev => {
+                    csv += `EV,"${ev.match}","${ev.sport}","${ev.time}","${ev.line}","${ev.selection}",${ev.odds},"${ev.bookie}",${ev.pct},${ev.stake},${ev.green_profit}\n`;
+                });
+                arbData.forEach(arb => {
+                    let totalStk = arb.stk1 + arb.stk2 + (arb.stk3 || 0);
+                    csv += `ARB,"${arb.match}","${arb.sport}","${arb.time}","${arb.line}","Multiple",0,"Multiple",${arb.pct},${totalStk},${arb.profit}\n`;
+                });
+                let encodedUri = encodeURI("data:text/csv;charset=utf-8," + csv);
+                let link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", "arb_sniper_scan.csv");
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
 
-print(f"✅ index.html generated — {len(HTML):,} chars")
-print(f"   API keys injected: {len(_keys_list)} key(s) from ODDS_API_KEYS secret")
+            function triggerScan() {
+                let pat = localStorage.getItem('gh_dispatch_token');
+                if (!pat) {
+                    pat = prompt("Enter your GitHub PAT (ghp_...) to authorize this scan:\\n(This is safely stored only in your local browser, never public)");
+                    if (!pat) return;
+                    localStorage.setItem('gh_dispatch_token', pat);
+                }
+                
+                // Assuming nikunj7711 based on original script, user can modify if needed
+                fetch('https://api.github.com/repos/nikunj7711/arb-sniper/actions/workflows/sniper.yml/dispatches', {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/vnd.github.v3+json',
+                        'Authorization': 'token ' + pat,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ ref: 'main' })
+                })
+                .then(response => {
+                    if(response.ok) {
+                        alert(" Engine Fired! Scan is running. Wait 2-3 minutes, then Hard Refresh this page.");
+                    } else {
+                        alert(" Authorization failed! Your token might be wrong or expired. Resetting token...");
+                        localStorage.removeItem('gh_dispatch_token');
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            }
+
+            window.onload = function() { renderData(); };
+        </script>
+    </body>
+    </html>
+    """
+    
+    html = html_template.replace("__TIME__", current_time)
+    html = html.replace("__EV_DATA__", json.dumps(evs))
+    html = html.replace("__ARB_DATA__", json.dumps(arbs))
+    html = html.replace("__BOOK_CAPS__", json.dumps(BOOK_CAPS))
+    html = html.replace("__BR_STATE__", json.dumps(bankroll_state))
+    html = html.replace("__BANKROLL__", str(TOTAL_BANKROLL))
+    
+    telemetry_str = f"Active Key: #{current_key_index + 1} | Monthly Quota: {requests_remaining}/500 | Scan Cost: ~{credits_burned} credits"
+    html = html.replace("__TELEMETRY_DATA__", telemetry_str)
+
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(html)
+    print(" Web Dashboard successfully updated (index.html)")
+
+# ==========================================
+#  MAIN EXECUTION
+# ==========================================
+def run_hybrid_scanner():
+    global scan_starting_used
+    my_bookies_list = MY_BOOKIES.split(',')
+    scan_starting_used = None
+    
+    ist_now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+    current_time_str = ist_now.strftime('%d %b %Y, %I:%M:%S %p IST')
+    
+    print(f"\n [{current_time_str}] ALL-SPORTS Sweep (EV + ARB) active...")
+    all_evs, all_arbs = [], []
+    
+    history_log = load_json('history_log.json', [])
+    history_map = {(x['match'], x['line'], x['selection']): x['odds'] for x in history_log[-5000:]}
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_sport = {}
+        for sport in TARGET_SPORTS:
+            url = f'https://api.the-odds-api.com/v4/sports/{sport}/odds'
+            params = {'regions': 'eu', 'bookmakers': MY_BOOKIES, 'markets': 'totals,spreads,h2h', 'oddsFormat': 'decimal'}
+            future = executor.submit(fetch_odds_with_retry, url, params.copy())
+            future_to_sport[future] = sport
+
+        for future in as_completed(future_to_sport):
+            sport = future_to_sport[future]
+            events = future.result()
+            if not events: continue
+                
+            for event in events:
+                match_name = f"{event['home_team']} vs {event['away_team']}"
+                match_time = format_time_ist(event['commence_time'])
+                ev_lines, arb_lines = extract_hybrid_data(event.get('bookmakers', []), my_bookies_list)
+                new_evs, new_arbs = evaluate_markets(ev_lines, arb_lines, match_name, match_time, sport, history_map)
+                all_evs.extend(new_evs)
+                all_arbs.extend(new_arbs)
+            
+    if all_arbs:
+        all_arbs.sort(key=lambda x: x['pct'], reverse=True)
+        for arb in all_arbs:
+            stk_str = f" ₹{arb['stk1']:.0f} on {arb['s1'].upper()} @ {arb['s1_data']['price']:.2f} [{display_bookie(arb['s1_data']['bookie'])}]\n ₹{arb['stk2']:.0f} on {arb['s2'].upper()} @ {arb['s2_data']['price']:.2f} [{display_bookie(arb['s2_data']['bookie'])}]"
+            if arb.get('type') == '3-way':
+                stk_str += f"\n ₹{arb['stk3']:.0f} on {arb['s3'].upper()} @ {arb['s3_data']['price']:.2f} [{display_bookie(arb['s3_data']['bookie'])}]"
+            
+            msg = f"   {arb['pct']:.2f}% ARB | {arb['match']}\n {arb['sport'].replace('_', ' ').title()}\n {arb['time']}\n {arb['line']}\n\n{stk_str}\n\n Profit: ₹{arb['profit']:.0f}"
+            
+            if not check_alert_cache(arb['match'], arb['line'], "ARB", arb['pct']):
+                send_phone_alert(msg, arb['pct'], arb['match'], "ARB")
+                
+                history_log.append({
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "match": arb['match'], "sport": arb['sport'], "line": arb['line'],
+                    "selection": "ARB", "odds": arb['pct'], "true_odds": 0, "bookie": "Multiple", "type": arb.get('type'),
+                    "stake_recommendation": sum([arb.get('stk1',0), arb.get('stk2',0), arb.get('stk3',0)])
+                })
+
+    if all_evs:
+        all_evs.sort(key=lambda x: x['pct'], reverse=True)
+        for ev in all_evs:
+            msg = f"   {ev['pct']:.2f}% EV | {ev['match']}\n {ev['sport'].replace('_', ' ').title()}\n {ev['time']}\n {ev['line']}\n\n BET EXACTLY: ₹{ev['stake']:.0f}\n {ev['selection'].upper()} {(ev['line'].split('_')[1] if '_' in ev['line'] else '')} @ {ev['odds']:.2f} on {display_bookie(ev['bookie'])}\n\n True Odds: {ev['true']:.2f}"
+            
+            if not check_alert_cache(ev['match'], ev['line'], ev['selection'], ev['odds']):
+                send_phone_alert(msg, ev['pct'], ev['match'], "EV")
+                
+                history_log.append({
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "match": ev['match'], "sport": ev['sport'], "line": ev['line'],
+                    "selection": ev['selection'], "odds": ev['odds'], "true_odds": ev['true'], "bookie": ev['bookie'],
+                    "stake_recommendation": ev['stake'], "clv": ev.get('clv')
+                })
+
+    save_json('history_log.json', history_log[-10000:])
+    
+    bankroll_state = update_bankroll_state(all_evs, all_arbs)
+    generate_web_dashboard(all_evs, all_arbs, current_time_str, bankroll_state)
+
+    print("\n" + "=" * 65)
+    print(" API USAGE REPORT")
+    print("=" * 65)
+    print(f" Active Key Index: #{current_key_index + 1}")
+    print(f" Remaining Monthly Credits: {requests_remaining} / 500")
+    print("=" * 65)
+
+if __name__ == "__main__":
+    print(" GitHub Actions Master Cloud Engine Started...")
+    run_hybrid_scanner()
+    print(" Scan complete.")
