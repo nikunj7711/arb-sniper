@@ -17,15 +17,21 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
       - name: Build Web Terminal (Inject Keys)
         env:
           ODDS_API_KEYS: ${{ secrets.ODDS_API_KEYS }}
         run: python arb_sniper.py
 
-      - name: Publish Dashboard to GitHub Pages
+      - name: Publish Dashboard and Save State
         run: |
           git config --global user.name "Arb Sniper Bot"
           git config --global user.email "bot@arbsniper.com"
-          git add index.html
-          git commit -m "Deploy Pure SPA Terminal [$(date '+%Y-%m-%d %H:%M IST')]" || exit 0
+          # Added *.json so the bankroll, cache, and history state are saved between runs!
+          git add index.html *.json
+          git commit -m "Deploy Pure SPA Terminal & Save State [$(date '+%Y-%m-%d %H:%M IST')]" || exit 0
           git push
