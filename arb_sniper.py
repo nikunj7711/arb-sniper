@@ -2,11 +2,8 @@
 import os, json
 
 # ── KEY INJECTION ──
-# Reads comma-separated keys from GitHub Secret ODDS_API_KEYS
-# Injects them directly into the JS so the browser never prompts for input
 _raw_keys = os.getenv('ODDS_API_KEYS', '')
 _keys_list = [k.strip() for k in _raw_keys.split(',') if k.strip()]
-# Serialise as a JS array literal, e.g. ["key1","key2"]
 INJECTED_KEYS_JS = json.dumps(_keys_list)
 
 HTML = """<!DOCTYPE html>
@@ -111,7 +108,6 @@ body::after{content:'';position:fixed;inset:0;z-index:0;
 .tab.arb.on{color:#000;background:linear-gradient(135deg,#c47eff,#7e22ce);box-shadow:0 2px 14px #c47eff44}
 .tab.calc.on{color:#000;background:linear-gradient(135deg,#ffd000,#ff8c00);box-shadow:0 2px 14px #ffd00044}
 .tab.an.on{color:#000;background:linear-gradient(135deg,#00ff90,#00a865);box-shadow:0 2px 14px #00ff9044}
-.tab.net.on{color:#000;background:linear-gradient(135deg,#c47eff,#4fa3ff);box-shadow:0 2px 14px #c47eff44}
 .tbadge{display:inline-block;background:rgba(0,0,0,.24);border-radius:8px;padding:1px 6px;font-size:10px;margin-left:3px;font-weight:800}
 .pane{display:none}.pane.on{display:block}
 
@@ -265,7 +261,6 @@ body::after{content:'';position:fixed;inset:0;z-index:0;
 </head>
 <body>
 
-<!-- BANKROLL MODAL -->
 <div class="modal" id="bkModal">
   <div class="mbox">
     <div class="mstripe"></div>
@@ -286,7 +281,6 @@ body::after{content:'';position:fixed;inset:0;z-index:0;
 
 <div class="wrap">
 
-<!-- HEADER -->
 <div class="hdr">
   <div class="hdr-brand">
     <div class="brand-icon">⚡</div>
@@ -304,7 +298,6 @@ body::after{content:'';position:fixed;inset:0;z-index:0;
   </div>
 </div>
 
-<!-- CONFIG -->
 <div class="cfg">
   <div class="cfg-grid">
     <div class="cfg-g wide">
@@ -330,10 +323,6 @@ body::after{content:'';position:fixed;inset:0;z-index:0;
       <label class="lbl">🔒 Min ARB%</label>
       <input class="inp" id="cfgARB" type="number" value="1.0" step="0.1" min="0">
     </div>
-    <div class="cfg-g wide">
-      <label class="lbl">🔔 NTFY Channel (push alerts → phone)</label>
-      <input class="inp" id="cfgNtfy" value="nikunj_arb_alerts_2026" placeholder="your_ntfy_channel_name">
-    </div>
   </div>
   <div class="cfg-foot">
     <div class="slider-g">
@@ -341,18 +330,12 @@ body::after{content:'';position:fixed;inset:0;z-index:0;
       <input type="range" class="slider" id="kellyR" min="1" max="100" value="30" oninput="onKelly(this.value)" style="--p:30%">
       <span class="kelly-v" id="kellyV">30%</span>
     </div>
-    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);letter-spacing:1px;user-select:none">
-      <input type="checkbox" id="autoLoop" style="width:14px;height:14px;accent-color:var(--cyan);cursor:pointer">
-      AUTO-LOOP
-    </label>
-    <span id="loopCountdown" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--gold);display:none;min-width:70px"></span>
     <button class="btn btn-c" id="btnStart" onclick="startScan()">▶ Start Sweep</button>
     <button class="btn btn-r"  id="btnStop"  onclick="stopScan()"  style="display:none">⏹ Stop</button>
     <button class="btn btn-gold btn-sm" onclick="exportCSV()">⬇ CSV</button>
   </div>
 </div>
 
-<!-- SCAN STATUS -->
 <div class="scan-bar" id="scanBar">
   <div class="scan-top">
     <span class="scan-sport" id="scanSport">Initializing…</span>
@@ -362,16 +345,13 @@ body::after{content:'';position:fixed;inset:0;z-index:0;
   <div class="scan-log" id="scanLog"></div>
 </div>
 
-<!-- TABS -->
 <div class="tabs">
   <div class="tab ev on"   id="tab-ev"   onclick="switchTab('ev')">⚡ EV <span class="tbadge" id="bEV">0</span></div>
   <div class="tab arb"     id="tab-arb"  onclick="switchTab('arb')">🔒 ARB <span class="tbadge" id="bARB">0</span></div>
   <div class="tab calc"    id="tab-calc" onclick="switchTab('calc')">🧮 Calc</div>
   <div class="tab an"      id="tab-an"   onclick="switchTab('an')">📊 Analytics</div>
-  <div class="tab net"     id="tab-net"  onclick="switchTab('net')">📡 Network</div>
 </div>
 
-<!-- EV PANE -->
 <div class="pane on" id="pane-ev">
   <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
     <button class="btn btn-sm" id="top5Btn" onclick="toggleTop5()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">🔝 Top 5</button>
@@ -381,7 +361,6 @@ body::after{content:'';position:fixed;inset:0;z-index:0;
   <div id="ev-cards"></div>
 </div>
 
-<!-- ARB PANE -->
 <div class="pane" id="pane-arb">
   <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
     <button class="btn btn-sm" id="arb3Btn" onclick="toggleArb3()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">🔱 3-Way Only</button>
@@ -390,7 +369,6 @@ body::after{content:'';position:fixed;inset:0;z-index:0;
   <div id="arb-cards"></div>
 </div>
 
-<!-- CALC PANE -->
 <div class="pane" id="pane-calc">
   <div class="calc-grid">
 
@@ -449,7 +427,6 @@ body::after{content:'';position:fixed;inset:0;z-index:0;
   </div>
 </div>
 
-<!-- ANALYTICS PANE -->
 <div class="pane" id="pane-an">
   <div class="kpi-row">
     <div class="kpi"><div class="ki" style="color:var(--cyan)">⚡ EV</div><div class="kv" id="anTE" style="color:var(--cyan)">0</div><div class="kl">Total Edges</div></div>
@@ -487,74 +464,56 @@ body::after{content:'';position:fixed;inset:0;z-index:0;
   </div>
 </div>
 
-<!-- NETWORK PANE -->
-<div class="pane" id="pane-net">
-  <div style="margin-bottom:13px">
-    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:11px">📡 API Key Sequential Matrix</div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:13px">Keys are used in order. On a 429 or 401, the engine automatically fails over to the next key. All quota data updates live during each sweep.</div>
-    <div id="netGrid" style="display:flex;flex-direction:column;gap:9px"></div>
-  </div>
-  <div style="background:var(--surf);border:1px solid var(--b1);border-radius:14px;padding:17px">
-    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:11px">⏱ Auto-Loop Status</div>
-    <div id="loopStatus" style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text2)">Auto-Loop is OFF — enable the checkbox and start a sweep to activate.</div>
-    <div style="margin-top:11px;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--text3)">LOOP INTERVAL: 5 MIN · CACHE TTL: 6 HRS · SESSION PERSISTS ACROSS RELOADS</div>
-  </div>
-</div>
-
-<!-- TELEMETRY -->
 <div class="tele">
-  <span>🔑 KEYS <span class="tv3" id="telKey">#1</span></span>
+  <span>🔑 KEY <span class="tv3" id="telKey">#1</span></span>
   <span>📡 QUOTA <span class="tv3" id="telQ">--/500</span></span>
   <span>⚡ BURN <span class="tv3" id="telB">0</span></span>
   <span>🏦 BANKROLL <span class="tv3" id="telBK">₹1500</span></span>
-  <span>🔔 ALERTS <span class="tv3" id="telAlerts">0</span></span>
   <span>⏱ SCAN <span class="tv3" id="telT">--</span></span>
 </div>
 
-</div><!-- /wrap -->
-
-<script>
+</div><script>
 'use strict';
-/* ── NTFY PUSH ALERTS ── */
-function getNtfyCh(){return document.getElementById('cfgNtfy').value.trim()||'arb_sniper_alerts'}
-var alertCount=0;
-function sendNtfy(title,body){
-  var ch=getNtfyCh();if(!ch)return;
-  fetch('https://ntfy.sh/'+ch,{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({topic:ch,title:title,message:body,tags:['gem','moneybag'],priority:5})
-  }).catch(function(e){console.warn('ntfy:',e.message)});
+
+/* ── NTFY PUSH NOTIFICATIONS ── */
+const NTFY_CHANNEL = 'nikunj_arb_alerts_2026';
+
+function sendNtfyAlert(msg, pct, match, type) {
+  const emoji = type === "ARB" ? "🚨" : "📈";
+  fetch('https://ntfy.sh/', {
+    method: 'POST',
+    body: JSON.stringify({
+      topic: NTFY_CHANNEL,
+      message: msg,
+      title: `${emoji} ${pct.toFixed(2)}% ${type} | ${match}`,
+      tags: ["gem", "moneybag"],
+      priority: 5
+    })
+  }).catch(err => console.error("Ntfy Error:", err));
 }
-/* ── ALERT DEDUP CACHE (6h TTL stored in localStorage) ── */
-function isDupe(key){
-  var raw=localStorage.getItem('arb_alert_cache')||'{}';
-  var cache=JSON.parse(raw);
-  var now=Date.now();
-  Object.keys(cache).forEach(function(k){if(now-cache[k]>21600000)delete cache[k]});
-  if(cache[key]){localStorage.setItem('arb_alert_cache',JSON.stringify(cache));return true}
-  cache[key]=now;localStorage.setItem('arb_alert_cache',JSON.stringify(cache));return false;
-}
-function fireEVAlert(ev){
-  var key='EV|'+ev.match+'|'+ev.line+'|'+ev.sel+'|'+ev.odds.toFixed(2);
-  if(isDupe(key))return;
-  alertCount++;$('telAlerts').textContent=alertCount;
-  var title='📈 '+ev.pct.toFixed(2)+'% EV — '+ev.match;
-  var body=ev.sport.replace(/_/g,' ').toUpperCase()+' · '+ev.time
-    +'\n\n💰 BET: '+ev.sel.toUpperCase()+' @ '+ev.odds.toFixed(2)+' on '+bk(ev.bookie)
-    +'\n📐 Kelly Stake: '+fmt(ev.stake)
-    +'\n🧠 True Odds: '+ev.true.toFixed(3)+' | Conf: '+ev.conf+'/100';
-  sendNtfy(title,body);
-}
-function fireARBAlert(arb){
-  var key='ARB|'+arb.match+'|'+arb.line+'|'+arb.pct.toFixed(2);
-  if(isDupe(key))return;
-  alertCount++;$('telAlerts').textContent=alertCount;
-  var title='🚨 '+arb.pct.toFixed(2)+'% ARB — '+arb.match;
-  var body=arb.sport.replace(/_/g,' ').toUpperCase()+' · '+arb.time+'\n';
-  arb.sides.forEach(function(s){body+='\n🔵 '+fmt(s.stake)+' on '+s.sel.toUpperCase()+' @ '+s.price.toFixed(2)+' ['+bk(s.bookie)+']'});
-  body+='\n\n✅ Guaranteed profit: '+fmt(arb.profit);
-  sendNtfy(title,body);
+
+/* ── ALERT CACHE (LOCAL STORAGE) ── */
+// Prevents duplicate notifications for 6 hours
+function isDuplicateAlert(alertKey) {
+  let cache = JSON.parse(localStorage.getItem('arb_alert_cache') || '{}');
+  const now = Date.now();
+  
+  // Clean up cache (delete entries older than 6 hours / 21600000 ms)
+  for (let k in cache) {
+    if (now - cache[k] > 21600000) {
+      delete cache[k];
+    }
+  }
+  
+  if (cache[alertKey]) {
+    localStorage.setItem('arb_alert_cache', JSON.stringify(cache));
+    return true; // It is a duplicate
+  }
+  
+  // Not a duplicate, save it and return false
+  cache[alertKey] = now;
+  localStorage.setItem('arb_alert_cache', JSON.stringify(cache));
+  return false;
 }
 
 /* ── CONSTANTS ── */
@@ -646,14 +605,13 @@ $('bkModal').addEventListener('click',e=>{if(e.target===$('bkModal'))closeBK()})
 
 /* ── TABS ── */
 function switchTab(t){
-  ['ev','arb','calc','an','net'].forEach(id=>{
+  ['ev','arb','calc','an'].forEach(id=>{
     $('tab-'+id).classList.remove('on');
     $('pane-'+id).classList.remove('on');
   });
   $('tab-'+t).classList.add('on');
   $('pane-'+t).classList.add('on');
   if(t==='an')renderAn();
-  if(t==='net')renderNetwork();
 }
 
 /* ── SCAN LOG ── */
@@ -667,7 +625,7 @@ function log(msg,cls=''){
 const API_KEYS = __INJECTED_KEYS__;
 let keyIdx = 0;
 function getKey(){return API_KEYS[keyIdx % Math.max(API_KEYS.length,1)]}
-function rotateKey(){keyQuota[keyIdx]=0;keyIdx++;log('🔄 Rotating to key #'+(keyIdx+1),'linf');renderNetwork()}
+function rotateKey(){keyIdx++;log('🔄 Rotating to key #'+(keyIdx+1),'linf')}
 
 /* ── START / STOP ── */
 function startScan(){
@@ -683,41 +641,14 @@ function startScan(){
   $('ev-cards').innerHTML='';$('arb-cards').innerHTML='';
   updateBadges();log('Sweep initializing… key #1 active','linf');
   runNext();
-}}
+}
 function stopScan(){
   scanning=false;
-  if(window._loopTick){clearInterval(window._loopTick);window._loopTick=null}
-  $('loopCountdown').style.display='none';$('loopCountdown').textContent='';
   $('btnStart').style.display='';$('btnStop').style.display='none';
   $('progFill').style.width='100%';
   log('Sweep stopped.','lerr');
   $('telT').textContent=((Date.now()-scanT0)/1000).toFixed(1)+'s';
   if(EVS.length||ARBS.length)renderAn();
-  renderNetwork();
-
-  // ── AUTO-LOOP ──
-  if($('autoLoop').checked && EVS.length+ARBS.length>=0){
-    sessionStorage.setItem('auto_resume','true');
-    let secs=300; // 5 minutes
-    $('loopCountdown').style.display='';
-    const tick=setInterval(()=>{
-      secs--;
-      const m=Math.floor(secs/60),s=String(secs%60).padStart(2,'0');
-      $('loopCountdown').textContent='⏳ '+m+':'+s;
-      if(secs<=0){
-        clearInterval(tick);
-        $('loopCountdown').textContent='';
-        $('loopCountdown').style.display='none';
-        startScan();
-      }
-    },1000);
-    // Store interval handle so stopScan can cancel it
-    window._loopTick=tick;
-    log('🔄 Auto-Loop armed — next sweep in 5 min','linf');
-  } else {
-    sessionStorage.removeItem('auto_resume');
-    $('loopCountdown').style.display='none';
-  }
 }
 
 /* ── SPORT LOOP ── */
@@ -736,7 +667,7 @@ async function runNext(){
     const res=await fetch(url);
     const rem=res.headers.get('x-requests-remaining');
     const used=res.headers.get('x-requests-used');
-    if(rem){quotaRem=rem;$('tQuota').textContent=rem+'/500';$('telQ').textContent=rem+'/500';keyQuota[keyIdx]=parseInt(rem)}
+    if(rem){quotaRem=rem;$('tQuota').textContent=rem+'/500';$('telQ').textContent=rem+'/500'}
     if(used){
       if(!creditT0)creditT0=parseInt(used)-1;
       const burn=parseInt(used)-creditT0;
@@ -811,7 +742,13 @@ function processEvents(events,sport){
         const bd=buildBD(d,side,trueO);
         const ev={pct:evp,match,time:mt,sport,line:lk,sel:side,odds:sp,true:trueO,bookie:d.best[side].bookie,stake,conf:cf,bd};
         EVS.push(ev);renderEV(ev,EVS.length-1);
-        fireEVAlert(ev);
+        
+        // CHECK CACHE AND SEND NTFY ALERT FOR EV
+        const alertKey = `EV|${match}|${lk}|${side}|${sp.toFixed(2)}`;
+        if (!isDuplicateAlert(alertKey)) {
+            const msg = `💎 💰 📈 ${evp.toFixed(2)}% EV | ${match}\n🏆 ${sport.replace(/_/g, ' ').toUpperCase()}\n📅 ${mt}\n📈 ${lk}\n\n💰 BET EXACTLY: ₹${stake.toFixed(0)}\n👉 ${side.toUpperCase()} @ ${sp.toFixed(2)} on ${bk(d.best[side].bookie)}\n\n🧠 True Odds: ${trueO.toFixed(3)} | Confidence: ${cf}/100`;
+            sendNtfyAlert(msg, evp, match, "EV");
+        }
       });
     });
     // ARB
@@ -828,7 +765,17 @@ function processEvents(events,sport){
           sides:k.map(ki=>({sel:ki,price:outs[ki].price,bookie:outs[ki].bookie,stake:(bankroll/margin)/outs[ki].price})),
           profit:(bankroll/margin)-bankroll};
         ARBS.push(arb);renderARB(arb,ARBS.length-1);
-        fireARBAlert(arb);
+        
+        // CHECK CACHE AND SEND NTFY ALERT FOR ARB
+        const alertKey = `ARB|${match}|${lk}|${pct.toFixed(2)}`;
+        if (!isDuplicateAlert(alertKey)) {
+            let msg = `💎 💰 🚨 ${pct.toFixed(2)}% ARB | ${match}\n🏆 ${sport.replace(/_/g, ' ').toUpperCase()}\n📅 ${mt}\n📈 ${lk}\n\n`;
+            arb.sides.forEach(s => {
+                msg += `🔵 ₹${s.stake.toFixed(0)} on ${s.sel.toUpperCase()} @ ${s.price.toFixed(2)} [${bk(s.bookie)}]\n`;
+            });
+            msg += `\n✨ Profit: ₹${arb.profit.toFixed(0)}`;
+            sendNtfyAlert(msg, pct, match, "ARB");
+        }
       }
     });
     $('tEV').textContent=EVS.length;$('tARB').textContent=ARBS.length;
@@ -919,50 +866,6 @@ function renderARB(arb,idx){
 
 /* ── BADGES ── */
 function updateBadges(){$('bEV').textContent=EVS.length;$('bARB').textContent=ARBS.length}
-
-/* ── NETWORK RENDER ── */
-const keyQuota={};  // live quota per key index, updated during sweeps
-function renderNetwork(){
-  const grid=$('netGrid');
-  if(!grid)return;
-  if(!API_KEYS.length){
-    grid.innerHTML='<div style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--red);padding:10px 0">No API keys injected. Deploy via GitHub Actions with ODDS_API_KEYS secret set.</div>';
-    return;
-  }
-  grid.innerHTML=API_KEYS.map((k,i)=>{
-    const masked=k.length>10?k.slice(0,4)+'••••'+k.slice(-4):'••••';
-    const rem=keyQuota[i]!==undefined?keyQuota[i]:'?';
-    const isActive=i===keyIdx;
-    const isExhausted=keyQuota[i]===0;
-    const statusColor=isActive?'var(--cyan)':isExhausted?'var(--red)':'var(--green)';
-    const statusLabel=isActive?'ACTIVE':'STANDBY';
-    const statusBg=isActive?'#00d8ff14':isExhausted?'#ff335214':'#00ff9008';
-    const barW=rem==='?'?50:Math.round((parseInt(rem)/500)*100);
-    return `<div style="background:${statusBg};border:1px solid ${statusColor}44;border-radius:12px;padding:13px 15px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-      <div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:2px;color:${statusColor};margin-bottom:4px">KEY #${i+1} · ${statusLabel}</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--text)">${masked}</div>
-      </div>
-      <div style="text-align:right;min-width:90px">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-bottom:5px">QUOTA REMAINING</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:800;color:${statusColor}">${rem}/500</div>
-        <div style="height:3px;background:var(--b2);border-radius:2px;margin-top:5px;overflow:hidden">
-          <div style="height:100%;width:${barW}%;background:${statusColor};border-radius:2px;transition:width .5s ease"></div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-
-  // Update loop status text
-  const ls=$('loopStatus');
-  if(ls){
-    const loopOn=$('autoLoop')&&$('autoLoop').checked;
-    ls.textContent=loopOn
-      ?'Auto-Loop is ACTIVE — after each sweep completes, a 5-minute cooldown fires the next sweep automatically.'
-      :'Auto-Loop is OFF — enable the checkbox next to Start Sweep to activate.';
-    ls.style.color=loopOn?'var(--cyan)':'var(--text2)';
-  }
-}
 
 /* ── INIT EMPTY ── */
 function initEmpty(){
@@ -1158,13 +1061,7 @@ function empty2(){return'<div style="font-family:JetBrains Mono,monospace;font-s
 (()=>{
   const bkv=localStorage.getItem('arb_bk');
   if(bkv){$('cfgBK').value=bkv;$('kB').value=bkv;$('telBK').textContent=fmt(parseFloat(bkv))}
-  const ntfy=localStorage.getItem('arb_ntfy');
-  if(ntfy)$('cfgNtfy').value=ntfy;
-  // Restore auto-loop preference
-  const loopPref=localStorage.getItem('arb_autoloop');
-  if(loopPref==='1')$('autoLoop').checked=true;
-
-  // Show key status
+  // Show key status in header indicator
   if(API_KEYS.length===0){
     $('keyDot').style.background='var(--red)';
     $('keyDot').style.boxShadow='0 0 8px var(--red)';
@@ -1175,33 +1072,8 @@ function empty2(){return'<div style="font-family:JetBrains Mono,monospace;font-s
     $('keyMsg').textContent=API_KEYS.length+plural+' injected via GitHub Secrets — ready ✓';
     $('telKey').textContent=API_KEYS.length+' key'+(API_KEYS.length>1?'s':'');
   }
-
-  renderNetwork();
-
-  // ── SESSION AUTO-RESUME ──
-  // If we were mid-loop and the page was reloaded, wait 5 min then fire next sweep
-  if(sessionStorage.getItem('auto_resume')==='true' && $('autoLoop').checked){
-    log('🔄 Session resumed — next sweep in 5 min','linf');
-    $('loopCountdown').style.display='';
-    let secs=300;
-    const tick=setInterval(()=>{
-      secs--;
-      const m=Math.floor(secs/60),s=String(secs%60).padStart(2,'0');
-      $('loopCountdown').textContent='⏳ '+m+':'+s;
-      if(secs<=0){
-        clearInterval(tick);
-        $('loopCountdown').textContent='';
-        $('loopCountdown').style.display='none';
-        startScan();
-      }
-    },1000);
-    window._loopTick=tick;
-  }
 })();
-
-$('autoLoop').addEventListener('change',()=>localStorage.setItem('arb_autoloop',$('autoLoop').checked?'1':'0'));
 $('cfgBK').addEventListener('change',()=>{localStorage.setItem('arb_bk',$('cfgBK').value);$('kB').value=$('cfgBK').value});
-$('cfgNtfy').addEventListener('change',()=>localStorage.setItem('arb_ntfy',$('cfgNtfy').value));
 </script>
 </body>
 </html>"""
