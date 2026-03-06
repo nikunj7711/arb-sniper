@@ -69,11 +69,20 @@ def is_duplicate_alert(match, line, selection, odds):
     with cache_lock:
         cache = load_json('alert_cache.json', {})
         now_ts = time.time()
-        cache = {k: v for k, v in cache.items() if now_ts - v < 6*3600}
+        
+        # Bulletproof cleanup: safely ignores old string data from previous versions
+        clean_cache = {}
+        for k, v in cache.items():
+            if isinstance(v, (float, int)) and (now_ts - v < 6*3600):
+                clean_cache[k] = v
+                
+        cache = clean_cache
         alert_key = f"{match}|{line}|{selection}|{odds:.2f}"
+        
         if alert_key in cache:
             save_json('alert_cache.json', cache)
             return True
+            
         cache[alert_key] = now_ts
         save_json('alert_cache.json', cache)
         return False
