@@ -19,6 +19,9 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Install Dependencies
+        run: pip install requests
+
       - name: Execute Cloud Scan & Build Terminal
         env:
           ODDS_API_KEYS: ${{ secrets.ODDS_API_KEYS }}
