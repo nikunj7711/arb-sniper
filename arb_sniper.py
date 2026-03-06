@@ -126,6 +126,7 @@ def process_markets(results):
         for event in events:
             home = event.get('home_team', 'Team A')
             away = event.get('away_team', 'Team B')
+            match_name = f"{home} vs {away}"
             match_time = format_ist_time(event['commence_time'])
             
             ev_lines, arb_lines = {}, {}
@@ -164,7 +165,7 @@ def process_markets(results):
                                 ev_pct = ((best_p / true_odds) - 1) * 100
                                 if ev_pct >= MIN_EV_THRESHOLD:
                                     all_evs.append({
-                                        'pct': ev_pct, 'home': home, 'away': away, 'time': match_time, 'sport': sport.replace('_', ' ').upper(),
+                                        'pct': ev_pct, 'match': match_name, 'home': home, 'away': away, 'time': match_time, 'sport': sport.replace('_', ' ').upper(),
                                         'line': lk, 'sel': side, 'odds': best_p, 'trueO': true_odds, 'bk': best_bk,
                                         'stk': calculate_kelly(best_p, true_odds, TOTAL_BANKROLL, best_bk),
                                         'conf': max(0, min(100, int((abs((1/best_p) - (1/true_odds)) / (1/true_odds)) * 500)))
@@ -178,7 +179,7 @@ def process_markets(results):
                     k_slice = keys[:ways]
                     margin = sum(1/outs[k]['price'] for k in k_slice)
                     if margin < 1.0 and (1-margin)*100 >= MIN_ARB_THRESHOLD:
-                        arb = {'pct': (1-margin)*100, 'home': home, 'away': away, 'time': match_time, 'sport': sport.replace('_', ' ').upper(), 'line': lk, 'ways': ways, 'profit': (TOTAL_BANKROLL/margin)-TOTAL_BANKROLL, 'sides': []}
+                        arb = {'pct': (1-margin)*100, 'match': match_name, 'home': home, 'away': away, 'time': match_time, 'sport': sport.replace('_', ' ').upper(), 'line': lk, 'ways': ways, 'profit': (TOTAL_BANKROLL/margin)-TOTAL_BANKROLL, 'sides': []}
                         for k in k_slice:
                             arb['sides'].append({'sel': k, 'pr': outs[k]['price'], 'bk': outs[k]['bookie'], 'stk': (TOTAL_BANKROLL/margin)/outs[k]['price']})
                         all_arbs.append(arb)
@@ -309,7 +310,6 @@ def generate_web(evs, arbs):
         event.target.classList.add('active');
         document.getElementById('pane-'+p).classList.add('active');
     }}
-    // Auto-refresh the page every 5 minutes to fetch the latest GitHub build
     setInterval(() => window.location.reload(true), 300000);
 </script>
 </body>
@@ -334,7 +334,7 @@ if __name__ == "__main__":
             for s in a['sides']: 
                 msg += f"🔵 ₹{s['stk']:.0f} on {s['sel'].upper()} @ {s['pr']:.2f} [{s['bk'].title().replace('_',' ')}]\n"
             msg += f"\n✨ Guaranteed Profit: ₹{a['profit']:.0f}"
-            requests.post("https://ntfy.sh/", json={"topic": NTFY_CHANNEL, "message": msg, "title": f"🚨 {a['pct']:.2f}% ARB | {a['home']} vs {a['away']}", "tags": ["gem", "moneybag"], "priority": 5}, timeout=5)
+            requests.post("https://ntfy.sh/", json={"topic": NTFY_CHANNEL, "message": msg, "title": f"🚨 {a['pct']:.2f}% ARB | {a['match']}", "tags": ["gem", "moneybag"], "priority": 5}, timeout=5)
 
     for e in evs:
         alert_key = f"EV|{e['match']}|{e['line']}|{e['sel']}|{e['odds']:.2f}"
@@ -343,7 +343,7 @@ if __name__ == "__main__":
             msg += f"💰 BET EXACTLY: ₹{e['stk']:.0f}\n"
             msg += f"👉 {e['sel'].upper()} @ {e['odds']:.2f} on {e['bk'].title().replace('_',' ')}\n\n"
             msg += f"🧠 True Odds: {e['trueO']:.3f} | Confidence: {e['conf']}/100"
-            requests.post("https://ntfy.sh/", json={"topic": NTFY_CHANNEL, "message": msg, "title": f"📈 {e['pct']:.2f}% EV | {e['home']} vs {e['away']}", "tags": ["gem", "moneybag"], "priority": 5}, timeout=5)
+            requests.post("https://ntfy.sh/", json={"topic": NTFY_CHANNEL, "message": msg, "title": f"📈 {e['pct']:.2f}% EV | {e['match']}", "tags": ["gem", "moneybag"], "priority": 5}, timeout=5)
 
     save_json('api_state.json', api_state)
     save_json('alert_cache.json', alert_cache)
