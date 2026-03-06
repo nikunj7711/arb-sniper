@@ -9,16 +9,18 @@ _raw_keys = os.getenv('ODDS_API_KEYS', '')
 API_KEYS = [k.strip() for k in _raw_keys.split(',') if k.strip()]
 
 NTFY_CHANNEL = 'nikunj_arb_alerts_2026'
+
+# --- LIVE FIRE TEST THRESHOLDS ---
 TOTAL_BANKROLL = 1500
-MIN_EV_THRESHOLD = 0.0
-MIN_ARB_THRESHOLD = 0.0
+MIN_EV_THRESHOLD = 0.0   # Set to 0.0 for testing
+MIN_ARB_THRESHOLD = 0.0  # Set to 0.0 for testing
 
 MY_BOOKIES = 'pinnacle,onexbet,marathonbet,dafabet,stake,betfair_ex_eu,betway'
 TARGET_SPORTS = ['soccer_epl', 'soccer_uefa_champs_league', 'basketball_nba', 'icehockey_nhl', 'tennis_atp', 'tennis_wta']
 BOOK_CAPS = {'betway': 300, 'stake': 500, 'onexbet': 400, 'marathonbet': 400, 'dafabet': 350, 'betfair_ex_eu': 600, 'pinnacle': 1000}
 
 # ==========================================
-#  STATE & CACHE MANAGERS
+#  STATE & CACHE MANAGERS (BULLETPROOFED)
 # ==========================================
 api_lock = threading.Lock()
 
@@ -34,7 +36,11 @@ def save_json(filepath, data):
         with open(filepath, 'w', encoding='utf-8') as f: json.dump(data, f, indent=2)
     except: pass
 
-api_state = load_json('api_state.json', {'active_index': 0, 'stats': {}})
+# Load and strictly enforce the structure to prevent KeyErrors
+api_state = load_json('api_state.json', {})
+if 'active_index' not in api_state: api_state['active_index'] = 0
+if 'stats' not in api_state: api_state['stats'] = {}
+
 alert_cache = load_json('alert_cache.json', {})
 
 # Clean old cache (6 hours)
@@ -48,13 +54,13 @@ def is_duplicate_alert(alert_key):
 
 def get_active_api_key():
     with api_lock:
-        idx = api_state.get('active_index', 0)
+        idx = api_state['active_index']
         if idx >= len(API_KEYS): return None, idx
         return API_KEYS[idx], idx
 
 def rotate_api_key(failed_idx):
     with api_lock:
-        if api_state.get('active_index', 0) == failed_idx:
+        if api_state['active_index'] == failed_idx:
             api_state['active_index'] += 1
             save_json('api_state.json', api_state)
             print(f"🔄 Key #{failed_idx + 1} Exhausted! Switching to Key #{api_state['active_index'] + 1}")
@@ -213,7 +219,7 @@ def generate_web(evs, arbs):
 
     # Generate EV Cards
     ev_html = ""
-    for e in evs:
+    for e in evs[:50]: # Show top 50 to prevent massive files during test
         ev_html += f"""
         <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
             <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
@@ -238,7 +244,7 @@ def generate_web(evs, arbs):
 
     # Generate ARB Cards
     arb_html = ""
-    for a in arbs:
+    for a in arbs[:50]: # Show top 50
         legs_html = ""
         for s in a['sides']:
             legs_html += f"""
@@ -278,7 +284,7 @@ def generate_web(evs, arbs):
     .time-badge {{ background: rgba(16,185,129,0.1); border: 1px solid #10b981; color: #10b981; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: bold; font-family: monospace; }}
     
     .tabs {{ display: flex; gap: 5px; background: #18181b; padding: 5px; border-radius: 10px; border: 1px solid #27272a; margin-bottom: 20px; }}
-    .tab {{ flex: 1; text-align: center; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; color: #a1a1aa; font-size: 13px; }}
+    .tab {{ flex: 1; text-align: center; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; color: #a1a1aa; font-size: 13px; transition: 0.2s; }}
     .tab.active {{ background: #3f3f46; color: #fff; }}
     .pane {{ display: none; }} .pane.active {{ display: block; }}
 </style>
@@ -310,6 +316,7 @@ def generate_web(evs, arbs):
         event.target.classList.add('active');
         document.getElementById('pane-'+p).classList.add('active');
     }}
+    // Auto-refresh the page every 5 minutes to fetch the latest GitHub build
     setInterval(() => window.location.reload(true), 300000);
 </script>
 </body>
