@@ -1,15 +1,13 @@
 name: Arb Sniper Bot
 
 on:
-  schedule:
-    - cron: '*/15 * * * *' # Runs exactly every 15 minutes automatically
-  workflow_dispatch:
+  workflow_dispatch: # Manual trigger only. The browser handles the actual scanning loops.
 
 permissions:
   contents: write
 
 jobs:
-  scan:
+  build-spa:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -19,18 +17,15 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Dependencies
-        run: pip install requests
-
-      - name: Execute Cloud Scan & Sync Terminal
+      - name: Build Web Terminal (Inject Keys)
         env:
           ODDS_API_KEYS: ${{ secrets.ODDS_API_KEYS }}
         run: python arb_sniper.py
 
-      - name: Publish Global Snapshot
+      - name: Publish Dashboard to GitHub Pages
         run: |
           git config --global user.name "Arb Sniper Bot"
           git config --global user.email "bot@arbsniper.com"
-          git add index.html api_state.json
-          git commit -m "Global Sync [$(date '+%Y-%m-%d %H:%M IST')]" || exit 0
+          git add index.html
+          git commit -m "Deploy Pure SPA Terminal [$(date '+%Y-%m-%d %H:%M IST')]" || exit 0
           git push
