@@ -622,3 +622,4 @@ if __name__ == "__main__":
         
     print("✅ Terminal UI Built Successfully.")
     print("📊 API State Tracker:", json.dumps(api_state, indent=2))
+
