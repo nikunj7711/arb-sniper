@@ -15,10 +15,22 @@ TOTAL_BANKROLL = 1500
 MIN_EV_THRESHOLD = 0.0   # Set to 0.0 for testing
 MIN_ARB_THRESHOLD = 0.0  # Set to 0.0 for testing
 
-MY_BOOKIES = 'pinnacle,onexbet,marathonbet,dafabet,stake,betfair_ex_eu,betway'
-TARGET_SPORTS = ['soccer_epl', 'soccer_uefa_champs_league', 'basketball_nba', 'icehockey_nhl', 'tennis_atp', 'tennis_wta']
-BOOK_CAPS = {'betway': 300, 'stake': 500, 'onexbet': 400, 'marathonbet': 400, 'dafabet': 350, 'betfair_ex_eu': 600, 'pinnacle': 1000}
+MY_BOOKIES = 'pinnacle,onexbet,marathonbet,dafabet,stake,betfair_ex_eu,betway,bet365,unibet,williamhill,888sport,betclic'
 
+TARGET_SPORTS = [
+    'soccer_epl', 'soccer_uefa_champs_league', 'soccer_spain_la_liga', 'soccer_italy_serie_a', 'soccer_germany_bundesliga',
+    'basketball_nba', 'basketball_euroleague', 'basketball_ncaab',
+    'icehockey_nhl',
+    'tennis_atp', 'tennis_wta',
+    'americanfootball_nfl',
+    'mma_mixed_martial_arts'
+]
+
+BOOK_CAPS = {
+    'betway': 300, 'stake': 500, 'onexbet': 400, 'marathonbet': 400, 'dafabet': 350, 
+    'betfair_ex_eu': 600, 'pinnacle': 1000, 'bet365': 400, 'unibet': 350, 
+    'williamhill': 350, '888sport': 350, 'betclic': 300
+}
 # ==========================================
 #  STATE & CACHE MANAGERS (BULLETPROOFED)
 # ==========================================
