@@ -563,7 +563,7 @@ window.onload = () => {
     final_html = final_html.replace('__BANKROLL__', str(TOTAL_BANKROLL))
     final_html = final_html.replace('__EV_JSON__', json.dumps(evs))
     final_html = final_html.replace('__ARB_JSON__', json.dumps(arbs))
-    final_html = final_html.replace('__API_KEYS__', INJECTED_KEYS_JS)
+    final_html = final_html.replace('__API_KEYS__', json.dumps(API_KEYS))
     final_html = final_html.replace('__MASKED_KEYS__', json.dumps(masked_keys))
     final_html = final_html.replace('__API_STATE__', json.dumps(api_state))
     final_html = final_html.replace('__ACTIVE_IDX__', str(api_state.get('active_index', 0)))
