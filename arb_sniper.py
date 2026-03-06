@@ -242,12 +242,8 @@ def evaluate_markets(ev_lines, arb_lines, match_name, match_time, sport):
 #  WEB DASHBOARD GENERATOR
 # ==========================================
 def generate_web_dashboard(evs, arbs, cur_time, br_state):
-    # Mask API keys for frontend security (e.g. 1a2b••••9z0x)
     masked_keys = [f"{k[:4]}••••{k[-4:]}" if len(k) > 10 else "Invalid Key" for k in API_KEYS]
     
-    # Calculate starting cost
-    starting_reqs = sum(int(v.get('remaining', 500)) for v in api_state.get('stats', {}).values())
-
     html_template = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -379,7 +375,6 @@ function recalc() {
     const bk = parseFloat(document.getElementById('cfgBankroll').value) || 1500;
     const kf = (parseFloat(document.getElementById('cfgKelly').value) || 30) / 100;
     
-    // Recalculate EV stakes
     document.querySelectorAll('.ev-stake').forEach(el => {
         const soft = parseFloat(el.dataset.soft);
         const trueO = parseFloat(el.dataset.true);
@@ -392,7 +387,6 @@ function recalc() {
         el.textContent = fmt(s);
     });
 
-    // Recalculate ARB stakes
     document.querySelectorAll('.arb-stake').forEach(el => {
         const margin = parseFloat(el.dataset.margin);
         const price = parseFloat(el.dataset.price);
@@ -488,7 +482,6 @@ function renderNetwork() {
     document.getElementById('netGrid').innerHTML = netHtml;
 }
 
-// ── BROWSER CLIENT-SIDE SCANNER ──
 function startEngine() {
     STATE.isScanning = true;
     document.getElementById('btnStart').style.display = 'none';
@@ -510,9 +503,6 @@ async function executeSweep() {
     document.getElementById('scanStatus').textContent = "🔄 SWEEP IN PROGRESS...";
     document.getElementById('scanStatus').style.color = "var(--cyan)";
     
-    // Notify user we are using the proxy cloud engine to trigger GitHub
-    // Since complex math and full history tracking runs best on the cloud Python script, 
-    // the JS engine triggers the GitHub Action to run, then reloads when fresh.
     let pat = localStorage.getItem('gh_dispatch_token');
     if (!pat) {
         pat = prompt("Enter your GitHub PAT (ghp_...) to authorize Auto-Loop sweeps:");
@@ -531,11 +521,9 @@ async function executeSweep() {
             document.getElementById('scanStatus').textContent = "☁️ CLOUD ENGINE FIRED. WAITING 45s...";
             document.getElementById('scanStatus').style.color = "var(--gold)";
             
-            // Wait 45 seconds for GitHub to finish building the new index.html, then reload
             STATE.loopTimer = setTimeout(() => {
                 if(STATE.isScanning) {
                     if (document.getElementById('autoLoop').checked) {
-                        // Set a flag in session storage so it automatically resumes after reload
                         sessionStorage.setItem('auto_resume', 'true');
                     }
                     window.location.reload(true);
@@ -552,11 +540,9 @@ async function executeSweep() {
     }
 }
 
-// Auto-Resume check on page load
 window.onload = () => {
     buildUI();
     if (sessionStorage.getItem('auto_resume') === 'true') {
-        // Wait 5 minutes before firing the next loop to save credits
         document.getElementById('btnStart').style.display = 'none';
         document.getElementById('btnStop').style.display = '';
         document.getElementById('scanStatus').textContent = "⏳ STANDBY (5 MINUTE TIMEOUT)";
@@ -565,7 +551,7 @@ window.onload = () => {
         
         STATE.loopTimer = setTimeout(() => {
             executeSweep();
-        }, 300000); // 5 minutes
+        }, 300000); 
     }
 };
 
@@ -573,20 +559,30 @@ window.onload = () => {
 </body>
 </html>"""
 
+    final_html = html_template.replace('__TIME__', cur_time)
+    final_html = final_html.replace('__BANKROLL__', str(TOTAL_BANKROLL))
+    final_html = final_html.replace('__EV_JSON__', json.dumps(evs))
+    final_html = final_html.replace('__ARB_JSON__', json.dumps(arbs))
+    final_html = final_html.replace('__API_KEYS__', INJECTED_KEYS_JS)
+    final_html = final_html.replace('__MASKED_KEYS__', json.dumps(masked_keys))
+    final_html = final_html.replace('__API_STATE__', json.dumps(api_state))
+    final_html = final_html.replace('__ACTIVE_IDX__', str(api_state.get('active_index', 0)))
+
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(final_html)
+
 # ==========================================
 #  MAIN EXECUTION (THE FACTORY)
 # ==========================================
 if __name__ == "__main__":
     print("🚀 GitHub Actions Cloud Factory Started...")
     
-    # 1. Fetch data
     results = fetch_all_sports_parallel()
     all_evs, all_arbs = [], []
     
     ist_now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
     current_time_str = ist_now.strftime('%d %b %Y, %I:%M:%S %p IST')
 
-    # 2. Process data
     for sport, events in results.items():
         if not events: continue
         for event in events:
@@ -603,7 +599,6 @@ if __name__ == "__main__":
     
     bankroll_state = update_bankroll_state(all_evs, all_arbs)
 
-    # 3. Send Push Notifications (with Duplicate Suppression)
     for arb in all_arbs:
         if not is_duplicate_alert(arb['match'], arb['line'], "ARB", arb['pct']):
             msg = f"💎 💰 🚨 {arb['pct']:.2f}% ARB | {arb['match']}\n🏆 {arb['sport'].replace('_', ' ').title()}\n📈 {arb['line']}\n\n✨ Profit: ₹{arb['profit']:.0f}"
@@ -614,21 +609,6 @@ if __name__ == "__main__":
             msg = f"💎 💰 📈 {ev['pct']:.2f}% EV | {ev['match']}\n🏆 {ev['sport'].replace('_', ' ').title()}\n📈 {ev['line']}\n\n💰 BET EXACTLY: ₹{ev['stake']:.0f}\n👉 {ev['selection'].upper()} @ {ev['odds']:.2f} on {ev['bookie'].title()}\n\n🧠 True Odds: {ev['true']:.3f}"
             send_phone_alert(msg, ev['pct'], ev['match'], "EV")
 
-    # 4. Generate the HTML File
-    final_html = HTML.replace('__TIME__', current_time_str)
-    final_html = final_html.replace('__BANKROLL__', str(TOTAL_BANKROLL))
-    final_html = final_html.replace('__EV_JSON__', json.dumps(all_evs))
-    final_html = final_html.replace('__ARB_JSON__', json.dumps(all_arbs))
-    final_html = final_html.replace('__API_KEYS__', INJECTED_KEYS_JS)
-    
-    masked_keys = [f"{k[:4]}••••{k[-4:]}" if len(k) > 10 else "Invalid" for k in API_KEYS]
-    final_html = final_html.replace('__MASKED_KEYS__', json.dumps(masked_keys))
-    final_html = final_html.replace('__API_STATE__', json.dumps(api_state))
-    final_html = final_html.replace('__ACTIVE_IDX__', str(api_state.get('active_index', 0)))
-
-    with open("index.html", "w", encoding="utf-8") as f:
-        f.write(final_html)
-        
+    generate_web_dashboard(all_evs, all_arbs, current_time_str, bankroll_state)
     print("✅ Terminal UI Built Successfully.")
     print("📊 API State Tracker:", json.dumps(api_state, indent=2))
-
