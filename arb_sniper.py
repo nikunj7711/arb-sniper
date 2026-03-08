@@ -206,22 +206,23 @@ def process_markets(results):
                                         'is_live': is_live
                                     })
 
-            # ARB Eval
+            # ARB Eval (FIXED: Strict 2-Way and 3-Way Handling)
             for lk, outs in arb_lines.items():
                 keys = list(outs.keys())
-                for ways in [2, 3]:
-                    if len(keys) < ways: continue
-                    k_slice = keys[:ways]
-                    margin = sum(1/outs[k]['price'] for k in k_slice)
-                    if margin < 1.0 and (1-margin)*100 >= MIN_ARB_THRESHOLD:
-                        arb = {'pct': (1-margin)*100, 'match': match_name, 'home': home, 'away': away, 'time': match_time, 'sport': sport.replace('_', ' ').upper(), 'line': lk, 'ways': ways, 'profit': (TOTAL_BANKROLL/margin)-TOTAL_BANKROLL, 'sides': [], 'is_live': is_live}
-                        for k in k_slice:
-                            arb['sides'].append({'sel': k, 'pr': outs[k]['price'], 'bk': outs[k]['bookie'], 'stk': (TOTAL_BANKROLL/margin)/outs[k]['price']})
-                        all_arbs.append(arb)
-
-    all_evs.sort(key=lambda x: x['pct'], reverse=True)
-    all_arbs.sort(key=lambda x: x['pct'], reverse=True)
-    return all_evs, all_arbs
+                ways = len(keys)
+                
+                # We only want exactly 2-way (Tennis/NBA) or exactly 3-way (Soccer)
+                if ways not in [2, 3]: 
+                    continue
+                    
+                # Calculate margin using ALL valid outcomes
+                margin = sum(1/outs[k]['price'] for k in keys)
+                
+                if margin < 1.0 and (1-margin)*100 >= MIN_ARB_THRESHOLD:
+                    arb = {'pct': (1-margin)*100, 'match': match_name, 'home': home, 'away': away, 'time': match_time, 'sport': sport.replace('_', ' ').upper(), 'line': lk, 'ways': ways, 'profit': (TOTAL_BANKROLL/margin)-TOTAL_BANKROLL, 'sides': [], 'is_live': is_live}
+                    for k in keys:
+                        arb['sides'].append({'sel': k, 'pr': outs[k]['price'], 'bk': outs[k]['bookie'], 'stk': (TOTAL_BANKROLL/margin)/outs[k]['price']})
+                    all_arbs.append(arb)
 
 # ==========================================
 #  WEBSITE GENERATOR
