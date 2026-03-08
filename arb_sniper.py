@@ -9,12 +9,11 @@ _raw_keys = os.getenv('ODDS_API_KEYS', '')
 API_KEYS = [k.strip() for k in _raw_keys.split(',') if k.strip()]
 
 NTFY_CHANNEL = 'nikunj_arb_alerts_2026'
-
-# --- LIVE FIRE TEST THRESHOLDS ---
 TOTAL_BANKROLL = 1500
-MIN_EV_THRESHOLD = 0.0   # Set to 0.0 for testing
-MIN_ARB_THRESHOLD = 0.0  # Set to 0.0 for testing
+MIN_EV_THRESHOLD = 1.5
+MIN_ARB_THRESHOLD = 1.0
 
+# EXPANDED HUNTING GROUND
 MY_BOOKIES = 'pinnacle,onexbet,marathonbet,dafabet,stake,betfair_ex_eu,betway,bet365,unibet,williamhill,888sport,betclic'
 
 TARGET_SPORTS = [
@@ -31,8 +30,9 @@ BOOK_CAPS = {
     'betfair_ex_eu': 600, 'pinnacle': 1000, 'bet365': 400, 'unibet': 350, 
     'williamhill': 350, '888sport': 350, 'betclic': 300
 }
+
 # ==========================================
-#  STATE & CACHE MANAGERS (BULLETPROOFED)
+#  STATE & CACHE MANAGERS
 # ==========================================
 api_lock = threading.Lock()
 
@@ -48,7 +48,6 @@ def save_json(filepath, data):
         with open(filepath, 'w', encoding='utf-8') as f: json.dump(data, f, indent=2)
     except: pass
 
-# Load and strictly enforce the structure to prevent KeyErrors
 api_state = load_json('api_state.json', {})
 if 'active_index' not in api_state: api_state['active_index'] = 0
 if 'stats' not in api_state: api_state['stats'] = {}
@@ -139,9 +138,21 @@ def format_ist_time(iso_str):
 # ==========================================
 def process_markets(results):
     all_evs, all_arbs = [], []
+    now_utc = datetime.now(timezone.utc)
+    
     for sport, events in results.items():
         if not events: continue
         for event in events:
+            
+            # --- LIVE MATCH DETECTION ---
+            is_live = False
+            try:
+                dt_commence = datetime.strptime(event['commence_time'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                if dt_commence < now_utc:
+                    is_live = True
+            except:
+                pass
+            
             home = event.get('home_team', 'Team A')
             away = event.get('away_team', 'Team B')
             match_name = f"{home} vs {away}"
@@ -186,7 +197,8 @@ def process_markets(results):
                                         'pct': ev_pct, 'match': match_name, 'home': home, 'away': away, 'time': match_time, 'sport': sport.replace('_', ' ').upper(),
                                         'line': lk, 'sel': side, 'odds': best_p, 'trueO': true_odds, 'bk': best_bk,
                                         'stk': calculate_kelly(best_p, true_odds, TOTAL_BANKROLL, best_bk),
-                                        'conf': max(0, min(100, int((abs((1/best_p) - (1/true_odds)) / (1/true_odds)) * 500)))
+                                        'conf': max(0, min(100, int((abs((1/best_p) - (1/true_odds)) / (1/true_odds)) * 500))),
+                                        'is_live': is_live
                                     })
 
             # Evaluate ARB
@@ -197,7 +209,7 @@ def process_markets(results):
                     k_slice = keys[:ways]
                     margin = sum(1/outs[k]['price'] for k in k_slice)
                     if margin < 1.0 and (1-margin)*100 >= MIN_ARB_THRESHOLD:
-                        arb = {'pct': (1-margin)*100, 'match': match_name, 'home': home, 'away': away, 'time': match_time, 'sport': sport.replace('_', ' ').upper(), 'line': lk, 'ways': ways, 'profit': (TOTAL_BANKROLL/margin)-TOTAL_BANKROLL, 'sides': []}
+                        arb = {'pct': (1-margin)*100, 'match': match_name, 'home': home, 'away': away, 'time': match_time, 'sport': sport.replace('_', ' ').upper(), 'line': lk, 'ways': ways, 'profit': (TOTAL_BANKROLL/margin)-TOTAL_BANKROLL, 'sides': [], 'is_live': is_live}
                         for k in k_slice:
                             arb['sides'].append({'sel': k, 'pr': outs[k]['price'], 'bk': outs[k]['bookie'], 'stk': (TOTAL_BANKROLL/margin)/outs[k]['price']})
                         all_arbs.append(arb)
@@ -231,11 +243,12 @@ def generate_web(evs, arbs):
 
     # Generate EV Cards
     ev_html = ""
-    for e in evs[:50]: # Show top 50 to prevent massive files during test
+    for e in evs[:50]: 
+        live_badge = '<span style="color:#ef4444; font-weight:bold; animation: pulse 1.5s infinite;">🔴 LIVE (In-Play)</span>' if e.get('is_live') else f"📅 {e['time']}"
         ev_html += f"""
         <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
             <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 {e['sport']} &nbsp;|&nbsp; 📅 {e['time']}</span>
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 {e['sport']} &nbsp;|&nbsp; {live_badge}</span>
                 <span style="color:#06b6d4; font-weight:800; font-family:monospace;">{e['pct']:.2f}% EV</span>
             </div>
             <div style="padding:15px;">
@@ -256,7 +269,8 @@ def generate_web(evs, arbs):
 
     # Generate ARB Cards
     arb_html = ""
-    for a in arbs[:50]: # Show top 50
+    for a in arbs[:50]: 
+        live_badge = '<span style="color:#ef4444; font-weight:bold; animation: pulse 1.5s infinite;">🔴 LIVE (In-Play)</span>' if a.get('is_live') else f"📅 {a['time']}"
         legs_html = ""
         for s in a['sides']:
             legs_html += f"""
@@ -268,7 +282,7 @@ def generate_web(evs, arbs):
         arb_html += f"""
         <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
             <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 {a['sport']} &nbsp;|&nbsp; 📅 {a['time']}</span>
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 {a['sport']} &nbsp;|&nbsp; {live_badge}</span>
                 <span style="color:#f59e0b; font-weight:800; font-family:monospace;">{a['pct']:.2f}% ARB</span>
             </div>
             <div style="padding:15px;">
@@ -299,6 +313,8 @@ def generate_web(evs, arbs):
     .tab {{ flex: 1; text-align: center; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; color: #a1a1aa; font-size: 13px; transition: 0.2s; }}
     .tab.active {{ background: #3f3f46; color: #fff; }}
     .pane {{ display: none; }} .pane.active {{ display: block; }}
+    
+    @keyframes pulse {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0.3; }} }}
 </style>
 </head>
 <body>
@@ -349,7 +365,8 @@ if __name__ == "__main__":
     for a in arbs:
         alert_key = f"ARB|{a['match']}|{a['line']}|{a['pct']:.2f}"
         if not is_duplicate_alert(alert_key):
-            msg = f"🏆 {a['sport']}\n📅 {a['time']}\n📈 {a['line']}\n\n"
+            time_str = "🔴 LIVE (In-Play)" if a.get('is_live') else f"📅 {a['time']}"
+            msg = f"🏆 {a['sport']}\n{time_str}\n📈 {a['line']}\n\n"
             for s in a['sides']: 
                 msg += f"🔵 ₹{s['stk']:.0f} on {s['sel'].upper()} @ {s['pr']:.2f} [{s['bk'].title().replace('_',' ')}]\n"
             msg += f"\n✨ Guaranteed Profit: ₹{a['profit']:.0f}"
@@ -358,7 +375,8 @@ if __name__ == "__main__":
     for e in evs:
         alert_key = f"EV|{e['match']}|{e['line']}|{e['sel']}|{e['odds']:.2f}"
         if not is_duplicate_alert(alert_key):
-            msg = f"🏆 {e['sport']}\n📅 {e['time']}\n📈 {e['line']}\n\n"
+            time_str = "🔴 LIVE (In-Play)" if e.get('is_live') else f"📅 {e['time']}"
+            msg = f"🏆 {e['sport']}\n{time_str}\n📈 {e['line']}\n\n"
             msg += f"💰 BET EXACTLY: ₹{e['stk']:.0f}\n"
             msg += f"👉 {e['sel'].upper()} @ {e['odds']:.2f} on {e['bk'].title().replace('_',' ')}\n\n"
             msg += f"🧠 True Odds: {e['trueO']:.3f} | Confidence: {e['conf']}/100"
