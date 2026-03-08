@@ -2,9 +2,8 @@ name: Arb Sniper Bot
 
 on:
   schedule:
-    - cron: '0 * * * *' # Runs at the start of every hour (e.g. 1:00, 2:00)
-  workflow_dispatch: # Gives you a manual button to force a scan immediately
-
+    - cron: '*/30 * * * *'  # Runs every 30 minutes
+  workflow_dispatch: # Keeps your manual run button
 permissions:
   contents: write
 
