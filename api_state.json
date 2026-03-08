@@ -1,1 +1,11 @@
-{}
+{
+  "active_index": 1,
+  "stats": {
+    "0": {
+      "remaining": 0
+    },
+    "1": {
+      "remaining": 279
+    }
+  }
+}
