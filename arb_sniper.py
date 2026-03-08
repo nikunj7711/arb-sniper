@@ -354,14 +354,14 @@ def generate_web(evs, arbs):
         f.write(HTML)
 
 # ==========================================
-#  MAIN EXECUTION (FIXED NOTIFICATIONS)
+#  MAIN EXECUTION (FIXED EMOJI CRASH)
 # ==========================================
 if __name__ == "__main__":
     print(f"🚀 Cloud Engine Booting... Loaded {len(API_KEYS)} Keys.")
     results = fetch_all_sports()
     evs, arbs = process_markets(results)
     
-    # 🔔 NTFY NOTIFICATION LOGIC
+    # 🔔 NTFY NOTIFICATION LOGIC (JSON MODE)
     for a in arbs:
         alert_key = f"ARB|{a['match']}|{a['line']}|{a['pct']:.2f}"
         if not is_duplicate_alert(alert_key):
@@ -371,9 +371,8 @@ if __name__ == "__main__":
                 msg += f"🔵 ₹{s['stk']:.0f} on {s['sel'].upper()} @ {s['pr']:.2f} [{s['bk'].title()}]\n"
             msg += f"\n✨ Profit: ₹{a['profit']:.0f}"
             
-            requests.post(f"https://ntfy.sh/{NTFY_CHANNEL}", 
-                          data=msg.encode('utf-8'),
-                          headers={"Title": f"🚨 {a['pct']:.2f}% ARB | {a['match']}", "Tags": "moneybag,gem"},
+            requests.post("https://ntfy.sh/", 
+                          json={"topic": NTFY_CHANNEL, "message": msg, "title": f"🚨 {a['pct']:.2f}% ARB | {a['match']}", "tags": ["moneybag","gem"]},
                           timeout=5)
 
     for e in evs:
@@ -385,9 +384,8 @@ if __name__ == "__main__":
             msg += f"👉 {e['sel'].upper()} @ {e['odds']:.2f} on {e['bk'].title()}\n\n"
             msg += f"🧠 True Odds: {e['trueO']:.3f}"
             
-            requests.post(f"https://ntfy.sh/{NTFY_CHANNEL}", 
-                          data=msg.encode('utf-8'),
-                          headers={"Title": f"📈 {e['pct']:.2f}% EV | {e['match']}", "Tags": "chart_with_upwards_trend,star"},
+            requests.post("https://ntfy.sh/", 
+                          json={"topic": NTFY_CHANNEL, "message": msg, "title": f"📈 {e['pct']:.2f}% EV | {e['match']}", "tags": ["chart_with_upwards_trend","star"]},
                           timeout=5)
 
     save_json('api_state.json', api_state)
