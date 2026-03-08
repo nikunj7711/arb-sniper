@@ -211,11 +211,9 @@ def process_markets(results):
                 keys = list(outs.keys())
                 ways = len(keys)
                 
-                # We only want exactly 2-way (Tennis/NBA) or exactly 3-way (Soccer)
                 if ways not in [2, 3]: 
                     continue
                     
-                # Calculate margin using ALL valid outcomes
                 margin = sum(1/outs[k]['price'] for k in keys)
                 
                 if margin < 1.0 and (1-margin)*100 >= MIN_ARB_THRESHOLD:
@@ -223,6 +221,10 @@ def process_markets(results):
                     for k in keys:
                         arb['sides'].append({'sel': k, 'pr': outs[k]['price'], 'bk': outs[k]['bookie'], 'stk': (TOTAL_BANKROLL/margin)/outs[k]['price']})
                     all_arbs.append(arb)
+
+    all_evs.sort(key=lambda x: x['pct'], reverse=True)
+    all_arbs.sort(key=lambda x: x['pct'], reverse=True)
+    return all_evs, all_arbs
 
 # ==========================================
 #  WEBSITE GENERATOR
@@ -324,7 +326,7 @@ def generate_web(evs, arbs):
 <div class="hdr">
     <div>
         <h1 class="title">⚡ ARB SNIPER</h1>
-        <div class="subtitle">Cloud Scanning Active · Target: 19 Keys</div>
+        <div class="subtitle">Cloud Scanning Active · Target: {len(API_KEYS)} Keys</div>
     </div>
     <div class="time-badge">SYNCED: {build_time}</div>
 </div>
