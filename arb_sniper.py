@@ -186,7 +186,8 @@ def process_markets(results):
             # EV Eval
             for lk, d in ev_lines.items():
                 pinny, softs = d['pin'], d['softs']
-                if len(pinny) in [2, 3]:
+                ways = len(pinny)
+                if ways in [2, 3]:
                     keys = list(pinny.keys())
                     true_odds_vals = remove_vig(*[pinny[k] for k in keys])
                     
@@ -200,13 +201,13 @@ def process_markets(results):
                                 if ev_pct >= MIN_EV_THRESHOLD:
                                     all_evs.append({
                                         'pct': ev_pct, 'match': match_name, 'home': home, 'away': away, 'time': match_time, 'sport': sport.replace('_', ' ').upper(),
-                                        'line': lk, 'sel': side, 'odds': best_p, 'trueO': true_odds, 'bk': best_bk,
+                                        'line': lk, 'ways': ways, 'sel': side, 'odds': best_p, 'trueO': true_odds, 'bk': best_bk,
                                         'stk': calculate_kelly(best_p, true_odds, TOTAL_BANKROLL, best_bk),
                                         'conf': max(0, min(100, int((abs((1/best_p) - (1/true_odds)) / (1/true_odds)) * 500))),
                                         'is_live': is_live
                                     })
 
-            # ARB Eval (FIXED: Strict 2-Way and 3-Way Handling)
+            # ARB Eval 
             for lk, outs in arb_lines.items():
                 keys = list(outs.keys())
                 ways = len(keys)
@@ -258,7 +259,7 @@ def generate_web(evs, arbs):
             </div>
             <div style="padding:15px;">
                 <div style="font-size:16px; font-weight:800; margin-bottom:10px;">{e['home']} <span style="font-size:12px; color:#a1a1aa;">vs</span> {e['away']}</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">{e['line']}</strong></div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">{e['line']}</strong> ({e['ways']}-Way)</div>
                 <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
                     <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">{e['sel'].upper()} @ {e['odds']:.2f}</strong></div>
                     <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">{e['bk'].title().replace('_',' ')}</div>
@@ -369,7 +370,7 @@ if __name__ == "__main__":
         alert_key = f"ARB|{a['match']}|{a['line']}|{a['pct']:.2f}"
         if not is_duplicate_alert(alert_key):
             time_str = "🔴 LIVE" if a.get('is_live') else f"📅 {a['time']}"
-            msg = f"🏆 {a['sport']}\n{time_str}\n📈 {a['line']}\n\n"
+            msg = f"🏆 {a['sport']}\n{time_str}\n📈 {a['line']} ({a['ways']}-Way)\n\n"
             for s in a['sides']: 
                 msg += f"🔵 ₹{s['stk']:.0f} on {s['sel'].upper()} @ {s['pr']:.2f} [{s['bk'].title()}]\n"
             msg += f"\n✨ Profit: ₹{a['profit']:.0f}"
@@ -382,7 +383,7 @@ if __name__ == "__main__":
         alert_key = f"EV|{e['match']}|{e['line']}|{e['sel']}|{e['odds']:.2f}"
         if not is_duplicate_alert(alert_key):
             time_str = "🔴 LIVE" if e.get('is_live') else f"📅 {e['time']}"
-            msg = f"🏆 {e['sport']}\n{time_str}\n📈 {e['line']}\n\n"
+            msg = f"🏆 {e['sport']}\n{time_str}\n📈 {e['line']} ({e['ways']}-Way)\n\n"
             msg += f"💰 BET: ₹{e['stk']:.0f}\n"
             msg += f"👉 {e['sel'].upper()} @ {e['odds']:.2f} on {e['bk'].title()}\n\n"
             msg += f"🧠 True Odds: {e['trueO']:.3f}"
