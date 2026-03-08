@@ -32,7 +32,7 @@ BOOK_CAPS = {
 }
 
 # ==========================================
-#  STATE & CACHE MANAGERS
+#  STATE & CACHE MANAGERS (BULLETPROOFED)
 # ==========================================
 api_lock = threading.Lock()
 
@@ -51,6 +51,13 @@ def save_json(filepath, data):
 api_state = load_json('api_state.json', {})
 if 'active_index' not in api_state: api_state['active_index'] = 0
 if 'stats' not in api_state: api_state['stats'] = {}
+
+# 🛡️ AUTO-RECOVERY SYSTEM: 
+# If the bot gets stuck out of bounds, it wipes its own memory and restarts at Key 1.
+if len(API_KEYS) > 0 and api_state['active_index'] >= len(API_KEYS):
+    print("🛡️ Auto-Recovery Activated: Resetting Key Index to 0.")
+    api_state['active_index'] = 0
+    api_state['stats'] = {}
 
 alert_cache = load_json('alert_cache.json', {})
 
@@ -241,11 +248,9 @@ def generate_web(evs, arbs):
             <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">{rem}/500</strong></div>
         </div>"""
 
-    # Generate EV Cards
-    ev_html = ""
-    for e in evs[:50]: 
+    def build_ev_card(e):
         live_badge = '<span style="color:#ef4444; font-weight:bold; animation: pulse 1.5s infinite;">🔴 LIVE (In-Play)</span>' if e.get('is_live') else f"📅 {e['time']}"
-        ev_html += f"""
+        return f"""
         <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
             <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
                 <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 {e['sport']} &nbsp;|&nbsp; {live_badge}</span>
@@ -254,12 +259,10 @@ def generate_web(evs, arbs):
             <div style="padding:15px;">
                 <div style="font-size:16px; font-weight:800; margin-bottom:10px;">{e['home']} <span style="font-size:12px; color:#a1a1aa;">vs</span> {e['away']}</div>
                 <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">{e['line']}</strong></div>
-                
                 <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
                     <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">{e['sel'].upper()} @ {e['odds']:.2f}</strong></div>
                     <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">{e['bk'].title().replace('_',' ')}</div>
                 </div>
-                
                 <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
                     <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹{e['stk']:.0f}</strong></div>
                     <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">{e['trueO']:.3f} | {e['conf']}/100</strong></div>
@@ -267,9 +270,7 @@ def generate_web(evs, arbs):
             </div>
         </div>"""
 
-    # Generate ARB Cards
-    arb_html = ""
-    for a in arbs[:50]: 
+    def build_arb_card(a):
         live_badge = '<span style="color:#ef4444; font-weight:bold; animation: pulse 1.5s infinite;">🔴 LIVE (In-Play)</span>' if a.get('is_live') else f"📅 {a['time']}"
         legs_html = ""
         for s in a['sides']:
@@ -278,8 +279,7 @@ def generate_web(evs, arbs):
                 <span>{s['sel'].upper()} @ <strong style="color:#f59e0b;">{s['pr']:.2f}</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">{s['bk'].title().replace('_',' ')}</span></span>
                 <strong style="color:#06b6d4;">₹{s['stk']:.0f}</strong>
             </div>"""
-            
-        arb_html += f"""
+        return f"""
         <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
             <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
                 <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 {a['sport']} &nbsp;|&nbsp; {live_badge}</span>
@@ -293,8 +293,17 @@ def generate_web(evs, arbs):
             </div>
         </div>"""
 
-    if not ev_html: ev_html = "<div style='text-align:center; padding:40px; color:#a1a1aa;'>No EV edges detected right now.</div>"
-    if not arb_html: arb_html = "<div style='text-align:center; padding:40px; color:#a1a1aa;'>No Arbitrage locks detected right now.</div>"
+    # Separate into Pre-Match and Live
+    pre_evs = [e for e in evs if not e.get('is_live')]
+    live_evs = [e for e in evs if e.get('is_live')]
+    pre_arbs = [a for a in arbs if not a.get('is_live')]
+    live_arbs = [a for a in arbs if a.get('is_live')]
+
+    pre_ev_html = "".join([build_ev_card(e) for e in pre_evs[:50]]) or "<div style='text-align:center; padding:40px; color:#a1a1aa;'>No Pre-Match EV edges detected.</div>"
+    live_ev_html = "".join([build_ev_card(e) for e in live_evs[:50]]) or "<div style='text-align:center; padding:40px; color:#a1a1aa;'>No Live EV edges detected.</div>"
+    
+    pre_arb_html = "".join([build_arb_card(a) for a in pre_arbs[:50]]) or "<div style='text-align:center; padding:40px; color:#a1a1aa;'>No Pre-Match Arbitrage locks.</div>"
+    live_arb_html = "".join([build_arb_card(a) for a in live_arbs[:50]]) or "<div style='text-align:center; padding:40px; color:#a1a1aa;'>No Live Arbitrage locks.</div>"
 
     HTML = f"""<!DOCTYPE html>
 <html lang="en">
@@ -309,8 +318,8 @@ def generate_web(evs, arbs):
     .subtitle {{ font-size: 11px; color: #a1a1aa; font-family: monospace; }}
     .time-badge {{ background: rgba(16,185,129,0.1); border: 1px solid #10b981; color: #10b981; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: bold; font-family: monospace; }}
     
-    .tabs {{ display: flex; gap: 5px; background: #18181b; padding: 5px; border-radius: 10px; border: 1px solid #27272a; margin-bottom: 20px; }}
-    .tab {{ flex: 1; text-align: center; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; color: #a1a1aa; font-size: 13px; transition: 0.2s; }}
+    .tabs {{ display: flex; flex-wrap: wrap; gap: 6px; background: #18181b; padding: 6px; border-radius: 10px; border: 1px solid #27272a; margin-bottom: 20px; }}
+    .tab {{ flex: 1 1 20%; min-width: 110px; text-align: center; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold; color: #a1a1aa; font-size: 12px; transition: 0.2s; }}
     .tab.active {{ background: #3f3f46; color: #fff; }}
     .pane {{ display: none; }} .pane.active {{ display: block; }}
     
@@ -328,13 +337,17 @@ def generate_web(evs, arbs):
 </div>
 
 <div class="tabs">
-    <div class="tab active" onclick="showPane('ev')">💎 EV Edges ({len(evs)})</div>
-    <div class="tab" onclick="showPane('arb')">🔒 Arbitrage ({len(arbs)})</div>
-    <div class="tab" onclick="showPane('net')">📡 API Network</div>
+    <div class="tab active" onclick="showPane('pre-ev')">💎 Pre-Match EV ({len(pre_evs)})</div>
+    <div class="tab" onclick="showPane('live-ev')">🔴 Live EV ({len(live_evs)})</div>
+    <div class="tab" onclick="showPane('pre-arb')">🔒 Pre-Match ARB ({len(pre_arbs)})</div>
+    <div class="tab" onclick="showPane('live-arb')">🔴 Live ARB ({len(live_arbs)})</div>
+    <div class="tab" onclick="showPane('net')">📡 Network</div>
 </div>
 
-<div id="pane-ev" class="pane active">{ev_html}</div>
-<div id="pane-arb" class="pane">{arb_html}</div>
+<div id="pane-pre-ev" class="pane active">{pre_ev_html}</div>
+<div id="pane-live-ev" class="pane">{live_ev_html}</div>
+<div id="pane-pre-arb" class="pane">{pre_arb_html}</div>
+<div id="pane-live-arb" class="pane">{live_arb_html}</div>
 <div id="pane-net" class="pane">{net_html}</div>
 
 <script>
@@ -344,7 +357,6 @@ def generate_web(evs, arbs):
         event.target.classList.add('active');
         document.getElementById('pane-'+p).classList.add('active');
     }}
-    // Auto-refresh the page every 5 minutes to fetch the latest GitHub build
     setInterval(() => window.location.reload(true), 300000);
 </script>
 </body>
