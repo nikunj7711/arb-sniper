@@ -1,10 +1,4 @@
 {
-  "EV|Chicago Blackhawks vs Utah Mammoth|H2H|Chicago Blackhawks|4.10": 1773078228.566152,
-  "EV|Columbus Blue Jackets vs Los Angeles Kings|H2H|Los Angeles Kings|3.04": 1773078228.8586981,
-  "EV|Columbus Blue Jackets vs Los Angeles Kings|H2H|Columbus Blue Jackets|2.14": 1773078229.1130264,
-  "EV|Washington Capitals vs Calgary Flames|H2H|Washington Capitals|1.91": 1773078229.3676777,
-  "EV|Chicago Blackhawks vs Utah Mammoth|H2H|Utah Mammoth|1.78": 1773078229.635232,
-  "EV|Brooklyn Nets vs Memphis Grizzlies|H2H|Brooklyn Nets|2.17": 1773078229.894579,
   "EV|Mallorca vs Espanyol|H2H|Mallorca|2.55": 1773081933.824581,
   "EV|Buffalo Sabres vs San Jose Sharks|H2H|San Jose Sharks|4.10": 1773085061.784881,
   "EV|Carolina Hurricanes vs Pittsburgh Penguins|H2H|Pittsburgh Penguins|4.20": 1773085061.9028099,
@@ -86,5 +80,18 @@
   "EV|Vancouver Canucks vs Ottawa Senators|H2H|Ottawa Senators|1.74": 1773098648.3363678,
   "EV|Barcelona vs Rayo Vallecano|H2H|Rayo Vallecano|11.90": 1773098648.5240912,
   "EV|Chelsea vs Newcastle United|H2H|Newcastle United|4.21": 1773098648.7210572,
-  "EV|Bayer Leverkusen vs Arsenal|H2H|Draw|4.47": 1773098648.9107351
+  "EV|Bayer Leverkusen vs Arsenal|H2H|Draw|4.47": 1773098648.9107351,
+  "ARB|Oklahoma City Thunder vs Denver Nuggets|H2H|7.50": 1773100197.6746104,
+  "ARB|Philadelphia Flyers vs New York Rangers|H2H|6.60": 1773100197.999891,
+  "ARB|Brooklyn Nets vs Memphis Grizzlies|H2H|2.12": 1773100198.1474075,
+  "EV|Philadelphia Flyers vs New York Rangers|H2H|Philadelphia Flyers|17.00": 1773100198.289484,
+  "EV|Colorado Avalanche vs Edmonton Oilers|H2H|Edmonton Oilers|3.40": 1773100198.4358344,
+  "EV|Florida Panthers vs Detroit Red Wings|H2H|Detroit Red Wings|2.85": 1773100198.5887032,
+  "EV|Buffalo Sabres vs San Jose Sharks|H2H|San Jose Sharks|3.67": 1773100198.722414,
+  "EV|Washington Capitals vs Calgary Flames|H2H|Calgary Flames|21.00": 1773100198.8493438,
+  "EV|Chicago Blackhawks vs Utah Mammoth|H2H|Utah Mammoth|1.78": 1773100199.0147724,
+  "EV|Cleveland Cavaliers vs Philadelphia 76ers|H2H|Philadelphia 76ers|12.00": 1773100199.1542015,
+  "EV|Oklahoma City Thunder vs Denver Nuggets|H2H|Oklahoma City Thunder|2.04": 1773100199.2906723,
+  "EV|Brooklyn Nets vs Memphis Grizzlies|H2H|Brooklyn Nets|2.38": 1773100199.4360576,
+  "EV|Philadelphia Flyers vs New York Rangers|H2H|New York Rangers|1.32": 1773100199.5610793
 }
