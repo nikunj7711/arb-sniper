@@ -1,10 +1,4 @@
 {
-  "EV|Washington Capitals vs Calgary Flames|H2H|Calgary Flames|3.75": 1773075224.8643348,
-  "EV|Chicago Blackhawks vs Utah Mammoth|H2H|Chicago Blackhawks|3.96": 1773075225.005685,
-  "EV|Philadelphia Flyers vs New York Rangers|H2H|Philadelphia Flyers|2.22": 1773075225.1244578,
-  "EV|Chicago Blackhawks vs Utah Mammoth|H2H|Utah Mammoth|1.80": 1773075225.2488832,
-  "EV|Barcelona vs Rayo Vallecano|H2H|Rayo Vallecano|11.90": 1773075225.3746214,
-  "EV|Chelsea vs Newcastle United|H2H|Newcastle United|4.21": 1773075225.5027585,
   "EV|Chicago Blackhawks vs Utah Mammoth|H2H|Chicago Blackhawks|4.10": 1773078228.566152,
   "EV|Columbus Blue Jackets vs Los Angeles Kings|H2H|Los Angeles Kings|3.04": 1773078228.8586981,
   "EV|Columbus Blue Jackets vs Los Angeles Kings|H2H|Columbus Blue Jackets|2.14": 1773078229.1130264,
@@ -83,5 +77,14 @@
   "EV|Philadelphia Flyers vs New York Rangers|H2H|Philadelphia Flyers|2.18": 1773096820.7108428,
   "EV|Washington Capitals vs Calgary Flames|H2H|Washington Capitals|1.88": 1773096820.821856,
   "EV|Bayer Leverkusen vs Arsenal|H2H|Bayer Leverkusen|6.40": 1773096820.9299645,
-  "EV|Oklahoma City Thunder vs Denver Nuggets|H2H|Oklahoma City Thunder|1.60": 1773096821.0292468
+  "EV|Oklahoma City Thunder vs Denver Nuggets|H2H|Oklahoma City Thunder|1.60": 1773096821.0292468,
+  "ARB|Brooklyn Nets vs Memphis Grizzlies|H2H|2.63": 1773098647.2088537,
+  "EV|Vancouver Canucks vs Ottawa Senators|H2H|Vancouver Canucks|4.16": 1773098647.577555,
+  "EV|Florida Panthers vs Detroit Red Wings|H2H|Detroit Red Wings|2.84": 1773098647.756484,
+  "EV|Winnipeg Jets vs Anaheim Ducks|H2H|Winnipeg Jets|2.31": 1773098647.9480765,
+  "EV|Florida Panthers vs Detroit Red Wings|H2H|Florida Panthers|2.26": 1773098648.1458137,
+  "EV|Vancouver Canucks vs Ottawa Senators|H2H|Ottawa Senators|1.74": 1773098648.3363678,
+  "EV|Barcelona vs Rayo Vallecano|H2H|Rayo Vallecano|11.90": 1773098648.5240912,
+  "EV|Chelsea vs Newcastle United|H2H|Newcastle United|4.21": 1773098648.7210572,
+  "EV|Bayer Leverkusen vs Arsenal|H2H|Draw|4.47": 1773098648.9107351
 }
