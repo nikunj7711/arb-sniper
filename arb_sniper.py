@@ -3,41 +3,43 @@ from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ==========================================
-#  CONFIGURATION (ULTRA-LOW COST MODE)
+#  1. CONFIGURATION (YOUR RULES)
 # ==========================================
+# This pulls your 19 keys from GitHub securely
 _raw_keys = os.getenv('ODDS_API_KEYS', '')
 API_KEYS = [k.strip() for k in _raw_keys.split(',') if k.strip()]
 
-NTFY_CHANNEL = 'nikunj_arb_alerts_2026'
-TOTAL_BANKROLL = 1500
-MIN_EV_THRESHOLD = 1.5
-MIN_ARB_THRESHOLD = 1.0
+NTFY_CHANNEL = 'nikunj_arb_alerts_2026' # Your phone's alert channel
+TOTAL_BANKROLL = 1500                   # Your total betting budget in Rupees
+MIN_EV_THRESHOLD = 1.5                  # Only alert if the Expected Value is > 1.5%
+MIN_ARB_THRESHOLD = 1.0                 # Only alert if the Arbitrage profit is > 1.0%
 
-# Using only the sharpest and softest books for maximum variance
+# The specific bookmakers we want to scan and compare
 MY_BOOKIES = 'pinnacle,onexbet,bet365,unibet,betway,stake,marathonbet'
 
-# 🎯 THE SNIPER LIST: 7 Credits per scan. 
+# The sports we are scanning (Costs 6 credits per scan)
 TARGET_SPORTS = [
     'soccer_epl', 
     'soccer_spain_la_liga', 
     'soccer_uefa_champs_league',
     'basketball_nba', 
     'icehockey_nhl', 
-    'tennis_atp',
-    'cricket_t20_world_cup' # <-- Delete this line tomorrow after the Final!
+    'tennis_atp'
 ]
 
+# Maximum amount you are allowed to bet on each specific site
 BOOK_CAPS = {
     'betway': 300, 'stake': 500, 'onexbet': 400, 'marathonbet': 400,  
     'pinnacle': 1000, 'bet365': 400, 'unibet': 350
 }
 
 # ==========================================
-#  STATE & CACHE MANAGERS
+#  2. MEMORY & AUTO-RECOVERY
 # ==========================================
 api_lock = threading.Lock()
 
 def load_json(filepath, default):
+    # Loads files like your API state or recent alerts so the bot remembers them
     if os.path.exists(filepath):
         try:
             with open(filepath, 'r', encoding='utf-8') as f: return json.load(f)
@@ -45,20 +47,22 @@ def load_json(filepath, default):
     return default
 
 def save_json(filepath, data):
+    # Saves data to your files
     try:
         with open(filepath, 'w', encoding='utf-8') as f: json.dump(data, f, indent=2)
     except: pass
 
+# Load API memory. If a key dies, it remembers to use the next one.
 api_state = load_json('api_state.json', {})
 if 'active_index' not in api_state: api_state['active_index'] = 0
 if 'stats' not in api_state: api_state['stats'] = {}
 
-# 🛡️ AUTO-RECOVERY SYSTEM
 if len(API_KEYS) > 0 and api_state['active_index'] >= len(API_KEYS):
     print("🛡️ Auto-Recovery Activated: Resetting Key Index to 0.")
     api_state['active_index'] = 0
     api_state['stats'] = {}
 
+# Load Alert memory so your phone doesn't get spammed with the same bet twice
 alert_cache = load_json('alert_cache.json', {})
 now_ts = time.time()
 alert_cache = {k: v for k, v in alert_cache.items() if isinstance(v, (int, float)) and (now_ts - v < 6*3600)}
@@ -75,6 +79,7 @@ def get_active_api_key():
         return API_KEYS[idx], idx
 
 def rotate_api_key(failed_idx):
+    # If a key hits 0/500, this seamlessly switches to the next key
     with api_lock:
         if api_state['active_index'] == failed_idx:
             api_state['active_index'] += 1
@@ -88,23 +93,26 @@ def update_key_telemetry(idx, rem):
         api_state['stats'][str(idx)]['remaining'] = int(rem)
 
 # ==========================================
-#  MATH ENGINE
+#  3. THE MATH ENGINE
 # ==========================================
 def remove_vig(*odds):
+    # Bookies hide a "fee" in their odds. This math removes the fee to find the TRUE probability.
     margin = sum(1/o for o in odds)
     return tuple(1 / ((1/o) / margin) for o in odds)
 
 def calculate_kelly(soft_odds, true_odds, bankroll, bookie=None):
+    # Tells you exactly how many Rupees to bet to grow wealth safely without going bankrupt
     b, p = soft_odds - 1.0, 1.0 / true_odds
-    safe_kelly = ((b * p - (1-p)) / b) * 0.30
+    safe_kelly = ((b * p - (1-p)) / b) * 0.30 # Using 30% Fractional Kelly for extra safety
     if safe_kelly <= 0: return 0
-    stake = max(20, bankroll * min(safe_kelly, 0.05))
+    stake = max(20, bankroll * min(safe_kelly, 0.05)) # Never risk more than 5% of bankroll
     return min(stake, BOOK_CAPS.get(bookie, 1000))
 
 # ==========================================
-#  CLOUD FETCHING (COST SAVING: h2h ONLY)
+#  4. CLOUD FETCHING (THE HUNTER)
 # ==========================================
 def fetch_odds_with_retry(url, params):
+    # Reaches out to the Odds API to download the data
     while True:
         key, idx = get_active_api_key()
         if not key: return None
@@ -125,17 +133,19 @@ def fetch_odds_with_retry(url, params):
 
 def fetch_all_sports():
     results = {}
+    # Scans multiple sports at the exact same time to save seconds
     with ThreadPoolExecutor(max_workers=4) as executor:
         futures = {executor.submit(
             fetch_odds_with_retry, 
             f'https://api.the-odds-api.com/v4/sports/{sp}/odds', 
-            {'regions': 'eu', 'bookmakers': MY_BOOKIES, 'markets': 'h2h'}
+            {'regions': 'eu', 'bookmakers': MY_BOOKIES, 'markets': 'h2h'} # h2h ONLY to save credits
         ): sp for sp in TARGET_SPORTS}
         for future in as_completed(futures):
             results[futures[future]] = future.result()
     return results
 
 def format_ist_time(iso_str):
+    # Converts global server time into Indian Standard Time (IST)
     try:
         dt = datetime.strptime(iso_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
         ist = dt.astimezone(timezone(timedelta(hours=5, minutes=30)))
@@ -143,7 +153,7 @@ def format_ist_time(iso_str):
     except: return "Unknown Time"
 
 # ==========================================
-#  PROCESS MARKETS
+#  5. DATA PROCESSING (FINDING THE GOLD)
 # ==========================================
 def process_markets(results):
     all_evs, all_arbs = [], []
@@ -155,7 +165,7 @@ def process_markets(results):
             is_live = False
             try:
                 dt_commence = datetime.strptime(event['commence_time'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-                if dt_commence < now_utc: is_live = True
+                if dt_commence < now_utc: is_live = True # If the game started in the past, it's LIVE!
             except: pass
             
             home = event.get('home_team', 'Team A')
@@ -164,6 +174,7 @@ def process_markets(results):
             match_time = format_ist_time(event['commence_time'])
             
             ev_lines, arb_lines = {}, {}
+            # Organize all the messy data from the API into clean boxes
             for bookie in event.get('bookmakers', []):
                 b_name = bookie['key']
                 for market in bookie.get('markets', []):
@@ -175,6 +186,7 @@ def process_markets(results):
                         if line_key not in ev_lines: ev_lines[line_key] = {'pin': {}, 'softs': {}}
                         if line_key not in arb_lines: arb_lines[line_key] = {}
                         
+                        # Pinnacle is our "True" source of reality. Other bookies are "Soft".
                         if b_name == 'pinnacle': ev_lines[line_key]['pin'][name] = price
                         else:
                             if name not in ev_lines[line_key]['softs']: ev_lines[line_key]['softs'][name] = {}
@@ -183,11 +195,11 @@ def process_markets(results):
                         if name not in arb_lines[line_key] or price > arb_lines[line_key][name]['price']:
                             arb_lines[line_key][name] = {'price': price, 'bookie': b_name}
 
-            # EV Eval
+            # --- EV EVALUATION (Value Betting) ---
             for lk, d in ev_lines.items():
                 pinny, softs = d['pin'], d['softs']
                 ways = len(pinny)
-                if ways in [2, 3]:
+                if ways in [2, 3]: # Only process 2-way (Tennis) or 3-way (Soccer)
                     keys = list(pinny.keys())
                     true_odds_vals = remove_vig(*[pinny[k] for k in keys])
                     
@@ -196,6 +208,7 @@ def process_markets(results):
                         if side in softs:
                             best_bk = max(softs[side], key=softs[side].get)
                             best_p = softs[side][best_bk]
+                            # If the soft book's price is higher than the true odds, we found an edge!
                             if best_p > true_odds:
                                 ev_pct = ((best_p / true_odds) - 1) * 100
                                 if ev_pct >= MIN_EV_THRESHOLD:
@@ -207,30 +220,33 @@ def process_markets(results):
                                         'is_live': is_live
                                     })
 
-            # ARB Eval 
+            # --- ARBITRAGE EVALUATION (Risk-Free Betting) ---
             for lk, outs in arb_lines.items():
                 keys = list(outs.keys())
                 ways = len(keys)
                 
                 if ways not in [2, 3]: 
-                    continue
+                    continue # Ignore anything that isn't strictly 2-way or 3-way
                     
                 margin = sum(1/outs[k]['price'] for k in keys)
                 
+                # If the combined probability is LESS than 100%, it is a guaranteed mathematical win
                 if margin < 1.0 and (1-margin)*100 >= MIN_ARB_THRESHOLD:
                     arb = {'pct': (1-margin)*100, 'match': match_name, 'home': home, 'away': away, 'time': match_time, 'sport': sport.replace('_', ' ').upper(), 'line': lk, 'ways': ways, 'profit': (TOTAL_BANKROLL/margin)-TOTAL_BANKROLL, 'sides': [], 'is_live': is_live}
                     for k in keys:
                         arb['sides'].append({'sel': k, 'pr': outs[k]['price'], 'bk': outs[k]['bookie'], 'stk': (TOTAL_BANKROLL/margin)/outs[k]['price']})
                     all_arbs.append(arb)
 
+    # Sort the results so the biggest profits are always at the top
     all_evs.sort(key=lambda x: x['pct'], reverse=True)
     all_arbs.sort(key=lambda x: x['pct'], reverse=True)
     return all_evs, all_arbs
 
 # ==========================================
-#  WEBSITE GENERATOR
+#  6. WEBSITE GENERATOR (VISUAL DASHBOARD)
 # ==========================================
 def generate_web(evs, arbs):
+    # Generates the beautiful dark-mode HTML file you see in GitHub
     ist_now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
     build_time = ist_now.strftime('%d %b %Y, %I:%M %p IST')
     
@@ -358,14 +374,14 @@ def generate_web(evs, arbs):
         f.write(HTML)
 
 # ==========================================
-#  MAIN EXECUTION (FIXED EMOJI CRASH)
+#  7. THE TRIGGER (RUNNING THE SHOW)
 # ==========================================
 if __name__ == "__main__":
     print(f"🚀 Cloud Engine Booting... Loaded {len(API_KEYS)} Keys.")
     results = fetch_all_sports()
     evs, arbs = process_markets(results)
     
-    # 🔔 NTFY NOTIFICATION LOGIC (JSON MODE)
+    # Send Arbitrage Alerts to your phone
     for a in arbs:
         alert_key = f"ARB|{a['match']}|{a['line']}|{a['pct']:.2f}"
         if not is_duplicate_alert(alert_key):
@@ -375,10 +391,12 @@ if __name__ == "__main__":
                 msg += f"🔵 ₹{s['stk']:.0f} on {s['sel'].upper()} @ {s['pr']:.2f} [{s['bk'].title()}]\n"
             msg += f"\n✨ Profit: ₹{a['profit']:.0f}"
             
+            # JSON formatted push notification (no emoji crashes!)
             requests.post("https://ntfy.sh/", 
                           json={"topic": NTFY_CHANNEL, "message": msg, "title": f"🚨 {a['pct']:.2f}% ARB | {a['match']}", "tags": ["moneybag","gem"]},
                           timeout=5)
 
+    # Send EV Alerts to your phone
     for e in evs:
         alert_key = f"EV|{e['match']}|{e['line']}|{e['sel']}|{e['odds']:.2f}"
         if not is_duplicate_alert(alert_key):
@@ -388,10 +406,12 @@ if __name__ == "__main__":
             msg += f"👉 {e['sel'].upper()} @ {e['odds']:.2f} on {e['bk'].title()}\n\n"
             msg += f"🧠 True Odds: {e['trueO']:.3f}"
             
+            # JSON formatted push notification
             requests.post("https://ntfy.sh/", 
                           json={"topic": NTFY_CHANNEL, "message": msg, "title": f"📈 {e['pct']:.2f}% EV | {e['match']}", "tags": ["chart_with_upwards_trend","star"]},
                           timeout=5)
 
+    # Save memory and update the website dashboard
     save_json('api_state.json', api_state)
     save_json('alert_cache.json', alert_cache)
     generate_web(evs, arbs)
