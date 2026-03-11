@@ -1,11 +1,4 @@
 {
-  "EV|Philadelphia Flyers vs Washington Capitals|H2H|Washington Capitals|2.45": 1773207063.83411,
-  "EV|Philadelphia Flyers vs Washington Capitals|H2H|Philadelphia Flyers|2.70": 1773207063.966368,
-  "EV|Liverpool vs Galatasaray|H2H|Galatasaray|10.40": 1773207064.078706,
-  "EV|Bod\u00f8/Glimt vs Sporting Lisbon|H2H|Draw|3.84": 1773207064.1922383,
-  "EV|Orlando Magic vs Cleveland Cavaliers|H2H|Cleveland Cavaliers|1.74": 1773207064.3133929,
-  "EV|Bod\u00f8/Glimt vs Sporting Lisbon|H2H|Bod\u00f8/Glimt|2.66": 1773207064.4161098,
-  "EV|Utah Jazz vs New York Knicks|H2H|Utah Jazz|6.57": 1773207064.5224185,
   "EV|Ottawa Senators vs Montr\u00e9al Canadiens|H2H|Montr\u00e9al Canadiens|3.10": 1773211595.0193589,
   "EV|Philadelphia Flyers vs Washington Capitals|H2H|Philadelphia Flyers|2.68": 1773211595.1740737,
   "EV|Ottawa Senators vs Montr\u00e9al Canadiens|H2H|Ottawa Senators|2.09": 1773211595.308598,
@@ -31,5 +24,14 @@
   "EV|Barcelona vs Sevilla|H2H|Sevilla|12.00": 1773225299.1562629,
   "EV|Chelsea vs Newcastle United|H2H|Newcastle United|4.12": 1773225299.3688054,
   "ARB|Bod\u00f8/Glimt vs Sporting Lisbon|H2H|3.03": 1773228589.0563624,
-  "EV|Bayer Leverkusen vs Arsenal|H2H|Bayer Leverkusen|7.00": 1773228589.216515
+  "EV|Bayer Leverkusen vs Arsenal|H2H|Bayer Leverkusen|7.00": 1773228589.216515,
+  "ARB|Bod\u00f8/Glimt vs Sporting Lisbon|H2H|2.81": 1773230252.6832573,
+  "EV|Philadelphia Flyers vs Washington Capitals|H2H|Philadelphia Flyers|2.70": 1773230253.0068731,
+  "EV|Ottawa Senators vs Montr\u00e9al Canadiens|H2H|Ottawa Senators|2.06": 1773230253.2792401,
+  "EV|Bod\u00f8/Glimt vs Sporting Lisbon|H2H|Bod\u00f8/Glimt|2.66": 1773230253.5328376,
+  "EV|Chelsea vs Newcastle United|H2H|Newcastle United|4.21": 1773230253.7859356,
+  "EV|Orlando Magic vs Cleveland Cavaliers|H2H|Cleveland Cavaliers|1.74": 1773230254.043889,
+  "EV|Los Angeles Clippers vs Minnesota Timberwolves|H2H|Minnesota Timberwolves|2.24": 1773230254.3080883,
+  "EV|Bod\u00f8/Glimt vs Sporting Lisbon|H2H|Draw|3.84": 1773230254.557514,
+  "EV|Denver Nuggets vs Houston Rockets|H2H|Denver Nuggets|1.51": 1773230254.8049018
 }
