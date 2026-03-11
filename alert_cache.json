@@ -1,11 +1,4 @@
 {
-  "EV|Philadelphia Flyers vs Washington Capitals|H2H|Philadelphia Flyers|2.69": 1773218165.7888808,
-  "EV|Philadelphia Flyers vs Washington Capitals|H2H|Washington Capitals|2.38": 1773218165.9451241,
-  "EV|Real Madrid vs Atl\u00e9tico Madrid|H2H|Atl\u00e9tico Madrid|4.21": 1773218166.0714912,
-  "EV|Liverpool vs Galatasaray|H2H|Galatasaray|10.60": 1773218166.2057197,
-  "EV|Barcelona vs Rayo Vallecano|H2H|Rayo Vallecano|11.90": 1773218166.3463717,
-  "EV|Liverpool vs Tottenham Hotspur|H2H|Tottenham Hotspur|8.60": 1773218166.4857423,
-  "EV|Liverpool vs Galatasaray|H2H|Draw|6.44": 1773218166.609199,
   "ARB|Bod\u00f8/Glimt vs Sporting Lisbon|H2H|1.28": 1773221909.5294414,
   "EV|Ottawa Senators vs Montr\u00e9al Canadiens|H2H|Ottawa Senators|2.08": 1773221909.6905706,
   "EV|Real Madrid vs Atl\u00e9tico Madrid|H2H|Atl\u00e9tico Madrid|4.12": 1773221909.803444,
@@ -40,5 +33,15 @@
   "EV|Ottawa Senators vs Montr\u00e9al Canadiens|H2H|Montr\u00e9al Canadiens|3.40": 1773239137.56164,
   "EV|Ottawa Senators vs Montr\u00e9al Canadiens|H2H|Ottawa Senators|2.00": 1773239137.7022905,
   "EV|Bayern Munich vs Atalanta BC|H2H|Atalanta BC|9.45": 1773239137.8278763,
-  "EV|Paris Saint Germain vs Chelsea|H2H|Chelsea|3.50": 1773239137.9389591
+  "EV|Paris Saint Germain vs Chelsea|H2H|Chelsea|3.50": 1773239137.9389591,
+  "ARB|Minnesota Wild vs Philadelphia Flyers|H2H|2.10": 1773241891.8954246,
+  "ARB|New Jersey Devils vs Calgary Flames|H2H|1.30": 1773241892.092722,
+  "ARB|Vegas Golden Knights vs Pittsburgh Penguins|H2H|1.21": 1773241892.2091901,
+  "EV|Ottawa Senators vs Montr\u00e9al Canadiens|H2H|Montr\u00e9al Canadiens|3.44": 1773241892.3372188,
+  "EV|Philadelphia Flyers vs Washington Capitals|H2H|Philadelphia Flyers|2.71": 1773241892.4558742,
+  "EV|Philadelphia Flyers vs Washington Capitals|H2H|Washington Capitals|2.38": 1773241892.5894072,
+  "EV|Ottawa Senators vs Montr\u00e9al Canadiens|H2H|Ottawa Senators|1.93": 1773241892.692868,
+  "EV|Barcelona vs Rayo Vallecano|H2H|Rayo Vallecano|11.90": 1773241892.825125,
+  "EV|Paris Saint Germain vs Chelsea|H2H|Chelsea|3.61": 1773241892.9501781,
+  "EV|Liverpool vs Tottenham Hotspur|H2H|Tottenham Hotspur|8.60": 1773241893.067819
 }
