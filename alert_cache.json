@@ -1,10 +1,4 @@
 {
-  "EV|Ottawa Senators vs Montr\u00e9al Canadiens|H2H|Montr\u00e9al Canadiens|3.10": 1773211595.0193589,
-  "EV|Philadelphia Flyers vs Washington Capitals|H2H|Philadelphia Flyers|2.68": 1773211595.1740737,
-  "EV|Ottawa Senators vs Montr\u00e9al Canadiens|H2H|Ottawa Senators|2.09": 1773211595.308598,
-  "EV|Los Angeles Clippers vs Minnesota Timberwolves|H2H|Los Angeles Clippers|1.88": 1773211595.4309042,
-  "EV|Bayer Leverkusen vs Arsenal|H2H|Arsenal|1.59": 1773211595.5563343,
-  "EV|Villarreal vs Real Sociedad|H2H|Villarreal|1.96": 1773211595.6735373,
   "EV|Bayern Munich vs Atalanta BC|H2H|Atalanta BC|9.45": 1773214830.0442994,
   "EV|Philadelphia Flyers vs Washington Capitals|H2H|Philadelphia Flyers|2.69": 1773218165.7888808,
   "EV|Philadelphia Flyers vs Washington Capitals|H2H|Washington Capitals|2.38": 1773218165.9451241,
@@ -33,5 +27,13 @@
   "EV|Orlando Magic vs Cleveland Cavaliers|H2H|Cleveland Cavaliers|1.74": 1773230254.043889,
   "EV|Los Angeles Clippers vs Minnesota Timberwolves|H2H|Minnesota Timberwolves|2.24": 1773230254.3080883,
   "EV|Bod\u00f8/Glimt vs Sporting Lisbon|H2H|Draw|3.84": 1773230254.557514,
-  "EV|Denver Nuggets vs Houston Rockets|H2H|Denver Nuggets|1.51": 1773230254.8049018
+  "EV|Denver Nuggets vs Houston Rockets|H2H|Denver Nuggets|1.51": 1773230254.8049018,
+  "ARB|Vancouver Canucks vs Nashville Predators|H2H|3.32": 1773234360.0470517,
+  "ARB|Vegas Golden Knights vs Pittsburgh Penguins|H2H|2.95": 1773234360.318334,
+  "ARB|Bod\u00f8/Glimt vs Sporting Lisbon|H2H|2.37": 1773234360.516396,
+  "ARB|Minnesota Wild vs Philadelphia Flyers|H2H|2.37": 1773234360.71927,
+  "ARB|Orlando Magic vs Cleveland Cavaliers|H2H|1.38": 1773234360.92656,
+  "ARB|Denver Nuggets vs Houston Rockets|H2H|1.10": 1773234361.1238449,
+  "EV|Bod\u00f8/Glimt vs Sporting Lisbon|H2H|Bod\u00f8/Glimt|2.62": 1773234361.3151124,
+  "EV|Villarreal vs Real Sociedad|H2H|Villarreal|1.96": 1773234361.509647
 }
