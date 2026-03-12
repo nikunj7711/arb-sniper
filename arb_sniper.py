@@ -451,6 +451,7 @@ if __name__ == "__main__":
     # 3. THE SMART MERGE: Inject BC.Game directly into the Odds-API events
     if bc_data:
         print(f"🔄 Merging {len(bc_data)} BC.Game matches with Global Market...")
+        merge_count = 0
         
         for bc_match in bc_data:
             bc_home = bc_match['home_team'].lower().replace(' fc', '').strip()
@@ -459,24 +460,36 @@ if __name__ == "__main__":
             match_found = False
             
             for sport, events in results.items():
+                if not events: continue
                 for event in events:
                     api_home = event.get('home_team', '').lower().replace(' fc', '').strip()
                     api_away = event.get('away_team', '').lower().replace(' fc', '').strip()
                     
-                    # FUZZY MATCH: If the first 5 letters match, or one name is inside the other
-                    home_match = (bc_home[:5] == api_home[:5]) or (bc_home in api_home) or (api_home in bc_home)
-                    away_match = (bc_away[:5] == api_away[:5]) or (bc_away in api_away) or (api_away in bc_away)
+                    # UPGRADED MATCHER: Chops names into words to catch "LA Lakers" vs "Los Angeles Lakers"
+                    bc_h_words = set([w for w in bc_home.split() if len(w) > 3])
+                    api_h_words = set([w for w in api_home.split() if len(w) > 3])
+                    bc_a_words = set([w for w in bc_away.split() if len(w) > 3])
+                    api_a_words = set([w for w in api_away.split() if len(w) > 3])
+                    
+                    home_match = bool(bc_h_words & api_h_words) or (bc_home in api_home) or (api_home in bc_home) or (bc_home[:5] == api_home[:5])
+                    away_match = bool(bc_a_words & api_a_words) or (bc_away in api_away) or (api_away in bc_away) or (bc_away[:5] == api_away[:5])
                     
                     if home_match and away_match:
-                        # BINGO! Inject BC.Game into this exact event alongside Pinnacle!
                         if 'bookmakers' not in event:
                             event['bookmakers'] = []
                         event['bookmakers'].append(bc_match['bookmakers'][0])
+                        merge_count += 1
+                        
+                        # Print visual proof that the link was successful
+                        print(f"🔗 LINKED: [BC] {bc_match['home_team'][:15]} <-> [API] {event['home_team'][:15]}")
+                        
                         match_found = True
-                        break # Move to the next BC.Game match
+                        break 
                         
                 if match_found:
                     break
+                    
+        print(f"✅ Successfully injected {merge_count} BC.Game matches into the math engine!")
 
     # 4. Process everything together (Now BC.Game will fight Pinnacle!)
     evs, arbs = process_markets(results)
