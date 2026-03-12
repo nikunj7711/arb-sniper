@@ -130,7 +130,6 @@ def calculate_kelly(soft_o, true_o, bank, bookie):
     b, p = soft_o - 1.0, 1.0 / true_o
     k = ((b * p - (1-p)) / b) * 0.30
     raw_stake = min(max(20, bank * min(k, 0.05)), BOOK_CAPS.get(bookie, 1000))
-    # 🛡️ ANTI-DETECTION: Rounding to nearest 10
     return round(raw_stake / 10) * 10
 
 def format_ist(iso_str):
@@ -202,18 +201,38 @@ def process_markets(results):
                         arb = {**meta, 'pct': (1-margin)*100, 'line': lk, 'ways': len(keys), 'profit': (TOTAL_BANKROLL/margin)-TOTAL_BANKROLL, 'sides': []}
                         for k in keys:
                             raw_s = (TOTAL_BANKROLL/margin)/outs[k]['price']
-                            arb['sides'].append({'sel': k, 'pr': outs[k]['price'], 'bk': outs[k]['bookie'], 'stk': round(raw_s / 10) * 10}) # 🛡️ ROUNDED
+                            arb['sides'].append({'sel': k, 'pr': outs[k]['price'], 'bk': outs[k]['bookie'], 'stk': round(raw_s / 10) * 10})
                         all_arbs.append(arb)
     return all_evs, all_arbs
 
 # ==========================================
-#  5. PRO DASHBOARD (SLEEK DESIGN)
+#  5. PRO DASHBOARD (WITH KEYS TAB)
 # ==========================================
 def generate_web(evs, arbs):
     ist_now = (datetime.now(timezone.utc) + timedelta(hours=5.5)).strftime('%d %b, %I:%M %p IST')
     SECRET_PASS = "NIKUNJ2026" 
 
-    net_html = "".join([f"<div style='background:#111; padding:8px; border-radius:6px; border-left:3px solid {'#06b6d4' if idx == api_state.get('active_index', 0) else '#3f3f46'}; margin-bottom:5px; font-size:11px;'>Key {idx+1}: <b>{api_state.get('stats', {}).get(str(idx), {}).get('remaining', '??')}</b></div>" for idx in range(len(API_KEYS))])
+    # 🔑 Build the detailed Keys Tab HTML
+    keys_html = ""
+    for idx, key in enumerate(API_KEYS):
+        rem = api_state.get('stats', {}).get(str(idx), {}).get('remaining', '??')
+        is_active = (idx == api_state.get('active_index', 0))
+        color = "#06b6d4" if is_active else "#3f3f46"
+        status = "ACTIVE" if is_active else "IDLE"
+        masked = f"{key[:4]}••••••••••••{key[-4:]}" if len(key) > 8 else "INVALID_KEY"
+        
+        keys_html += f"""
+        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid {color}; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
+            <div>
+                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #{idx+1} <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:{color}; border:1px solid {color};'>{status}</span></div>
+                <div style='font-family:monospace; font-size:16px; color:#fff;'>{masked}</div>
+            </div>
+            <div style='text-align:right;'>
+                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
+                <div style='font-size:22px; font-weight:bold; color:{color};'>{rem}</div>
+            </div>
+        </div>
+        """
 
     def match_card(item, is_arb):
         color = "#f59e0b" if is_arb else "#06b6d4"
@@ -264,13 +283,18 @@ def generate_web(evs, arbs):
             <p id='err' style='color:#ef4444; font-size:12px; margin-top:10px;'></p>
         </div>
         <div id='content' style='display:none;'>
-            <div style='display:flex; justify-content:space-between; align-items:start; margin-bottom:20px;'>
-                <div><h2 style='color:#06b6d4; margin:0;'>⚡ SNIPER PRO</h2><small style='color:#444;'>Synced: {ist_now}</small></div>
-                <div style='text-align:right; width:120px;'>{net_html}</div>
+            <div style='margin-bottom:20px;'>
+                <h2 style='color:#06b6d4; margin:0;'>⚡ SNIPER PRO</h2>
+                <small style='color:#444;'>Synced: {ist_now}</small>
             </div>
-            <div style='display:flex; gap:5px; margin-bottom:20px;'><div class='tab active' onclick='sw(0)'>ARB ({len(arbs)})</div><div class='tab' onclick='sw(1)'>VALUE ({len(evs)})</div></div>
+            <div style='display:flex; gap:5px; margin-bottom:20px;'>
+                <div class='tab active' onclick='sw(0)'>ARB ({len(arbs)})</div>
+                <div class='tab' onclick='sw(1)'>VALUE ({len(evs)})</div>
+                <div class='tab' onclick='sw(2)'>KEYS</div>
+            </div>
             <div id='p0' class='pane active-pane'>{"".join([match_card(a, True) for a in arbs])}</div>
             <div id='p1' class='pane'>{"".join([match_card(e, False) for e in evs[:50]])}</div>
+            <div id='p2' class='pane'>{keys_html}</div>
         </div>
         <script>
             function ck() {{ 
