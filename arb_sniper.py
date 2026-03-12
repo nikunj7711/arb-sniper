@@ -27,7 +27,7 @@ BOOK_CAPS = {
 }
 
 # ==========================================
-#  2. MEMORY & AUTO-RECOVERY
+#  2. KEY ROTATION & MEMORY
 # ==========================================
 api_lock = threading.Lock()
 
@@ -66,20 +66,6 @@ def update_key_telemetry(idx, rem):
         api_state['stats'][str(idx)]['remaining'] = int(rem)
 
 # ==========================================
-#  3. THE MATH ENGINE
-# ==========================================
-def remove_vig(*odds):
-    margin = sum(1/o for o in odds)
-    return tuple(1 / ((1/o) / margin) for o in odds)
-
-def calculate_kelly(soft_odds, true_odds, bankroll, bookie=None):
-    b, p = soft_odds - 1.0, 1.0 / true_odds
-    safe_kelly = ((b * p - (1-p)) / b) * 0.30 
-    if safe_kelly <= 0: return 0
-    stake = max(20, bankroll * min(safe_kelly, 0.05)) 
-    return min(stake, BOOK_CAPS.get(bookie, 1000))
-
-# ==========================================
 #  4. DATA FETCHERS
 # ==========================================
 def fetch_bcgame_custom():
@@ -102,6 +88,7 @@ def fetch_bcgame_custom():
             if m1:
                 if "1" in m1: h2h.append({'name': comps[0]['name'], 'price': float(m1["1"]["k"])})
                 if "2" in m1: h2h.append({'name': comps[1]['name'], 'price': float(m1["2"]["k"])})
+                if "3" in m1: h2h.append({'name': 'Draw', 'price': float(m1["3"]["k"])})
             
             totals = []
             m18 = mks.get("18", {})
@@ -149,6 +136,17 @@ def fetch_all_sports():
 # ==========================================
 #  5. DATA PROCESSING
 # ==========================================
+def remove_vig(*odds):
+    margin = sum(1/o for o in odds)
+    return tuple(1 / ((1/o) / margin) for o in odds)
+
+def calculate_kelly(soft_odds, true_odds, bankroll, bookie=None):
+    b, p = soft_odds - 1.0, 1.0 / true_odds
+    safe_kelly = ((b * p - (1-p)) / b) * 0.30 
+    if safe_kelly <= 0: return 0
+    stake = max(20, bankroll * min(safe_kelly, 0.05)) 
+    return min(stake, BOOK_CAPS.get(bookie, 1000))
+
 def process_markets(results):
     all_evs, all_arbs = [], []
     for sport, events in results.items():
@@ -168,7 +166,6 @@ def process_markets(results):
                         line_key = f"{m_type} {point}".strip()
                         if line_key not in ev_lines: ev_lines[line_key] = {'pin': {}, 'softs': {}}
                         if line_key not in arb_lines: arb_lines[line_key] = {}
-                        
                         if b_name == 'pinnacle': ev_lines[line_key]['pin'][name] = price
                         else:
                             if name not in ev_lines[line_key]['softs']: ev_lines[line_key]['softs'][name] = {}
@@ -201,43 +198,52 @@ def process_markets(results):
     return all_evs, all_arbs
 
 # ==========================================
-#  6. WEBSITE GENERATOR
+#  6. WEBSITE GENERATOR (RESTORED BEAUTY)
 # ==========================================
 def generate_web(evs, arbs):
     ist_now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
     build_time = ist_now.strftime('%d %b, %I:%M %p IST')
     
+    def build_legs(a):
+        html = ""
+        for s in a['sides']:
+            html += f"<div style='display:flex; justify-content:space-between; background:#09090b; padding:8px; border-radius:6px; margin-bottom:4px;'><span>{s['sel']} @ <b>{s['pr']}</b> ({s['bk'].upper()})</span> <span>₹{s['stk']:.0f}</span></div>"
+        return html
+
     arb_html = ""
     for a in arbs:
-        legs = "".join([f"<div style='display:flex; justify-content:space-between; background:#09090b; padding:8px; border-radius:6px; margin-bottom:4px;'><span>{s['sel']} @ <b>{s['pr']}</b> ({s['bk'].upper()})</span> <span>₹{s['stk']:.0f}</span></div>" for s in a['sides']])
-        arb_html += f"""<div class='card'><div style='display:flex; justify-content:space-between; margin-bottom:8px;'><span class='badge arb-badge'>{a['pct']:.2f}% ARB</span> <button class='copy-btn' onclick='navigator.clipboard.writeText(\"{a['match']}\")'>COPY</button></div><b>{a['match']}</b><br><small>{a['line']}</small><br><br>{legs}<div style='text-align:right; margin-top:8px; color:#10b981;'>Profit: ₹{a['profit']:.0f}</div></div>"""
+        arb_html += f"<div class='card'><div style='display:flex; justify-content:space-between; margin-bottom:8px;'><span class='badge arb-badge'>{a['pct']:.2f}% ARB</span> <button class='copy-btn' onclick='navigator.clipboard.writeText(\"{a['match']}\")'>COPY NAME</button></div><b>{a['match']}</b><br><small style='color:#a1a1aa;'>{a['line']}</small><br><br>{build_legs(a)}<div style='text-align:right; margin-top:8px; color:#10b981; font-weight:bold;'>Profit: ₹{a['profit']:.0f}</div></div>"
 
     ev_html = ""
     for e in evs[:30]:
-        ev_html += f"""<div class='card'><div style='display:flex; justify-content:space-between; margin-bottom:8px;'><span class='badge ev-badge'>{e['pct']:.2f}% EV</span> <button class='copy-btn' onclick='navigator.clipboard.writeText(\"{e['match']}\")'>COPY</button></div><b>{e['match']}</b><br><small>{e['line']} | {e['bk'].upper()} @ {e['odds']}</small><br><br><div style='display:flex; justify-content:space-between;'><span>Stake: <b>₹{e['stk']:.0f}</b></span> <span style='color:#a1a1aa; font-size:12px;'>True: {e['trueO']:.3f}</span></div></div>"""
+        ev_html += f"<div class='card'><div style='display:flex; justify-content:space-between; margin-bottom:8px;'><span class='badge ev-badge'>{e['pct']:.2f}% EV</span> <button class='copy-btn' onclick='navigator.clipboard.writeText(\"{e['match']}\")'>COPY NAME</button></div><b>{e['match']}</b><br><small style='color:#a1a1aa;'>{e['line']} | {e['bk'].upper()} @ {e['odds']}</small><br><br><div style='display:flex; justify-content:space-between;'><span>Stake: <b>₹{e['stk']:.0f}</b></span> <span style='color:#a1a1aa; font-size:12px;'>True: {e['trueO']:.3f}</span></div></div>"
 
     HTML = f"""<!DOCTYPE html>
-    <html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>
-    body {{ background: #09090b; color: #fff; font-family: sans-serif; padding: 15px; max-width: 600px; margin: auto; }}
-    .card {{ background: #18181b; border: 1px solid #27272a; padding: 15px; border-radius: 12px; margin-bottom: 12px; }}
-    .copy-btn {{ background: #27272a; color: #fff; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; }}
-    .badge {{ font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }}
-    .arb-badge {{ background: #f59e0b; color: #000; }}
-    .ev-badge {{ background: #06b6d4; color: #000; }}
+    <html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
+    <style>
+        body {{ background: #09090b; color: #fff; font-family: sans-serif; padding: 15px; max-width: 600px; margin: auto; }}
+        .card {{ background: #18181b; border: 1px solid #27272a; padding: 15px; border-radius: 12px; margin-bottom: 12px; }}
+        .copy-btn {{ background: #3f3f46; color: #fff; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: bold; }}
+        .badge {{ font-size: 11px; padding: 3px 8px; border-radius: 5px; font-weight: bold; }}
+        .arb-badge {{ background: #f59e0b; color: #000; }}
+        .ev-badge {{ background: #06b6d4; color: #000; }}
+        h2, h3 {{ margin-bottom: 15px; }}
     </style></head><body>
     <h2 style='color:#06b6d4;'>⚡ ARB SNIPER</h2>
-    <p style='font-size:12px; color:#a1a1aa;'>Last Sync: {build_time}</p>
-    <h3 style='border-bottom: 1px solid #27272a; padding-bottom: 5px;'>🔒 ARBITRAGE ({len(arbs)})</h3>
-    {arb_html}
-    <h3 style='border-bottom: 1px solid #27272a; padding-bottom: 5px;'>💎 VALUE BETS ({len(evs)})</h3>
-    {ev_html}
+    <p style='font-size:12px; color:#a1a1aa; margin-bottom:20px;'>Last Sync: {build_time}</p>
+    
+    <h3 style='border-left: 4px solid #f59e0b; padding-left: 10px;'>🔒 ARBITRAGE ({len(arbs)})</h3>
+    {arb_html if arbs else "<p style='color:#3f3f46;'>No Arbitrage found.</p>"}
+
+    <h3 style='border-left: 4px solid #06b6d4; padding-left: 10px; margin-top:30px;'>💎 VALUE BETS ({len(evs)})</h3>
+    {ev_html if evs else "<p style='color:#3f3f46;'>No Value bets found.</p>"}
     </body></html>"""
     
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(HTML)
 
 # ==========================================
-#  7. MAIN TRIGGER
+#  7. MAIN TRIGGER (THE MONSTER MATCHER)
 # ==========================================
 if __name__ == "__main__":
     print(f"🚀 Sniper Booting... {len(API_KEYS)} Keys Loaded.")
@@ -245,24 +251,34 @@ if __name__ == "__main__":
     bc_data = fetch_bcgame_custom()
     
     if bc_data:
+        print(f"🔄 Attempting to merge {len(bc_data)} BC.Game matches...")
         merge_count = 0
         for bc in bc_data:
-            bc_h = bc['home_team'].lower().replace('fc ', '').replace(' fc', '').replace('real ', '').strip()
-            bc_a = bc['away_team'].lower().replace('fc ', '').replace(' fc', '').replace('real ', '').strip()
+            # Clean names AGGRESSIVELY: Remove (Holis), (E), FC, Real, etc.
+            def clean(n):
+                for junk in ['(holis)', '(e)', 'fc ', ' fc', 'real ', ' real', ' vs ', 'as ']:
+                    n = n.lower().replace(junk, '')
+                return n.strip()
+            
+            bc_h, bc_a = clean(bc['home_team']), clean(bc['away_team'])
             linked = False
             for events in results.values():
                 if not events: continue
                 for ev in events:
-                    api_h = ev.get('home_team', '').lower().replace('fc ', '').replace(' fc', '').replace('real ', '').strip()
-                    api_a = ev.get('away_team', '').lower().replace('fc ', '').replace(' fc', '').replace('real ', '').strip()
-                    h_match = any(w in api_h for w in bc_h.split() if len(w) > 3) or bc_h[:5] == api_h[:5]
-                    a_match = any(w in api_a for w in bc_a.split() if len(w) > 3) or bc_a[:5] == api_a[:5]
+                    api_h, api_a = clean(ev.get('home_team', '')), clean(ev.get('away_team', ''))
+                    
+                    # Logic: If names match directly OR share a unique long word (like "Atalanta")
+                    h_match = (bc_h == api_h) or any(w in api_h for w in bc_h.split() if len(w) > 4)
+                    a_match = (bc_a == api_a) or any(w in api_a for w in bc_a.split() if len(w) > 4)
+                    
                     if h_match and a_match:
                         if 'bookmakers' not in ev: ev['bookmakers'] = []
                         ev['bookmakers'].append(bc['bookmakers'][0])
-                        merge_count += 1; linked = True; break
+                        merge_count += 1; linked = True
+                        print(f"  🔗 LINKED: {bc['home_team']} <-> {ev['home_team']}")
+                        break
                 if linked: break
-        print(f"✅ Injected {merge_count} BC.Game matches!")
+        print(f"✅ SUCCESSFULLY INJECTED {merge_count} BC.GAME MATCHES!")
 
     evs, arbs = process_markets(results)
     evs.sort(key=lambda x: x['pct'], reverse=True)
