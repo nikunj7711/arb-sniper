@@ -207,15 +207,11 @@ def process_markets(results):
     return all_evs, all_arbs
 
 # ==========================================
-#  5. PRO DASHBOARD (PASSWORD + TELEMETRY)
+#  5. PRO DASHBOARD (SLEEK DESIGN)
 # ==========================================
 def generate_web(evs, arbs):
     ist_now = (datetime.now(timezone.utc) + timedelta(hours=5.5)).strftime('%d %b, %I:%M %p IST')
-    
-    # 🔒 DASHBOARD PASSWORD 
     SECRET_PASS = "NIKUNJ2026" 
-
-    total_arb_profit = sum(a['profit'] for a in arbs)
 
     net_html = "".join([f"<div style='background:#111; padding:8px; border-radius:6px; border-left:3px solid {'#06b6d4' if idx == api_state.get('active_index', 0) else '#3f3f46'}; margin-bottom:5px; font-size:11px;'>Key {idx+1}: <b>{api_state.get('stats', {}).get(str(idx), {}).get('remaining', '??')}</b></div>" for idx in range(len(API_KEYS))])
 
@@ -268,11 +264,6 @@ def generate_web(evs, arbs):
             <p id='err' style='color:#ef4444; font-size:12px; margin-top:10px;'></p>
         </div>
         <div id='content' style='display:none;'>
-            <div style='background:rgba(6,182,212,0.1); border:1px solid #06b6d4; padding:15px; border-radius:12px; margin-bottom:20px; text-align:center;'>
-                <div style='font-size:12px; color:#06b6d4; font-weight:bold;'>TOTAL SESSION PROFIT FOUND</div>
-                <div style='font-size:32px; font-weight:bold; color:#fff;'>₹{total_arb_profit:.0f}</div>
-                <div style='font-size:10px; color:#a1a1aa;'>Based on ₹{TOTAL_BANKROLL} Bankroll</div>
-            </div>
             <div style='display:flex; justify-content:space-between; align-items:start; margin-bottom:20px;'>
                 <div><h2 style='color:#06b6d4; margin:0;'>⚡ SNIPER PRO</h2><small style='color:#444;'>Synced: {ist_now}</small></div>
                 <div style='text-align:right; width:120px;'>{net_html}</div>
