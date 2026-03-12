@@ -5,7 +5,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # ==========================================
 #  1. CONFIGURATION (YOUR RULES)
 # ==========================================
-_raw_keys = os.getenv('ODDS_API_KEYS', '')
+# Hardcoded for online compiler; use os.getenv('ODDS_API_KEYS') for GitHub
+_raw_keys = '41308dc8cb155421b36bf4e58a0fe50b'
 API_KEYS = [k.strip() for k in _raw_keys.split(',') if k.strip()]
 
 NTFY_CHANNEL = 'nikunj_arb_alerts_2026' 
@@ -15,13 +16,15 @@ MIN_ARB_THRESHOLD = 0.5
 
 MY_BOOKIES = 'pinnacle,onexbet,bet365,unibet,betway,stake,marathonbet'
 
+# Enhanced list to ensure BC.Game matches have counterparts
 TARGET_SPORTS = [
     'soccer_epl', 
     'soccer_spain_la_liga', 
     'soccer_uefa_champs_league',
     'basketball_nba', 
-    'icehockey_nhl', 
-    'tennis_atp'
+    'icehockey_nhl',
+    'soccer_italy_serie_a',
+    'upcoming'  # Pulls the next 8 matches from EVERY sport to maximize merge potential
 ]
 
 BOOK_CAPS = {
@@ -125,6 +128,7 @@ def fetch_bcgame_custom():
             commence_time = datetime.fromtimestamp(desc.get('scheduled', 0), tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             translated_markets = []
             
+            # Winner Market
             h2h_outcomes = []
             market_1 = markets.get("1", {}).get("", {})
             if market_1:
@@ -134,6 +138,7 @@ def fetch_bcgame_custom():
             if h2h_outcomes:
                 translated_markets.append({'key': 'h2h', 'outcomes': h2h_outcomes})
 
+            # Over/Under Market
             market_18 = markets.get("18", {})
             total_outcomes = []
             for point_key, point_data in market_18.items():
@@ -167,15 +172,17 @@ def fetch_odds_with_retry(url, params):
         rem = res.headers.get('x-requests-remaining')
         if rem: update_key_telemetry(idx, rem)
 
-        if res.status_code in [401, 429]:
+        if res.status_code == 200:
+            return res.json()
+        elif res.status_code in [401, 429]:
+            print(f"⚠️ Odds-API Quota Error {res.status_code}. Key Exhausted.")
             if rotate_api_key(idx): continue
             else: return None
-        elif res.status_code == 200:
-            return res.json()
         return None
 
 def fetch_all_sports():
     results = {}
+    print("📡 Fetching Odds-API Master Data...")
     with ThreadPoolExecutor(max_workers=4) as executor:
         futures = {executor.submit(
             fetch_odds_with_retry, 
@@ -183,7 +190,11 @@ def fetch_all_sports():
             {'regions': 'eu', 'bookmakers': MY_BOOKIES, 'markets': 'h2h,totals,spreads'} 
         ): sp for sp in TARGET_SPORTS}
         for future in as_completed(futures):
-            results[futures[future]] = future.result()
+            sp = futures[future]
+            data = future.result()
+            results[sp] = data
+            if data: print(f"  ✅ {sp.upper()}: {len(data)} matches loaded.")
+            else: print(f"  ❌ {sp.upper()}: FAILED.")
     return results
 
 def format_ist_time(iso_str):
@@ -209,11 +220,8 @@ def process_markets(results):
                 if dt_commence < now_utc: is_live = True
             except: pass
             
-            home = event.get('home_team', 'Team A')
-            away = event.get('away_team', 'Team B')
-            match_name = f"{home} vs {away}"
-            match_time = format_ist_time(event['commence_time'])
-            
+            home, away = event.get('home_team', 'A'), event.get('away_team', 'B')
+            match_name, match_time = f"{home} vs {away}", format_ist_time(event['commence_time'])
             ev_lines, arb_lines = {}, {}
             
             for bookie in event.get('bookmakers', []):
@@ -236,13 +244,12 @@ def process_markets(results):
                         if name not in arb_lines[line_key] or price > arb_lines[line_key][name]['price']:
                             arb_lines[line_key][name] = {'price': price, 'bookie': b_name}
 
+            # EV & ARB Math Logic
             for lk, d in ev_lines.items():
                 pinny, softs = d['pin'], d['softs']
-                ways = len(pinny)
-                if ways in [2, 3]: 
+                if len(pinny) in [2, 3]: 
                     keys = list(pinny.keys())
                     true_odds_vals = remove_vig(*[pinny[k] for k in keys])
-                    
                     for idx, side in enumerate(keys):
                         true_odds = true_odds_vals[idx]
                         if side in softs:
@@ -251,28 +258,17 @@ def process_markets(results):
                             if best_p > true_odds:
                                 ev_pct = ((best_p / true_odds) - 1) * 100
                                 if ev_pct >= MIN_EV_THRESHOLD:
-                                    all_evs.append({
-                                        'pct': ev_pct, 'match': match_name, 'home': home, 'away': away, 'time': match_time, 'sport': sport.replace('_', ' ').upper(),
-                                        'line': lk, 'ways': ways, 'sel': side, 'odds': best_p, 'trueO': true_odds, 'bk': best_bk,
-                                        'stk': calculate_kelly(best_p, true_odds, TOTAL_BANKROLL, best_bk),
-                                        'conf': max(0, min(100, int((abs((1/best_p) - (1/true_odds)) / (1/true_odds)) * 500))),
-                                        'is_live': is_live
-                                    })
+                                    all_evs.append({'pct': ev_pct, 'match': match_name, 'home': home, 'away': away, 'time': match_time, 'sport': sport.upper(), 'line': lk, 'ways': len(pinny), 'sel': side, 'odds': best_p, 'trueO': true_odds, 'bk': best_bk, 'stk': calculate_kelly(best_p, true_odds, TOTAL_BANKROLL, best_bk), 'conf': 100, 'is_live': is_live})
 
             for lk, outs in arb_lines.items():
                 keys = list(outs.keys())
-                ways = len(keys)
-                if ways not in [2, 3]: continue 
-                    
-                margin = sum(1/outs[k]['price'] for k in keys)
-                if margin < 1.0 and (1-margin)*100 >= MIN_ARB_THRESHOLD:
-                    arb = {'pct': (1-margin)*100, 'match': match_name, 'home': home, 'away': away, 'time': match_time, 'sport': sport.replace('_', ' ').upper(), 'line': lk, 'ways': ways, 'profit': (TOTAL_BANKROLL/margin)-TOTAL_BANKROLL, 'sides': [], 'is_live': is_live}
-                    for k in keys:
-                        arb['sides'].append({'sel': k, 'pr': outs[k]['price'], 'bk': outs[k]['bookie'], 'stk': (TOTAL_BANKROLL/margin)/outs[k]['price']})
-                    all_arbs.append(arb)
+                if len(keys) in [2, 3]:
+                    margin = sum(1/outs[k]['price'] for k in keys)
+                    if margin < 1.0 and (1-margin)*100 >= MIN_ARB_THRESHOLD:
+                        arb = {'pct': (1-margin)*100, 'match': match_name, 'home': home, 'away': away, 'time': match_time, 'sport': sport.upper(), 'line': lk, 'ways': len(keys), 'profit': (TOTAL_BANKROLL/margin)-TOTAL_BANKROLL, 'sides': [], 'is_live': is_live}
+                        for k in keys: arb['sides'].append({'sel': k, 'pr': outs[k]['price'], 'bk': outs[k]['bookie'], 'stk': (TOTAL_BANKROLL/margin)/outs[k]['price']})
+                        all_arbs.append(arb)
 
-    all_evs.sort(key=lambda x: x['pct'], reverse=True)
-    all_arbs.sort(key=lambda x: x['pct'], reverse=True)
     return all_evs, all_arbs
 
 # ==========================================
@@ -282,194 +278,52 @@ def generate_web(evs, arbs):
     ist_now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
     build_time = ist_now.strftime('%d %b %Y, %I:%M %p IST')
     
-    net_html = ""
-    for idx, key in enumerate(API_KEYS):
-        masked = f"{key[:4]}••••{key[-4:]}" if len(key) > 8 else "Invalid"
-        rem = api_state.get('stats', {}).get(str(idx), {}).get('remaining', 500)
-        status = "ACTIVE" if idx == api_state.get('active_index', 0) else ("EXHAUSTED" if rem == 0 else "STANDBY")
-        color = "#06b6d4" if status == "ACTIVE" else ("#ef4444" if status == "EXHAUSTED" else "#10b981")
-        net_html += f"""
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid {color}; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">{masked}</strong>
-                <span style="font-size:10px; font-weight:bold; color:{color};">{status}</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">{rem}/500</strong></div>
-        </div>"""
-
     def build_ev_card(e):
-        live_badge = '<span style="color:#ef4444; font-weight:bold; animation: pulse 1.5s infinite;">🔴 LIVE</span>' if e.get('is_live') else f"📅 {e['time']}"
-        return f"""
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 {e['sport']} &nbsp;|&nbsp; {live_badge}</span>
-                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">{e['pct']:.2f}% EV</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">{e['home']} <span style="font-size:12px; color:#a1a1aa;">vs</span> {e['away']}</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">{e['line']}</strong> ({e['ways']}-Way)</div>
-                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
-                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">{e['sel'].upper()} @ {e['odds']:.2f}</strong></div>
-                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">{e['bk'].title().replace('_',' ')}</div>
-                </div>
-                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
-                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹{e['stk']:.0f}</strong></div>
-                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">{e['trueO']:.3f} | {e['conf']}/100</strong></div>
-                </div>
-            </div>
-        </div>"""
-
+        return f"<div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:12px; margin-bottom:10px;'><b>{e['pct']:.2f}% EV</b> | {e['match']}<br><small>{e['line']} - {e['bk'].upper()} @ {e['odds']}</small></div>"
+    
     def build_arb_card(a):
-        live_badge = '<span style="color:#ef4444; font-weight:bold; animation: pulse 1.5s infinite;">🔴 LIVE</span>' if a.get('is_live') else f"📅 {a['time']}"
-        legs_html = ""
-        for s in a['sides']:
-            legs_html += f"""
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>{s['sel'].upper()} @ <strong style="color:#f59e0b;">{s['pr']:.2f}</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">{s['bk'].title().replace('_',' ')}</span></span>
-                <strong style="color:#06b6d4;">₹{s['stk']:.0f}</strong>
-            </div>"""
-        return f"""
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 {a['sport']} &nbsp;|&nbsp; {live_badge}</span>
-                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">{a['pct']:.2f}% ARB</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">{a['home']} <span style="font-size:12px; color:#a1a1aa;">vs</span> {a['away']}</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">{a['line']}</strong> ({a['ways']}-Way)</div>
-                {legs_html}
-                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹{a['profit']:.0f}</strong></div>
-            </div>
-        </div>"""
+        return f"<div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:12px; margin-bottom:10px; border-left:4px solid #f59e0b;'><b>{a['pct']:.2f}% ARB</b> | {a['match']}<br><small>Profit: ₹{a['profit']:.0f}</small></div>"
 
-    pre_ev_html = "".join([build_ev_card(e) for e in evs if not e.get('is_live')][:50]) or "<div style='text-align:center; padding:40px; color:#a1a1aa;'>No Pre-Match EV detected.</div>"
-    live_ev_html = "".join([build_ev_card(e) for e in evs if e.get('is_live')][:50]) or "<div style='text-align:center; padding:40px; color:#a1a1aa;'>No Live EV detected.</div>"
-    pre_arb_html = "".join([build_arb_card(a) for a in arbs if not a.get('is_live')][:50]) or "<div style='text-align:center; padding:40px; color:#a1a1aa;'>No Pre-Match Arbitrage locks.</div>"
-    live_arb_html = "".join([build_arb_card(a) for a in arbs if a.get('is_live')][:50]) or "<div style='text-align:center; padding:40px; color:#a1a1aa;'>No Live Arbitrage locks.</div>"
-
-    HTML = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ARB SNIPER | Auto-Terminal</title>
-<style>
-    body {{ background: #09090b; color: #f4f4f5; font-family: system-ui, -apple-system, sans-serif; padding: 15px; max-width: 800px; margin: auto; }}
-    .hdr {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; padding-bottom: 15px; margin-bottom: 20px; }}
-    .title {{ font-size: 24px; font-weight: 800; color: #06b6d4; margin:0; }}
-    .subtitle {{ font-size: 11px; color: #a1a1aa; font-family: monospace; }}
-    .time-badge {{ background: rgba(16,185,129,0.1); border: 1px solid #10b981; color: #10b981; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: bold; font-family: monospace; }}
-    .tabs {{ display: flex; flex-wrap: wrap; gap: 6px; background: #18181b; padding: 6px; border-radius: 10px; border: 1px solid #27272a; margin-bottom: 20px; }}
-    .tab {{ flex: 1 1 20%; min-width: 110px; text-align: center; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold; color: #a1a1aa; font-size: 12px; transition: 0.2s; }}
-    .tab.active {{ background: #3f3f46; color: #fff; }}
-    .pane {{ display: none; }} .pane.active {{ display: block; }}
-    @keyframes pulse {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0.3; }} }}
-</style>
-</head>
-<body>
-<div class="hdr">
-    <div>
-        <h1 class="title">⚡ ARB SNIPER</h1>
-        <div class="subtitle">Cloud Scanning Active · Target: {len(API_KEYS)} Keys</div>
-    </div>
-    <div class="time-badge">SYNCED: {build_time}</div>
-</div>
-<div class="tabs">
-    <div class="tab active" onclick="showPane('pre-ev')">💎 Pre-Match EV</div>
-    <div class="tab" onclick="showPane('live-ev')">🔴 Live EV</div>
-    <div class="tab" onclick="showPane('pre-arb')">🔒 Pre-Match ARB</div>
-    <div class="tab" onclick="showPane('live-arb')">🔴 Live ARB</div>
-    <div class="tab" onclick="showPane('net')">📡 Network</div>
-</div>
-<div id="pane-pre-ev" class="pane active">{pre_ev_html}</div>
-<div id="pane-live-ev" class="pane">{live_ev_html}</div>
-<div id="pane-pre-arb" class="pane">{pre_arb_html}</div>
-<div id="pane-live-arb" class="pane">{live_arb_html}</div>
-<div id="pane-net" class="pane">{net_html}</div>
-<script>
-    function showPane(p) {{
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.pane').forEach(t => t.classList.remove('active'));
-        event.target.classList.add('active');
-        document.getElementById('pane-'+p).classList.add('active');
-    }}
-    setInterval(() => window.location.reload(true), 300000);
-</script>
-</body>
-</html>"""
-    with open("index.html", "w", encoding="utf-8") as f:
-        f.write(HTML)
+    HTML = f"<html><body style='background:#09090b; color:#fff; font-family:sans-serif; padding:20px;'><h1>⚡ ARB SNIPER DASHBOARD</h1><p>Last Sync: {build_time}</p><h2>🔒 Arbitrage Locks</h2>{''.join([build_arb_card(a) for a in arbs])}<h2>💎 Value Bets</h2>{''.join([build_ev_card(e) for e in evs[:20]])}</body></html>"
+    with open("index.html", "w", encoding="utf-8") as f: f.write(HTML)
 
 # ==========================================
-#  7. THE TRIGGER (RUNNING THE SHOW)
+#  7. THE TRIGGER (MAIN)
 # ==========================================
 if __name__ == "__main__":
-    print(f"🚀 Cloud Engine Booting... Loaded {len(API_KEYS)} Keys.")
+    print(f"🚀 Engine Booting... {len(API_KEYS)} Keys Loaded.")
     
-    # 1. Fetch data from The-Odds-API (Pinnacle & Softs)
     results = fetch_all_sports()
-    
-    # 2. Fetch custom BC.Game data
     bc_data = fetch_bcgame_custom()
     
-    # 3. THE SMART MERGE: Inject BC.Game directly into the Odds-API events
     if bc_data:
-        print(f"\n🔄 Attempting to merge {len(bc_data)} BC.Game matches with Global Market...")
+        print(f"\n🔄 Merging {len(bc_data)} BC.Game matches...")
         merge_count = 0
-        
         for bc_match in bc_data:
-            bc_home = bc_match['home_team'].lower().replace(' fc', '').strip()
-            bc_away = bc_match['away_team'].lower().replace(' fc', '').strip()
+            # Clean names for better matching
+            bc_h = bc_match['home_team'].lower().replace('fc ', '').replace(' fc', '').strip()
+            bc_a = bc_match['away_team'].lower().replace('fc ', '').replace(' fc', '').strip()
             
-            match_found = False
+            found = False
             for sport, events in results.items():
                 if not events: continue
                 for event in events:
-                    api_home = event.get('home_team', '').lower().replace(' fc', '').strip()
-                    api_away = event.get('away_team', '').lower().replace(' fc', '').strip()
+                    api_h = event.get('home_team', '').lower().replace('fc ', '').replace(' fc', '').strip()
+                    api_a = event.get('away_team', '').lower().replace('fc ', '').replace(' fc', '').strip()
                     
-                    bc_h_words = set([w for w in bc_home.split() if len(w) > 3])
-                    api_h_words = set([w for w in api_home.split() if len(w) > 3])
-                    bc_a_words = set([w for w in bc_away.split() if len(w) > 3])
-                    api_a_words = set([w for w in api_away.split() if len(w) > 3])
+                    # Token-word matching logic
+                    h_match = any(w in api_h for w in bc_h.split() if len(w) > 3) or bc_h[:5] == api_h[:5]
+                    a_match = any(w in api_a for w in bc_a.split() if len(w) > 3) or bc_a[:5] == api_a[:5]
                     
-                    home_match = bool(bc_h_words & api_h_words) or (bc_home in api_home) or (api_home in bc_home) or (bc_home[:5] == api_home[:5])
-                    away_match = bool(bc_a_words & api_a_words) or (bc_away in api_away) or (api_away in bc_away) or (bc_away[:5] == api_away[:5])
-                    
-                    if home_match and away_match:
-                        if 'bookmakers' not in event:
-                            event['bookmakers'] = []
+                    if h_match and a_match:
+                        if 'bookmakers' not in event: event['bookmakers'] = []
                         event['bookmakers'].append(bc_match['bookmakers'][0])
                         merge_count += 1
-                        print(f"  🔗 LINKED: [BC] {bc_match['home_team'][:15]} <-> [API] {event['home_team'][:15]}")
-                        match_found = True
-                        break 
-                if match_found: break
-                    
-        print(f"✅ Successfully injected {merge_count} BC.Game matches into the math engine!\n")
+                        print(f"  🔗 LINKED: {bc_match['home_team']} <-> {event['home_team']}")
+                        found = True; break
+                if found: break
+        print(f"✅ Injected {merge_count} BC.Game matches!\n")
 
-    # 4. Process everything together
     evs, arbs = process_markets(results)
-    
-    for a in arbs:
-        alert_key = f"ARB|{a['match']}|{a['line']}|{a['pct']:.2f}"
-        if not is_duplicate_alert(alert_key):
-            msg = f"🏆 {a['sport']}\n📈 {a['line']} ({a['ways']}-Way)\n\n"
-            for s in a['sides']: msg += f"🔵 ₹{s['stk']:.0f} on {s['sel'].upper()} @ {s['pr']:.2f} [{s['bk'].title()}]\n"
-            msg += f"\n✨ Profit: ₹{a['profit']:.0f}"
-            try:
-                requests.post("https://ntfy.sh/", json={"topic": NTFY_CHANNEL, "message": msg, "title": f"🚨 {a['pct']:.2f}% ARB | {a['match']}", "tags": ["moneybag"]}, timeout=5)
-            except: pass
-
-    for e in evs:
-        alert_key = f"EV|{e['match']}|{e['line']}|{e['sel']}|{e['odds']:.2f}"
-        if not is_duplicate_alert(alert_key):
-            msg = f"🏆 {e['sport']}\n📈 {e['line']} ({e['ways']}-Way)\n\n💰 BET: ₹{e['stk']:.0f}\n👉 {e['sel'].upper()} @ {e['odds']:.2f} on {e['bk'].title()}\n\n🧠 True Odds: {e['trueO']:.3f}"
-            try:
-                requests.post("https://ntfy.sh/", json={"topic": NTFY_CHANNEL, "message": msg, "title": f"📈 {e['pct']:.2f}% EV | {e['match']}", "tags": ["chart_with_upwards_trend"]}, timeout=5)
-            except: pass
-
-    save_json('api_state.json', api_state)
-    save_json('alert_cache.json', alert_cache)
     generate_web(evs, arbs)
-    print(f"✅ Global Terminal Synced. EV: {len(evs)} | ARB: {len(arbs)}")
+    print(f"✅ Sync Complete. EV: {len(evs)} | ARB: {len(arbs)}")
