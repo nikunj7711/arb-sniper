@@ -5,7 +5,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # ==========================================
 #  1. CONFIGURATION (19-KEY COMPATIBLE)
 # ==========================================
-# For GitHub: Uses the environment variable. For local: Paste your comma-separated string.
 _raw_keys = os.getenv('ODDS_API_KEYS', '41308dc8cb155421b36bf4e58a0fe50b')
 API_KEYS = [k.strip() for k in _raw_keys.split(',') if k.strip()]
 
@@ -19,7 +18,7 @@ MY_BOOKIES = 'pinnacle,onexbet,bet365,unibet,betway,stake,marathonbet'
 TARGET_SPORTS = [
     'soccer_epl', 'soccer_spain_la_liga', 'soccer_uefa_champs_league',
     'basketball_nba', 'icehockey_nhl', 'soccer_italy_serie_a',
-    'upcoming' # This is the secret key to finding BC.Game matches across all sports
+    'upcoming' 
 ]
 
 BOOK_CAPS = {
@@ -28,7 +27,7 @@ BOOK_CAPS = {
 }
 
 # ==========================================
-#  2. KEY ROTATION & MEMORY
+#  2. MEMORY & AUTO-RECOVERY
 # ==========================================
 api_lock = threading.Lock()
 
@@ -103,7 +102,6 @@ def fetch_bcgame_custom():
             if m1:
                 if "1" in m1: h2h.append({'name': comps[0]['name'], 'price': float(m1["1"]["k"])})
                 if "2" in m1: h2h.append({'name': comps[1]['name'], 'price': float(m1["2"]["k"])})
-                if "3" in m1: h2h.append({'name': 'Draw', 'price': float(m1["3"]["k"])})
             
             totals = []
             m18 = mks.get("18", {})
@@ -209,10 +207,16 @@ def generate_web(evs, arbs):
     ist_now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
     build_time = ist_now.strftime('%d %b, %I:%M %p IST')
     
-    def build_legs(a):
-        return "".join([f"<div style='display:flex; justify-content:space-between; background:#09090b; padding:8px; border-radius:6px; margin-bottom:4px;'><span>{s['sel']} @ <b>{s['pr']}</b> ({s['bk'].upper()})</span> <span>₹{s['stk']:.0f}</span></div>" for s in a['sides']])
+    arb_html = ""
+    for a in arbs:
+        legs = "".join([f"<div style='display:flex; justify-content:space-between; background:#09090b; padding:8px; border-radius:6px; margin-bottom:4px;'><span>{s['sel']} @ <b>{s['pr']}</b> ({s['bk'].upper()})</span> <span>₹{s['stk']:.0f}</span></div>" for s in a['sides']])
+        arb_html += f"""<div class='card'><div style='display:flex; justify-content:space-between; margin-bottom:8px;'><span class='badge arb-badge'>{a['pct']:.2f}% ARB</span> <button class='copy-btn' onclick='navigator.clipboard.writeText(\"{a['match']}\")'>COPY</button></div><b>{a['match']}</b><br><small>{a['line']}</small><br><br>{legs}<div style='text-align:right; margin-top:8px; color:#10b981;'>Profit: ₹{a['profit']:.0f}</div></div>"""
 
-    HTML = f"""
+    ev_html = ""
+    for e in evs[:30]:
+        ev_html += f"""<div class='card'><div style='display:flex; justify-content:space-between; margin-bottom:8px;'><span class='badge ev-badge'>{e['pct']:.2f}% EV</span> <button class='copy-btn' onclick='navigator.clipboard.writeText(\"{e['match']}\")'>COPY</button></div><b>{e['match']}</b><br><small>{e['line']} | {e['bk'].upper()} @ {e['odds']}</small><br><br><div style='display:flex; justify-content:space-between;'><span>Stake: <b>₹{e['stk']:.0f}</b></span> <span style='color:#a1a1aa; font-size:12px;'>True: {e['trueO']:.3f}</span></div></div>"""
+
+    HTML = f"""<!DOCTYPE html>
     <html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>
     body {{ background: #09090b; color: #fff; font-family: sans-serif; padding: 15px; max-width: 600px; margin: auto; }}
     .card {{ background: #18181b; border: 1px solid #27272a; padding: 15px; border-radius: 12px; margin-bottom: 12px; }}
@@ -223,14 +227,14 @@ def generate_web(evs, arbs):
     </style></head><body>
     <h2 style='color:#06b6d4;'>⚡ ARB SNIPER</h2>
     <p style='font-size:12px; color:#a1a1aa;'>Last Sync: {build_time}</p>
-    
     <h3 style='border-bottom: 1px solid #27272a; padding-bottom: 5px;'>🔒 ARBITRAGE ({len(arbs)})</h3>
-    {"".join([f"<div class='card'><div style='display:flex; justify-content:space-between; margin-bottom:8px;'><span class='badge arb-badge'>{a['pct']:.2f}% ARB</span> <button class='copy-btn' onclick='navigator.clipboard.writeText(\"{a['match']}\")'>COPY NAME</button></div><b>{a['match']}</b><br><small>{a['line']}</small><br><br>{build_legs(a)}<div style='text-align:right; margin-top:8px; color:#10b981;'>Profit: ₹{a['profit']:.0f}</div></div>" for a in arbs])}
-
+    {arb_html}
     <h3 style='border-bottom: 1px solid #27272a; padding-bottom: 5px;'>💎 VALUE BETS ({len(evs)})</h3>
-    {"".join([f"<div class='card'><div style='display:flex; justify-content:space-between; margin-bottom:8px;'><span class='badge ev-badge'>{e['pct']:.2f}% EV</span> <button class='copy-btn' onclick='navigator.clipboard.writeText(\"{e['match']}\")'>COPY NAME</button></div><b>{e['match']}</b><br><small>{e['line']} | {e['bk'].upper()} @ {e['odds']}</small><br><br><div style='display:flex; justify-content:space-between;'><span>Stake: <b>₹{e['stk']:.0f}</b></span> <span style='color:#a1a1aa; font-size:12px;'>True: {e['trueO']:.3f}</span></div></div>" for e in evs[:20]])}
+    {ev_html}
     </body></html>"""
-    with open("index.html", "w", encoding="utf-8") as f: f.write(HTML)
+    
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(HTML)
 
 # ==========================================
 #  7. MAIN TRIGGER
@@ -251,10 +255,8 @@ if __name__ == "__main__":
                 for ev in events:
                     api_h = ev.get('home_team', '').lower().replace('fc ', '').replace(' fc', '').replace('real ', '').strip()
                     api_a = ev.get('away_team', '').lower().replace('fc ', '').replace(' fc', '').replace('real ', '').strip()
-                    
                     h_match = any(w in api_h for w in bc_h.split() if len(w) > 3) or bc_h[:5] == api_h[:5]
                     a_match = any(w in api_a for w in bc_a.split() if len(w) > 3) or bc_a[:5] == api_a[:5]
-                    
                     if h_match and a_match:
                         if 'bookmakers' not in ev: ev['bookmakers'] = []
                         ev['bookmakers'].append(bc['bookmakers'][0])
@@ -263,9 +265,7 @@ if __name__ == "__main__":
         print(f"✅ Injected {merge_count} BC.Game matches!")
 
     evs, arbs = process_markets(results)
-    # SORT DESCENDING
     evs.sort(key=lambda x: x['pct'], reverse=True)
     arbs.sort(key=lambda x: x['pct'], reverse=True)
-    
     generate_web(evs, arbs)
     print(f"✅ Sync Complete. EV: {len(evs)} | ARB: {len(arbs)}")
