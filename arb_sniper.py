@@ -442,15 +442,43 @@ def generate_web(evs, arbs):
 if __name__ == "__main__":
     print(f"🚀 Cloud Engine Booting... Loaded {len(API_KEYS)} Keys.")
     
-    # 1. Fetch data from The-Odds-API
+    # 1. Fetch data from The-Odds-API (Pinnacle & Softs)
     results = fetch_all_sports()
     
-    # 2. INJECT BC.GAME CUSTOM DATA
+    # 2. Fetch custom BC.Game data
     bc_data = fetch_bcgame_custom()
+    
+    # 3. THE SMART MERGE: Inject BC.Game directly into the Odds-API events
     if bc_data:
-        results['BC_GAME_GLOBAL'] = bc_data # Plugs straight into your math engine!
+        print(f"🔄 Merging {len(bc_data)} BC.Game matches with Global Market...")
         
-    # 3. Process everything together
+        for bc_match in bc_data:
+            bc_home = bc_match['home_team'].lower().replace(' fc', '').strip()
+            bc_away = bc_match['away_team'].lower().replace(' fc', '').strip()
+            
+            match_found = False
+            
+            for sport, events in results.items():
+                for event in events:
+                    api_home = event.get('home_team', '').lower().replace(' fc', '').strip()
+                    api_away = event.get('away_team', '').lower().replace(' fc', '').strip()
+                    
+                    # FUZZY MATCH: If the first 5 letters match, or one name is inside the other
+                    home_match = (bc_home[:5] == api_home[:5]) or (bc_home in api_home) or (api_home in bc_home)
+                    away_match = (bc_away[:5] == api_away[:5]) or (bc_away in api_away) or (api_away in bc_away)
+                    
+                    if home_match and away_match:
+                        # BINGO! Inject BC.Game into this exact event alongside Pinnacle!
+                        if 'bookmakers' not in event:
+                            event['bookmakers'] = []
+                        event['bookmakers'].append(bc_match['bookmakers'][0])
+                        match_found = True
+                        break # Move to the next BC.Game match
+                        
+                if match_found:
+                    break
+
+    # 4. Process everything together (Now BC.Game will fight Pinnacle!)
     evs, arbs = process_markets(results)
     
     # Send Arbitrage Alerts to your phone
