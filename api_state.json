@@ -1,62 +1,8 @@
 {
-  "active_index": 18,
+  "active_index": 1,
   "stats": {
     "0": {
-      "remaining": 0
-    },
-    "1": {
-      "remaining": 248
-    },
-    "2": {
-      "remaining": 373
-    },
-    "3": {
-      "remaining": 404
-    },
-    "4": {
-      "remaining": 0
-    },
-    "5": {
-      "remaining": 0
-    },
-    "6": {
-      "remaining": 462
-    },
-    "7": {
-      "remaining": 451
-    },
-    "8": {
-      "remaining": 433
-    },
-    "9": {
-      "remaining": 484
-    },
-    "10": {
-      "remaining": 480
-    },
-    "11": {
-      "remaining": 480
-    },
-    "12": {
-      "remaining": 466
-    },
-    "13": {
-      "remaining": 480
-    },
-    "14": {
-      "remaining": 475
-    },
-    "15": {
-      "remaining": 480
-    },
-    "16": {
-      "remaining": 455
-    },
-    "17": {
-      "remaining": 443
-    },
-    "18": {
-      "remaining": 432
+      "remaining": 203
     }
   }
 }
