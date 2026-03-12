@@ -14,7 +14,7 @@ TOTAL_BANKROLL = 1500                   # Your total betting budget in Rupees
 MIN_EV_THRESHOLD = 1.5                  # Only alert if the Expected Value is > 1.5%
 MIN_ARB_THRESHOLD = 0.5                 # UPDATED: Lowered to 0.5% to catch high-frequency glitches
 
-# The specific bookmakers we want to scan and compare
+# The specific bookmakers we want to scan and compare via API
 MY_BOOKIES = 'pinnacle,onexbet,bet365,unibet,betway,stake,marathonbet'
 
 # The sports we are scanning
@@ -30,7 +30,7 @@ TARGET_SPORTS = [
 # Maximum amount you are allowed to bet on each specific site
 BOOK_CAPS = {
     'betway': 300, 'stake': 500, 'onexbet': 400, 'marathonbet': 400,  
-    'pinnacle': 1000, 'bet365': 400, 'unibet': 350
+    'pinnacle': 1000, 'bet365': 400, 'unibet': 350, 'bcgame': 1000 # Added BC.Game cap
 }
 
 # ==========================================
@@ -104,6 +104,82 @@ def calculate_kelly(soft_odds, true_odds, bankroll, bookie=None):
 # ==========================================
 #  4. CLOUD FETCHING (THE HUNTER)
 # ==========================================
+
+def fetch_bcgame_custom():
+    """
+    CUSTOM PIPELINE: Bypasses API limits to pull unlimited BC.Game odds.
+    Translates the data into The-Odds-API format so your bot can read it instantly.
+    """
+    headers = {
+        'accept': '*/*',
+        'origin': 'https://bc.game',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+    }
+    
+    print("🥷 Injecting custom BC.Game Zero-Cost Pipeline...")
+    
+    try:
+        # Step 1: Steal the active map version
+        map_url = 'https://api-k-c7818b61-623.sptpub.com/api/v4/prematch/brand/2103509236163162112/en/0'
+        version = requests.get(map_url, headers=headers, timeout=10).json()['top_events_versions'][0]
+        
+        # Step 2: Download the master database
+        data_url = f"https://api-k-c7818b61-623.sptpub.com/api/v4/prematch/brand/2103509236163162112/en/{version}"
+        events = requests.get(data_url, headers=headers, timeout=10).json().get('events', {})
+        
+        standardized_events = []
+        
+        # Step 3: Translate BC.Game data into Odds-API format
+        for event_id, match in events.items():
+            desc = match.get('desc', {})
+            markets = match.get('markets', {})
+            
+            comps = desc.get('competitors', [])
+            if len(comps) < 2: continue
+            home_team = comps[0].get('name')
+            away_team = comps[1].get('name')
+            
+            commence_time = datetime.fromtimestamp(desc.get('scheduled', 0), tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            
+            translated_markets = []
+            
+            # Extract Match Winner (H2H - Market "1")
+            h2h_outcomes = []
+            market_1 = markets.get("1", {}).get("", {})
+            if market_1:
+                if "1" in market_1: h2h_outcomes.append({'name': home_team, 'price': float(market_1["1"]["k"])})
+                if "2" in market_1: h2h_outcomes.append({'name': away_team, 'price': float(market_1["2"]["k"])})
+                if "3" in market_1: h2h_outcomes.append({'name': 'Draw', 'price': float(market_1["3"]["k"])})
+            if h2h_outcomes:
+                translated_markets.append({'key': 'h2h', 'outcomes': h2h_outcomes})
+
+            # Extract Totals (Over/Under - Market "18")
+            market_18 = markets.get("18", {})
+            total_outcomes = []
+            for point_key, point_data in market_18.items():
+                point_val = point_key.replace("total=", "")
+                if "12" in point_data: total_outcomes.append({'name': 'Over', 'price': float(point_data["12"]["k"]), 'point': float(point_val)})
+                if "13" in point_data: total_outcomes.append({'name': 'Under', 'price': float(point_data["13"]["k"]), 'point': float(point_val)})
+            if total_outcomes:
+                translated_markets.append({'key': 'totals', 'outcomes': total_outcomes})
+            
+            if translated_markets:
+                standardized_events.append({
+                    'home_team': home_team,
+                    'away_team': away_team,
+                    'commence_time': commence_time,
+                    'bookmakers': [{
+                        'key': 'bcgame',
+                        'title': 'BC.Game',
+                        'markets': translated_markets
+                    }]
+                })
+                
+        return standardized_events
+    except Exception as e:
+        print(f"⚠️ BC.Game Scraper Error: {e}")
+        return []
+
 def fetch_odds_with_retry(url, params):
     while True:
         key, idx = get_active_api_key()
@@ -125,7 +201,6 @@ def fetch_odds_with_retry(url, params):
 
 def fetch_all_sports():
     results = {}
-    # UPDATED: Now hunting H2H, Totals, and Spreads to beat OddsJam at their own game
     with ThreadPoolExecutor(max_workers=4) as executor:
         futures = {executor.submit(
             fetch_odds_with_retry, 
@@ -166,7 +241,6 @@ def process_markets(results):
             
             ev_lines, arb_lines = {}, {}
             
-            # UPDATED: The Secret Sauce for parsing deep derivative markets
             for bookie in event.get('bookmakers', []):
                 b_name = bookie['key']
                 for market in bookie.get('markets', []):
@@ -174,7 +248,6 @@ def process_markets(results):
                     for outcome in market['outcomes']:
                         name, price = outcome['name'], outcome['price']
                         
-                        # Extracts the point value (e.g., "2.5" from "Over 2.5")
                         point = str(outcome.get('point', ''))
                         line_key = f"{m_type} {point}".strip()
 
@@ -368,7 +441,16 @@ def generate_web(evs, arbs):
 # ==========================================
 if __name__ == "__main__":
     print(f"🚀 Cloud Engine Booting... Loaded {len(API_KEYS)} Keys.")
+    
+    # 1. Fetch data from The-Odds-API
     results = fetch_all_sports()
+    
+    # 2. INJECT BC.GAME CUSTOM DATA
+    bc_data = fetch_bcgame_custom()
+    if bc_data:
+        results['BC_GAME_GLOBAL'] = bc_data # Plugs straight into your math engine!
+        
+    # 3. Process everything together
     evs, arbs = process_markets(results)
     
     # Send Arbitrage Alerts to your phone
