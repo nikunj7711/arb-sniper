@@ -272,20 +272,115 @@ def process_markets(results):
     return all_evs, all_arbs
 
 # ==========================================
-#  6. WEBSITE GENERATOR
+#  6. WEBSITE GENERATOR (RESTORED PRO DASHBOARD)
 # ==========================================
 def generate_web(evs, arbs):
     ist_now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
     build_time = ist_now.strftime('%d %b %Y, %I:%M %p IST')
     
-    def build_ev_card(e):
-        return f"<div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:12px; margin-bottom:10px;'><b>{e['pct']:.2f}% EV</b> | {e['match']}<br><small>{e['line']} - {e['bk'].upper()} @ {e['odds']}</small></div>"
-    
-    def build_arb_card(a):
-        return f"<div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:12px; margin-bottom:10px; border-left:4px solid #f59e0b;'><b>{a['pct']:.2f}% ARB</b> | {a['match']}<br><small>Profit: ₹{a['profit']:.0f}</small></div>"
+    # 📡 Network Status Section
+    net_html = ""
+    for idx, key in enumerate(API_KEYS):
+        masked = f"{key[:4]}••••{key[-4:]}"
+        rem = api_state.get('stats', {}).get(str(idx), {}).get('remaining', 500)
+        status = "ACTIVE" if idx == api_state.get('active_index', 0) else ("EXHAUSTED" if rem == 0 else "STANDBY")
+        color = "#06b6d4" if status == "ACTIVE" else ("#ef4444" if status == "EXHAUSTED" else "#10b981")
+        net_html += f"""
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid {color}; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">{masked}</strong>
+                <span style="font-size:10px; font-weight:bold; color:{color};">{status}</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">{rem}/500</strong></div>
+        </div>"""
 
-    HTML = f"<html><body style='background:#09090b; color:#fff; font-family:sans-serif; padding:20px;'><h1>⚡ ARB SNIPER DASHBOARD</h1><p>Last Sync: {build_time}</p><h2>🔒 Arbitrage Locks</h2>{''.join([build_arb_card(a) for a in arbs])}<h2>💎 Value Bets</h2>{''.join([build_ev_card(e) for e in evs[:20]])}</body></html>"
-    with open("index.html", "w", encoding="utf-8") as f: f.write(HTML)
+    def build_ev_card(e):
+        return f"""
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 {e['sport']} &nbsp;|&nbsp; 📅 {e['time']}</span>
+                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">{e['pct']:.2f}% EV</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">{e['match']}</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">{e['line']}</strong></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
+                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">{e['sel'].upper()} @ {e['odds']:.2f}</strong></div>
+                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">{e['bk'].upper()}</div>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
+                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹{e['stk']:.0f}</strong></div>
+                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS</span><br><strong style="font-family:monospace; color:#10b981;">{e['trueO']:.3f}</strong></div>
+                </div>
+            </div>
+        </div>"""
+
+    def build_arb_card(a):
+        legs_html = ""
+        for s in a['sides']:
+            legs_html += f"""
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>{s['sel'].upper()} @ <strong style="color:#f59e0b;">{s['pr']:.2f}</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">{s['bk'].upper()}</span></span>
+                <strong style="color:#06b6d4;">₹{s['stk']:.0f}</strong>
+            </div>"""
+        return f"""
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 {a['sport']} &nbsp;|&nbsp; 📅 {a['time']}</span>
+                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">{a['pct']:.2f}% ARB</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">{a['match']}</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">{a['line']}</strong></div>
+                {legs_html}
+                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹{a['profit']:.0f}</strong></div>
+            </div>
+        </div>"""
+
+    HTML = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARB SNIPER | Auto-Terminal</title>
+<style>
+    body {{ background: #09090b; color: #f4f4f5; font-family: system-ui, -apple-system, sans-serif; padding: 15px; max-width: 800px; margin: auto; }}
+    .hdr {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; padding-bottom: 15px; margin-bottom: 20px; }}
+    .title {{ font-size: 24px; font-weight: 800; color: #06b6d4; margin:0; }}
+    .subtitle {{ font-size: 11px; color: #a1a1aa; font-family: monospace; }}
+    .time-badge {{ background: rgba(16,185,129,0.1); border: 1px solid #10b981; color: #10b981; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: bold; font-family: monospace; }}
+    .tabs {{ display: flex; flex-wrap: wrap; gap: 6px; background: #18181b; padding: 6px; border-radius: 10px; border: 1px solid #27272a; margin-bottom: 20px; }}
+    .tab {{ flex: 1; min-width: 100px; text-align: center; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold; color: #a1a1aa; font-size: 12px; transition: 0.2s; }}
+    .tab.active {{ background: #3f3f46; color: #fff; }}
+    .pane {{ display: none; }} .pane.active {{ display: block; }}
+</style>
+</head>
+<body>
+<div class="hdr">
+    <div><h1 class="title">⚡ ARB SNIPER</h1><div class="subtitle">Cloud Scanning Active</div></div>
+    <div class="time-badge">SYNCED: {build_time}</div>
+</div>
+<div class="tabs">
+    <div class="tab active" onclick="showPane('arb')">🔒 Arbitrage ({len(arbs)})</div>
+    <div class="tab" onclick="showPane('ev')">💎 Value Bets ({len(evs)})</div>
+    <div class="tab" onclick="showPane('net')">📡 Network</div>
+</div>
+<div id="pane-arb" class="pane active">{"".join([build_arb_card(a) for a in arbs]) or "<p style='text-align:center; padding:50px;'>No Arbitrage found.</p>"}</div>
+<div id="pane-ev" class="pane">{"".join([build_ev_card(e) for e in evs[:50]]) or "<p style='text-align:center; padding:50px;'>No EV bets found.</p>"}</div>
+<div id="pane-net" class="pane">{net_html}</div>
+<script>
+    function showPane(p) {{
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.pane').forEach(t => t.classList.remove('active'));
+        event.target.classList.add('active');
+        document.getElementById('pane-'+p).classList.add('active');
+    }}
+    setInterval(() => window.location.reload(true), 300000);
+</script>
+</body>
+</html>"""
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(HTML)
 
 # ==========================================
 #  7. THE TRIGGER (MAIN)
