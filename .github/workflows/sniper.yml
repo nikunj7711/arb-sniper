@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: '*/30 * * * *'  # Runs every 30 minutes
   workflow_dispatch: # Keeps your manual run button
+
 permissions:
   contents: write
 
@@ -11,7 +12,9 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Crucial for pulling new changes correctly
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -30,6 +33,14 @@ jobs:
         run: |
           git config --global user.name "Arb Sniper Bot"
           git config --global user.email "bot@arbsniper.com"
-          git add index.html api_state.json alert_cache.json
+          
+          # Add files safely (ignores them if they don't exist yet)
+          git add index.html api_state.json alert_cache.json || true
+          
           git commit -m "Auto-Scan Completed [$(date '+%Y-%m-%d %H:%M IST')]" || exit 0
-          git push
+          
+          # 👇 THE CRITICAL FIX: Download Nikunj's manual code edits before uploading
+          git pull --rebase origin main
+          
+          # Finally, push the dashboard to the web
+          git push origin main
