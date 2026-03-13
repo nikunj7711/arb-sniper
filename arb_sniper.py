@@ -209,7 +209,8 @@ def generate_ai_report(arbs):
     prompt = f"Act as a professional sports betting quant. I just found these arbitrage opportunities: {top_arbs}. Write a punchy, 2-sentence market update for my dashboard users advising them to act fast. Do not use hashtags or asterisks."
     
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        # 🛠️ FIX: Added '-latest' to the model endpoint
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_API_KEY}"
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
         res = requests.post(url, json=payload, headers={'Content-Type': 'application/json'}, timeout=15)
         
@@ -222,6 +223,7 @@ def generate_ai_report(arbs):
     except Exception as e:
         print(f"🤖 Gemini Connection Exception: {e}")
         return "AI Module Offline: Connection timed out."
+
 
 # ==========================================
 #  6. DYNAMIC UI GENERATOR (LIVE JS ENGINE)
