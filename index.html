@@ -1,1233 +1,189 @@
-<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>
-        body { background:#09090b; color:#fff; font-family:sans-serif; padding:15px; max-width:600px; margin:auto; }
+<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body { background:#09090b; color:#fff; font-family:-apple-system, sans-serif; padding:15px; max-width:600px; margin:auto; }
         .card { background:#18181b; border:1px solid #27272a; padding:15px; border-radius:12px; margin-bottom:12px; }
-        #lock-screen { position:fixed; top:0; left:0; width:100%; height:100%; background:#09090b; z-index:999; display:flex; flex-direction:column; align-items:center; justify-content:center; }
-        .pass-input { background:#18181b; border:1px solid #27272a; color:#fff; padding:12px; border-radius:8px; text-align:center; margin-bottom:10px; }
-        .tab { flex:1; text-align:center; padding:12px; background:#18181b; border-radius:8px; cursor:pointer; font-size:12px; color:#666; font-weight:bold; }
-        .tab.active { background:#3f3f46; color:#fff; border:1px solid #06b6d4; }
+        .tab { flex:1; text-align:center; padding:12px; background:#18181b; border-radius:8px; cursor:pointer; font-size:12px; color:#666; font-weight:bold; border:1px solid transparent; }
+        .tab.active { background:#3f3f46; color:#fff; border-color:#06b6d4; }
         .pane { display:none; } .active-pane { display:block; }
-        .copy-btn { background:#3f3f46; color:#fff; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:11px; }
-        .badge { font-size:10px; padding:3px 7px; border-radius:5px; font-weight:bold; }
+        .btn { background:#27272a; color:#fff; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:11px; }
+        .btn-calc { background: rgba(6,182,212,0.2); color:#06b6d4; border:1px solid #06b6d4; }
+        .badge { font-size:10px; padding:3px 7px; border-radius:5px; font-weight:bold; color:#000; }
+        .input-box { background:#000; border:1px solid #27272a; color:#10b981; padding:12px; border-radius:8px; width:100%; font-size:16px; font-weight:bold; margin-bottom:15px; box-sizing:border-box; outline:none; }
+        .input-box:focus { border-color: #06b6d4; }
+        .clock { background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px; font-family:monospace; }
     </style></head><body>
-        <div id='lock-screen'>
-            <h2 style='color:#06b6d4;'>⚡ TERMINAL LOCKED</h2>
-            <input type='password' id='ps' class='pass-input' placeholder='Enter Code'>
-            <button onclick='ck()' style='background:#06b6d4; border:none; padding:10px 20px; border-radius:8px; font-weight:bold; cursor:pointer;'>UNLOCK</button>
+        <div id='lock-screen' style='position:fixed; top:0; left:0; width:100%; height:100%; background:#09090b; z-index:999; display:flex; flex-direction:column; align-items:center; justify-content:center;'>
+            <h2 style='color:#06b6d4; letter-spacing: 2px;'>⚡ SNIPER TERMINAL</h2>
+            <input type='password' id='ps' style='background:#18181b; border:1px solid #27272a; color:#fff; padding:12px; border-radius:8px; text-align:center; margin-bottom:10px; width:200px;' placeholder='Authorization Code'>
+            <button onclick='ck()' style='background:#06b6d4; color:#000; border:none; padding:10px 20px; border-radius:8px; font-weight:bold; cursor:pointer; width:225px;'>ENTER SYSTEM</button>
             <p id='err' style='color:#ef4444; font-size:12px; margin-top:10px;'></p>
         </div>
+
         <div id='content' style='display:none;'>
-            <div style='margin-bottom:20px;'>
-                <h2 style='color:#06b6d4; margin:0;'>⚡ SNIPER PRO</h2>
-                <small style='color:#444;'>Synced: 13 Mar, 10:35 PM IST</small>
+            <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;'>
+                <div><h2 style='color:#06b6d4; margin:0;'>⚡ SNIPER PRO</h2><small style='color:#444;'>Synced: 13 Mar, 11:37 PM IST</small></div>
+                <button onclick='localStorage.clear(); location.reload();' class='btn' style='background:#ef4444;'>LOGOUT</button>
             </div>
-            <div style='display:flex; gap:5px; margin-bottom:20px;'>
-                <div class='tab active' onclick='sw(0)'>ARB (5)</div>
-                <div class='tab' onclick='sw(1)'>VALUE (46)</div>
-                <div class='tab' onclick='sw(2)'>KEYS</div>
-            </div>
-            <div id='p0' class='pane active-pane'>
-        <div class='card' style='border-left: 4px solid #f59e0b;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#f59e0b; color:#000;'>2.63% ARB</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 ICEHOCKEY NHL</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("St Louis Blues vs Edmonton Oilers")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>St Louis Blues vs Edmonton Oilers</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 14 Mar | 05:40 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 7h 4m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>TOTALS 6.5</b> (2-Way)</div>
-            <div style='display:flex; justify-content:space-between; background:#000; padding:8px; border-radius:6px; margin-top:5px; border:1px solid #222;'><span>Over @ <b style='color:#f59e0b'>2.17</b> <small>(ONEXBET)</small></span><span style='color:#fff'>₹710</span></div><div style='display:flex; justify-content:space-between; background:#000; padding:8px; border-radius:6px; margin-top:5px; border:1px solid #222;'><span>Under @ <b style='color:#f59e0b'>1.95</b> <small>(PINNACLE)</small></span><span style='color:#fff'>₹790</span></div>
-            <div style='text-align:right; font-weight:bold; color:#10b981; margin-top:12px; font-size:18px;'>Profit: ₹41</div>
-        </div>
-        <div class='card' style='border-left: 4px solid #f59e0b;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#f59e0b; color:#000;'>2.56% ARB</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 UPCOMING</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Louisiana Tech Bulldogs vs Missouri St Bears")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Louisiana Tech Bulldogs vs Missouri St Bears</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 13 Mar | 10:06 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ LIVE NOW</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='display:flex; justify-content:space-between; background:#000; padding:8px; border-radius:6px; margin-top:5px; border:1px solid #222;'><span>Louisiana Tech Bulldogs @ <b style='color:#f59e0b'>2.8</b> <small>(UNIBET)</small></span><span style='color:#fff'>₹550</span></div><div style='display:flex; justify-content:space-between; background:#000; padding:8px; border-radius:6px; margin-top:5px; border:1px solid #222;'><span>Missouri St Bears @ <b style='color:#f59e0b'>1.62</b> <small>(BETWAY)</small></span><span style='color:#fff'>₹950</span></div>
-            <div style='text-align:right; font-weight:bold; color:#10b981; margin-top:12px; font-size:18px;'>Profit: ₹39</div>
-        </div>
-        <div class='card' style='border-left: 4px solid #f59e0b;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#f59e0b; color:#000;'>1.27% ARB</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER UEFA CHAMPS LEAGUE</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Tottenham Hotspur vs Atlético Madrid")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Tottenham Hotspur vs Atlético Madrid</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 19 Mar | 01:30 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 122h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>TOTALS 2.5</b> (2-Way)</div>
-            <div style='display:flex; justify-content:space-between; background:#000; padding:8px; border-radius:6px; margin-top:5px; border:1px solid #222;'><span>Over @ <b style='color:#f59e0b'>1.81</b> <small>(ONEXBET)</small></span><span style='color:#fff'>₹840</span></div><div style='display:flex; justify-content:space-between; background:#000; padding:8px; border-radius:6px; margin-top:5px; border:1px solid #222;'><span>Under @ <b style='color:#f59e0b'>2.3</b> <small>(UNIBET)</small></span><span style='color:#fff'>₹660</span></div>
-            <div style='text-align:right; font-weight:bold; color:#10b981; margin-top:12px; font-size:18px;'>Profit: ₹19</div>
-        </div>
-        <div class='card' style='border-left: 4px solid #f59e0b;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#f59e0b; color:#000;'>0.82% ARB</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 ICEHOCKEY NHL</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Minnesota Wild vs New York Rangers")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Minnesota Wild vs New York Rangers</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 15 Mar | 03:30 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 28h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='display:flex; justify-content:space-between; background:#000; padding:8px; border-radius:6px; margin-top:5px; border:1px solid #222;'><span>Minnesota Wild @ <b style='color:#f59e0b'>1.83</b> <small>(ONEXBET)</small></span><span style='color:#fff'>₹830</span></div><div style='display:flex; justify-content:space-between; background:#000; padding:8px; border-radius:6px; margin-top:5px; border:1px solid #222;'><span>New York Rangers @ <b style='color:#f59e0b'>4.3</b> <small>(UNIBET)</small></span><span style='color:#fff'>₹350</span></div><div style='display:flex; justify-content:space-between; background:#000; padding:8px; border-radius:6px; margin-top:5px; border:1px solid #222;'><span>Draw @ <b style='color:#f59e0b'>4.7</b> <small>(UNIBET)</small></span><span style='color:#fff'>₹320</span></div>
-            <div style='text-align:right; font-weight:bold; color:#10b981; margin-top:12px; font-size:18px;'>Profit: ₹12</div>
-        </div>
-        <div class='card' style='border-left: 4px solid #f59e0b;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#f59e0b; color:#000;'>0.51% ARB</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER UEFA CHAMPS LEAGUE</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Barcelona vs Newcastle United")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Barcelona vs Newcastle United</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 18 Mar | 11:15 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 120h 39m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>TOTALS 3.5</b> (2-Way)</div>
-            <div style='display:flex; justify-content:space-between; background:#000; padding:8px; border-radius:6px; margin-top:5px; border:1px solid #222;'><span>Over @ <b style='color:#f59e0b'>2.16</b> <small>(UNIBET)</small></span><span style='color:#fff'>₹700</span></div><div style='display:flex; justify-content:space-between; background:#000; padding:8px; border-radius:6px; margin-top:5px; border:1px solid #222;'><span>Under @ <b style='color:#f59e0b'>1.88</b> <small>(ONEXBET)</small></span><span style='color:#fff'>₹800</span></div>
-            <div style='text-align:right; font-weight:bold; color:#10b981; margin-top:12px; font-size:18px;'>Profit: ₹8</div>
-        </div></div>
-            <div id='p1' class='pane'>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>349.28% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 UPCOMING</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Tappara vs Lukko")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Tappara vs Lukko</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 13 Mar | 10:00 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ LIVE NOW</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>LUKKO</b> @ 31.0 <span style='float:right; color:#06b6d4;'>BETWAY</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹50</b></span><span style='color:#444;'>True: 6.900</span></div>
             
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>132.71% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 UPCOMING</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Ässät vs TPS")'>COPY</button>
+            <div style='background:rgba(245, 158, 11, 0.1); padding:15px; border-radius:12px; border:1px solid rgba(245, 158, 11, 0.3); margin-bottom:15px;'>
+                <h4 style='margin:0 0 5px 0; color:#f59e0b; font-size:12px;'>🤖 GEMINI AI MARKET REPORT</h4>
+                <p style='margin:0; font-size:13px; color:#ddd; line-height:1.4;'>AI Module Offline: Market data still processing normally.</p>
             </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Ässät vs TPS</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 13 Mar | 10:00 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ LIVE NOW</span>
+
+            <div style='background:#18181b; padding:15px; border-radius:12px; border:1px solid #27272a; margin-bottom:15px;'>
+                <label style='font-size:11px; color:#a1a1aa; font-weight:bold; display:block; margin-bottom:8px;'>MASTER BANKROLL (₹)</label>
+                <input type='number' id='userBankroll' class='input-box' value='5000' style='margin-bottom:0;' oninput='saveBankroll()'>
             </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>TPS</b> @ 5.0 <span style='float:right; color:#06b6d4;'>BETWAY</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹80</b></span><span style='color:#444;'>True: 2.149</span></div>
+
+            <div style='display:flex; gap:5px; margin-bottom:20px; position:sticky; top:0; z-index:10; background:#09090b; padding-bottom:10px;'>
+                <div class='tab active' onclick='sw(0)'>ARBS (4)</div>
+                <div class='tab' onclick='sw(1)'>EV (38)</div>
+                <div class='tab' onclick='sw(2)'>CALC</div>
+                <div class='tab' onclick='sw(3)'>KEYS</div>
+            </div>
+
+            <div id='p0' class='pane active-pane'></div>
+            <div id='p1' class='pane'></div>
             
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>76.67% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 UPCOMING</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Pelicans vs HPK")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Pelicans vs HPK</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 13 Mar | 10:00 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ LIVE NOW</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>PELICANS</b> @ 5.25 <span style='float:right; color:#06b6d4;'>BETWAY</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹80</b></span><span style='color:#444;'>True: 2.972</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>51.21% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 UPCOMING</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("JYP vs Ilves")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>JYP vs Ilves</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 13 Mar | 10:00 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ LIVE NOW</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>JYP</b> @ 6.0 <span style='float:right; color:#06b6d4;'>BETWAY</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹50</b></span><span style='color:#444;'>True: 3.968</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>34.36% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 ICEHOCKEY NHL</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("New York Islanders vs Los Angeles Kings")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>New York Islanders vs Los Angeles Kings</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 14 Mar | 04:40 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 6h 4m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>LOS ANGELES KINGS</b> @ 2.95 <span style='float:right; color:#06b6d4;'>UNIBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹80</b></span><span style='color:#444;'>True: 2.196</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>29.55% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 ICEHOCKEY NHL</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("St Louis Blues vs Edmonton Oilers")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>St Louis Blues vs Edmonton Oilers</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 14 Mar | 05:40 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 7h 4m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>ST LOUIS BLUES</b> @ 3.1 <span style='float:right; color:#06b6d4;'>UNIBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹60</b></span><span style='color:#444;'>True: 2.393</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>27.88% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 UPCOMING</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("HIFK vs Kärpät")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>HIFK vs Kärpät</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 13 Mar | 11:00 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 0h 24m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>KÄRPÄT</b> @ 3.9 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹40</b></span><span style='color:#444;'>True: 3.050</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>27.36% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER ITALY SERIE A</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Como vs Pisa")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Como vs Pisa</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 22 Mar | 05:00 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 210h 24m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>PISA</b> @ 13.0 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 10.207</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>25.57% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER UEFA CHAMPS LEAGUE</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Bayern Munich vs Atalanta BC")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Bayern Munich vs Atalanta BC</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 19 Mar | 01:30 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 122h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>ATALANTA BC</b> @ 9.75 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 7.764</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>24.70% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 ICEHOCKEY NHL</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("New York Islanders vs Los Angeles Kings")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>New York Islanders vs Los Angeles Kings</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 14 Mar | 04:40 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 6h 4m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>NEW YORK ISLANDERS</b> @ 2.29 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹80</b></span><span style='color:#444;'>True: 1.836</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>21.66% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 ICEHOCKEY NHL</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("St Louis Blues vs Edmonton Oilers")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>St Louis Blues vs Edmonton Oilers</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 14 Mar | 05:40 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 7h 4m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>EDMONTON OILERS</b> @ 2.09 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹80</b></span><span style='color:#444;'>True: 1.718</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>18.98% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 BASKETBALL NBA</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Portland Trail Blazers vs Utah Jazz")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Portland Trail Blazers vs Utah Jazz</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 14 Mar | 07:40 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 9h 4m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>UTAH JAZZ</b> @ 10.2 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 8.573</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>16.96% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 BASKETBALL NBA</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Indiana Pacers vs New York Knicks")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Indiana Pacers vs New York Knicks</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 14 Mar | 05:10 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 6h 34m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>INDIANA PACERS</b> @ 7.5 <span style='float:right; color:#06b6d4;'>UNIBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 6.412</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>15.73% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER ITALY SERIE A</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Juventus vs Sassuolo")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Juventus vs Sassuolo</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 22 Mar | 01:15 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 194h 39m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>SASSUOLO</b> @ 10.5 <span style='float:right; color:#06b6d4;'>UNIBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 9.073</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>14.93% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 UPCOMING</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("HIFK vs Kärpät")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>HIFK vs Kärpät</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 13 Mar | 11:00 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 0h 24m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>HIFK</b> @ 1.71 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹80</b></span><span style='color:#444;'>True: 1.488</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>13.51% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER ITALY SERIE A</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Atalanta BC vs Hellas Verona")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Atalanta BC vs Hellas Verona</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 22 Mar | 07:30 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 212h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>HELLAS VERONA</b> @ 9.5 <span style='float:right; color:#06b6d4;'>UNIBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 8.370</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>12.34% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER SPAIN LA LIGA</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Real Madrid vs Atlético Madrid")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Real Madrid vs Atlético Madrid</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 23 Mar | 01:30 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 218h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>ATLÉTICO MADRID</b> @ 4.01 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 3.569</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>11.78% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER UEFA CHAMPS LEAGUE</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Liverpool vs Galatasaray")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Liverpool vs Galatasaray</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 19 Mar | 01:30 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 122h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>GALATASARAY</b> @ 11.0 <span style='float:right; color:#06b6d4;'>UNIBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 9.840</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>10.00% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 UPCOMING</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Louisiana Tech Bulldogs vs Missouri St Bears")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Louisiana Tech Bulldogs vs Missouri St Bears</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 13 Mar | 10:06 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ LIVE NOW</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>LOUISIANA TECH BULLDOGS</b> @ 2.8 <span style='float:right; color:#06b6d4;'>UNIBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 2.545</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>9.96% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER SPAIN LA LIGA</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Barcelona vs Rayo Vallecano")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Barcelona vs Rayo Vallecano</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 22 Mar | 06:30 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 211h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>RAYO VALLECANO</b> @ 11.9 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 10.822</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>9.53% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER ITALY SERIE A</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("AS Roma vs Lecce")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>AS Roma vs Lecce</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 22 Mar | 10:30 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 215h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>LECCE</b> @ 10.1 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 9.221</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>9.40% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER SPAIN LA LIGA</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Real Madrid vs Elche CF")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Real Madrid vs Elche CF</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 15 Mar | 01:30 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 26h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>ELCHE CF</b> @ 9.5 <span style='float:right; color:#06b6d4;'>UNIBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 8.684</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>9.06% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 ICEHOCKEY NHL</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("St Louis Blues vs Edmonton Oilers")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>St Louis Blues vs Edmonton Oilers</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 14 Mar | 05:40 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 7h 4m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>TOTALS 6.5</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>OVER</b> @ 2.17 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹30</b></span><span style='color:#444;'>True: 1.990</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>9.06% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER EPL</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Liverpool vs Tottenham Hotspur")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Liverpool vs Tottenham Hotspur</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 15 Mar | 10:00 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 47h 24m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>TOTTENHAM HOTSPUR</b> @ 9.85 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 9.032</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>8.70% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#ef4444; font-weight:bold;'>● VOLATILE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER ITALY SERIE A</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Fiorentina vs Inter Milan")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Fiorentina vs Inter Milan</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 23 Mar | 01:15 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 218h 39m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>FIORENTINA</b> @ 5.27 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 4.848</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>7.98% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER UEFA CHAMPS LEAGUE</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Manchester City vs Real Madrid")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Manchester City vs Real Madrid</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 18 Mar | 01:30 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 98h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>REAL MADRID</b> @ 5.5 <span style='float:right; color:#06b6d4;'>UNIBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 5.093</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>7.71% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 UPCOMING</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("JYP vs Ilves")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>JYP vs Ilves</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 13 Mar | 10:00 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ LIVE NOW</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>ILVES</b> @ 1.44 <span style='float:right; color:#06b6d4;'>BETWAY</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹80</b></span><span style='color:#444;'>True: 1.337</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>5.96% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER ITALY SERIE A</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Parma vs Cremonese")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Parma vs Cremonese</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 21 Mar | 07:30 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 188h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>DRAW</b> @ 3.15 <span style='float:right; color:#06b6d4;'>UNIBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 2.973</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>5.77% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER EPL</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Fulham vs Burnley")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Fulham vs Burnley</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 21 Mar | 08:30 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 189h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>BURNLEY</b> @ 6.7 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 6.334</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>5.47% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER UEFA CHAMPS LEAGUE</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Sporting Lisbon vs Bodø/Glimt")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Sporting Lisbon vs Bodø/Glimt</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 17 Mar | 11:15 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 96h 39m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>BODØ/GLIMT</b> @ 5.17 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 4.902</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>5.41% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 BASKETBALL NBA</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Dallas Mavericks vs Cleveland Cavaliers")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Dallas Mavericks vs Cleveland Cavaliers</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 14 Mar | 05:10 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 6h 34m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>DALLAS MAVERICKS</b> @ 7.12 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 6.754</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>4.01% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER SPAIN LA LIGA</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("CA Osasuna vs Girona")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>CA Osasuna vs Girona</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 21 Mar | 11:00 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 192h 24m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>GIRONA</b> @ 3.4 <span style='float:right; color:#06b6d4;'>UNIBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 3.269</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>3.85% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER ITALY SERIE A</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("AC Milan vs Torino")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>AC Milan vs Torino</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 21 Mar | 10:30 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 191h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>TORINO</b> @ 9.1 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 8.763</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>3.50% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 UPCOMING</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Pelicans vs HPK")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Pelicans vs HPK</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 13 Mar | 10:00 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ LIVE NOW</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>HPK</b> @ 1.56 <span style='float:right; color:#06b6d4;'>BETWAY</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹30</b></span><span style='color:#444;'>True: 1.507</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>3.10% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 BASKETBALL NBA</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Detroit Pistons vs Memphis Grizzlies")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Detroit Pistons vs Memphis Grizzlies</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 14 Mar | 05:10 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 6h 34m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>MEMPHIS GRIZZLIES</b> @ 10.3 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 9.991</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>2.59% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER UEFA CHAMPS LEAGUE</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Barcelona vs Newcastle United")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Barcelona vs Newcastle United</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 18 Mar | 11:15 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 120h 39m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>NEWCASTLE UNITED</b> @ 5.3 <span style='float:right; color:#06b6d4;'>UNIBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 5.166</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>2.38% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER UEFA CHAMPS LEAGUE</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Barcelona vs Newcastle United")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Barcelona vs Newcastle United</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 18 Mar | 11:15 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 120h 39m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>TOTALS 3.5</b> (2-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>OVER</b> @ 2.16 <span style='float:right; color:#06b6d4;'>UNIBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 2.110</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>2.26% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER SPAIN LA LIGA</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Elche CF vs Mallorca")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Elche CF vs Mallorca</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 21 Mar | 06:30 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 187h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>MALLORCA</b> @ 3.9 <span style='float:right; color:#06b6d4;'>UNIBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 3.814</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>1.82% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER EPL</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Bournemouth vs Manchester United")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Bournemouth vs Manchester United</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 21 Mar | 01:30 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 170h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>BOURNEMOUTH</b> @ 3.1 <span style='float:right; color:#06b6d4;'>UNIBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 3.045</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>1.76% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER UEFA CHAMPS LEAGUE</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Arsenal vs Bayer Leverkusen")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Arsenal vs Bayer Leverkusen</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 18 Mar | 01:30 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 98h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>BAYER LEVERKUSEN</b> @ 10.5 <span style='float:right; color:#06b6d4;'>UNIBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 10.319</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>1.64% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER EPL</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Chelsea vs Newcastle United")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Chelsea vs Newcastle United</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 14 Mar | 11:00 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 24h 24m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>NEWCASTLE UNITED</b> @ 4.1 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 4.034</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>1.43% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER EPL</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Bournemouth vs Manchester United")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Bournemouth vs Manchester United</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 21 Mar | 01:30 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 170h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>DRAW</b> @ 3.94 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 3.885</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>1.21% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER EPL</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Aston Villa vs West Ham United")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Aston Villa vs West Ham United</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 22 Mar | 07:45 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 213h 9m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>DRAW</b> @ 3.95 <span style='float:right; color:#06b6d4;'>UNIBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 3.903</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>1.15% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER SPAIN LA LIGA</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Girona vs Athletic Bilbao")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Girona vs Athletic Bilbao</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 14 Mar | 06:30 PM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 19h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>DRAW</b> @ 3.46 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 3.421</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>1.10% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER UEFA CHAMPS LEAGUE</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Bayern Munich vs Atalanta BC")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Bayern Munich vs Atalanta BC</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 19 Mar | 01:30 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 122h 54m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>DRAW</b> @ 6.4 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 6.330</span></div>
-            
-        </div>
-        <div class='card' style='border-left: 4px solid #06b6d4;'>
-            <div style='display:flex; justify-content:space-between; align-items:start;'>
-                <div>
-                    <span class='badge' style='background:#06b6d4; color:#000;'>1.05% EV</span>
-                    <span style='font-size:9px; margin-left:5px; color:#10b981; font-weight:bold;'>● STABLE MKT</span>
-                    <div style='font-size:10px; color:#a1a1aa; margin-top:5px;'>🏆 SOCCER ITALY SERIE A</div>
-                </div>
-                <button class='copy-btn' onclick='navigator.clipboard.writeText("Lazio vs AC Milan")'>COPY</button>
-            </div>
-            <div style='font-size:17px; font-weight:bold; margin: 12px 0;'>Lazio vs AC Milan</div>
-            <div style='display:flex; gap:10px; font-size:11px; margin-bottom:8px;'>
-                <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 16 Mar | 01:15 AM</span>
-                <span style='background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px;'>⏳ 50h 39m</span>
-            </div>
-            <div style='font-size:11px; margin-bottom:10px; color:#10b981; font-weight:bold;'>🛡️ STEALTH: ROUNDED STAKE</div>
-            <div style='font-size:13px; color:#eee;'>Line: <b>H2H</b> (3-Way)</div>
-            <div style='background:#000; padding:10px; border-radius:6px; margin-top:10px;'>Bet <b>AC MILAN</b> @ 2.05 <span style='float:right; color:#06b6d4;'>ONEXBET</span></div><div style='display:flex; justify-content:space-between; margin-top:8px; font-size:11px;'><span>Stake: <b>₹20</b></span><span style='color:#444;'>True: 2.029</span></div>
-            
-        </div></div>
             <div id='p2' class='pane'>
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #1 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>c5c5••••••••••••e127</div>
+                <div class='card'>
+                    <h3 style='margin-top:0; color:#06b6d4;'>Smart Calculator</h3>
+                    <input type='number' id='calcBank' class='input-box' placeholder='Investment Amount' oninput='runCalc()'>
+                    <input type='number' id='odd1' class='input-box' placeholder='Odd 1' oninput='runCalc()'>
+                    <input type='number' id='odd2' class='input-box' placeholder='Odd 2' oninput='runCalc()'>
+                    <div id='calcResult' style='margin-top:5px; padding:15px; background:#000; border-radius:8px; border:1px solid #222;'>Awaiting Input...</div>
+                </div>
             </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>203</div>
-            </div>
+
+            <div id='p3' class='pane'><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #1</div><div style='font-family:monospace; color:#fff;'>c5c5••••e127</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>203</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #2</div><div style='font-family:monospace; color:#fff;'>4130••••e50b</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>117</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #3</div><div style='font-family:monospace; color:#fff;'>dd73••••db34</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>319</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #4</div><div style='font-family:monospace; color:#fff;'>5df6••••6bdf</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>376</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #5</div><div style='font-family:monospace; color:#fff;'>0c68••••e8a2</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #6</div><div style='font-family:monospace; color:#fff;'>2c49••••f3b0</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #7</div><div style='font-family:monospace; color:#fff;'>0a51••••fc96</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>368</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #8</div><div style='font-family:monospace; color:#fff;'>087f••••f22e</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>445</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #9</div><div style='font-family:monospace; color:#fff;'>1727••••81db</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>407</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #10</div><div style='font-family:monospace; color:#fff;'>baa5••••474c</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>474</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #11</div><div style='font-family:monospace; color:#fff;'>a58d••••75ce</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>466</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #12</div><div style='font-family:monospace; color:#fff;'>7513••••a79e</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>456</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #13</div><div style='font-family:monospace; color:#fff;'>b148••••95d4</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>316</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #14</div><div style='font-family:monospace; color:#fff;'>f633••••fc2c</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>452</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #15</div><div style='font-family:monospace; color:#fff;'>4ed1••••93cf</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>465</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #16</div><div style='font-family:monospace; color:#fff;'>d29c••••ac67</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>430</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #17</div><div style='font-family:monospace; color:#fff;'>97f5••••0b1d</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>431</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #18</div><div style='font-family:monospace; color:#fff;'>26f8••••9f6e</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>401</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #06b6d4; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #19</div><div style='font-family:monospace; color:#fff;'>2596••••e1c4</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>430</div></div></div></div>
         </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #2 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>4130••••••••••••e50b</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>117</div>
-            </div>
-        </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #3 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>dd73••••••••••••db34</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>319</div>
-            </div>
-        </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #4 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>5df6••••••••••••6bdf</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>376</div>
-            </div>
-        </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #5 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>0c68••••••••••••e8a2</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>??</div>
-            </div>
-        </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #6 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>2c49••••••••••••f3b0</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>??</div>
-            </div>
-        </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #7 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>0a51••••••••••••fc96</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>368</div>
-            </div>
-        </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #8 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>087f••••••••••••f22e</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>445</div>
-            </div>
-        </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #9 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>1727••••••••••••81db</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>407</div>
-            </div>
-        </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #10 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>baa5••••••••••••474c</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>474</div>
-            </div>
-        </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #11 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>a58d••••••••••••75ce</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>466</div>
-            </div>
-        </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #12 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>7513••••••••••••a79e</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>456</div>
-            </div>
-        </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #13 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>b148••••••••••••95d4</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>316</div>
-            </div>
-        </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #14 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>f633••••••••••••fc2c</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>452</div>
-            </div>
-        </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #15 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>4ed1••••••••••••93cf</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>465</div>
-            </div>
-        </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #16 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>d29c••••••••••••ac67</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>430</div>
-            </div>
-        </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #17 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>97f5••••••••••••0b1d</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>431</div>
-            </div>
-        </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #06b6d4; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #18 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#06b6d4; border:1px solid #06b6d4;'>ACTIVE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>26f8••••••••••••9f6e</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#06b6d4;'>427</div>
-            </div>
-        </div>
-        
-        <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
-            <div>
-                <div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #19 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div>
-                <div style='font-family:monospace; font-size:16px; color:#fff;'>2596••••••••••••e1c4</div>
-            </div>
-            <div style='text-align:right;'>
-                <div style='font-size:10px; color:#a1a1aa;'>REMAINING CALLS</div>
-                <div style='font-size:22px; font-weight:bold; color:#3f3f46;'>??</div>
-            </div>
-        </div>
-        </div>
-        </div>
+
         <script>
-            // The secret pass is injected directly into the JS variable
-            const currentSecret = 'ARB2026';
-            
+            const EXPECTED_HASH = '2986aa2732ab10167c3c738108433d437ccfa4d8f7fc99f24aad4d0214ef5bf7';
+            const rawArbs = [{"match": "St Louis Blues vs Edmonton Oilers", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T00:10:00Z", "time": "14 Mar | 05:40 AM", "pct": 2.6349994091929507, "line": "TOTALS 6.5", "ways": 2, "margin": 0.9736500059080705, "sides": [{"sel": "Over", "pr": 2.17, "bk": "onexbet"}, {"sel": "Under", "pr": 1.95, "bk": "pinnacle"}]}, {"match": "Tottenham Hotspur vs Atl\u00e9tico Madrid", "sport": "SOCCER UEFA CHAMPS LEAGUE", "raw_time": "2026-03-18T20:00:00Z", "time": "19 Mar | 01:30 AM", "pct": 1.2731203459043883, "line": "TOTALS 2.5", "ways": 2, "margin": 0.9872687965409561, "sides": [{"sel": "Over", "pr": 1.81, "bk": "onexbet"}, {"sel": "Under", "pr": 2.3, "bk": "unibet"}]}, {"match": "Minnesota Wild vs New York Rangers", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T22:00:00Z", "time": "15 Mar | 03:30 AM", "pct": 0.8227815586613896, "line": "H2H", "ways": 3, "margin": 0.9917721844133861, "sides": [{"sel": "Minnesota Wild", "pr": 1.83, "bk": "onexbet"}, {"sel": "New York Rangers", "pr": 4.3, "bk": "unibet"}, {"sel": "Draw", "pr": 4.7, "bk": "unibet"}]}, {"match": "Barcelona vs Newcastle United", "sport": "SOCCER UEFA CHAMPS LEAGUE", "raw_time": "2026-03-18T17:45:00Z", "time": "18 Mar | 11:15 PM", "pct": 0.5122143420015823, "line": "TOTALS 3.5", "ways": 2, "margin": 0.9948778565799842, "sides": [{"sel": "Over", "pr": 2.16, "bk": "unibet"}, {"sel": "Under", "pr": 1.88, "bk": "onexbet"}]}];
+            const rawEvs = [{"match": "New York Islanders vs Los Angeles Kings", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-13T23:10:00Z", "time": "14 Mar | 04:40 AM", "pct": 34.02284263959392, "line": "H2H", "ways": 2, "sel": "Los Angeles Kings", "odds": 2.95, "trueO": 2.201117318435754, "bk": "unibet"}, {"match": "St Louis Blues vs Edmonton Oilers", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T00:10:00Z", "time": "14 Mar | 05:40 AM", "pct": 29.552238805970156, "line": "H2H", "ways": 2, "sel": "St Louis Blues", "odds": 3.1, "trueO": 2.392857142857143, "bk": "unibet"}, {"match": "Como vs Pisa", "sport": "SOCCER ITALY SERIE A", "raw_time": "2026-03-22T11:30:00Z", "time": "22 Mar | 05:00 PM", "pct": 27.36066291533559, "line": "H2H", "ways": 3, "sel": "Pisa", "odds": 13.0, "trueO": 10.20723330298767, "bk": "onexbet"}, {"match": "Bayern Munich vs Atalanta BC", "sport": "SOCCER UEFA CHAMPS LEAGUE", "raw_time": "2026-03-18T20:00:00Z", "time": "19 Mar | 01:30 AM", "pct": 25.573308886124014, "line": "H2H", "ways": 3, "sel": "Atalanta BC", "odds": 9.75, "trueO": 7.764388854992883, "bk": "onexbet"}, {"match": "New York Islanders vs Los Angeles Kings", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-13T23:10:00Z", "time": "14 Mar | 04:40 AM", "pct": 23.8705583756345, "line": "H2H", "ways": 2, "sel": "New York Islanders", "odds": 2.27, "trueO": 1.832558139534884, "bk": "onexbet"}, {"match": "St Louis Blues vs Edmonton Oilers", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T00:10:00Z", "time": "14 Mar | 05:40 AM", "pct": 21.65671641791045, "line": "H2H", "ways": 2, "sel": "Edmonton Oilers", "odds": 2.09, "trueO": 1.7179487179487178, "bk": "onexbet"}, {"match": "Portland Trail Blazers vs Utah Jazz", "sport": "BASKETBALL NBA", "raw_time": "2026-03-14T02:10:00Z", "time": "14 Mar | 07:40 AM", "pct": 20.361197110423078, "line": "H2H", "ways": 2, "sel": "Utah Jazz", "odds": 10.7, "trueO": 8.889908256880735, "bk": "onexbet"}, {"match": "Juventus vs Sassuolo", "sport": "SOCCER ITALY SERIE A", "raw_time": "2026-03-21T19:45:00Z", "time": "22 Mar | 01:15 AM", "pct": 15.73275341696192, "line": "H2H", "ways": 3, "sel": "Sassuolo", "odds": 10.5, "trueO": 9.072626106259309, "bk": "unibet"}, {"match": "Atalanta BC vs Hellas Verona", "sport": "SOCCER ITALY SERIE A", "raw_time": "2026-03-22T14:00:00Z", "time": "22 Mar | 07:30 PM", "pct": 13.506493506493511, "line": "H2H", "ways": 3, "sel": "Hellas Verona", "odds": 9.5, "trueO": 8.369565217391305, "bk": "unibet"}, {"match": "Real Madrid vs Atl\u00e9tico Madrid", "sport": "SOCCER SPAIN LA LIGA", "raw_time": "2026-03-22T20:00:00Z", "time": "23 Mar | 01:30 AM", "pct": 12.062825694205115, "line": "H2H", "ways": 3, "sel": "Atl\u00e9tico Madrid", "odds": 4.0, "trueO": 3.569426324225594, "bk": "onexbet"}, {"match": "Liverpool vs Galatasaray", "sport": "SOCCER UEFA CHAMPS LEAGUE", "raw_time": "2026-03-18T20:00:00Z", "time": "19 Mar | 01:30 AM", "pct": 11.784645595661125, "line": "H2H", "ways": 3, "sel": "Galatasaray", "odds": 11.0, "trueO": 9.840349666436623, "bk": "unibet"}, {"match": "Barcelona vs Rayo Vallecano", "sport": "SOCCER SPAIN LA LIGA", "raw_time": "2026-03-22T13:00:00Z", "time": "22 Mar | 06:30 PM", "pct": 9.961456493148546, "line": "H2H", "ways": 3, "sel": "Rayo Vallecano", "odds": 11.9, "trueO": 10.821973789280849, "bk": "onexbet"}, {"match": "AS Roma vs Lecce", "sport": "SOCCER ITALY SERIE A", "raw_time": "2026-03-22T17:00:00Z", "time": "22 Mar | 10:30 PM", "pct": 9.533855683201864, "line": "H2H", "ways": 3, "sel": "Lecce", "odds": 10.1, "trueO": 9.220893336587746, "bk": "onexbet"}, {"match": "St Louis Blues vs Edmonton Oilers", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T00:10:00Z", "time": "14 Mar | 05:40 AM", "pct": 9.059278350515477, "line": "TOTALS 6.5", "ways": 2, "sel": "Over", "odds": 2.17, "trueO": 1.9897435897435893, "bk": "onexbet"}, {"match": "Fiorentina vs Inter Milan", "sport": "SOCCER ITALY SERIE A", "raw_time": "2026-03-22T19:45:00Z", "time": "23 Mar | 01:15 AM", "pct": 8.696376090460966, "line": "H2H", "ways": 3, "sel": "Fiorentina", "odds": 5.27, "trueO": 4.848367709714737, "bk": "onexbet"}, {"match": "Liverpool vs Tottenham Hotspur", "sport": "SOCCER EPL", "raw_time": "2026-03-15T16:30:00Z", "time": "15 Mar | 10:00 PM", "pct": 8.473109015590552, "line": "H2H", "ways": 3, "sel": "Tottenham Hotspur", "odds": 9.85, "trueO": 9.080591576465542, "bk": "onexbet"}, {"match": "Manchester City vs Real Madrid", "sport": "SOCCER UEFA CHAMPS LEAGUE", "raw_time": "2026-03-17T20:00:00Z", "time": "18 Mar | 01:30 AM", "pct": 7.982658880485771, "line": "H2H", "ways": 3, "sel": "Real Madrid", "odds": 5.5, "trueO": 5.093410420730009, "bk": "unibet"}, {"match": "Parma vs Cremonese", "sport": "SOCCER ITALY SERIE A", "raw_time": "2026-03-21T14:00:00Z", "time": "21 Mar | 07:30 PM", "pct": 5.957445650003823, "line": "H2H", "ways": 3, "sel": "Draw", "odds": 3.15, "trueO": 2.972891598769762, "bk": "unibet"}, {"match": "Indiana Pacers vs New York Knicks", "sport": "BASKETBALL NBA", "raw_time": "2026-03-13T23:40:00Z", "time": "14 Mar | 05:10 AM", "pct": 5.805243445692865, "line": "H2H", "ways": 2, "sel": "Indiana Pacers", "odds": 7.5, "trueO": 7.0884955752212395, "bk": "unibet"}, {"match": "Fulham vs Burnley", "sport": "SOCCER EPL", "raw_time": "2026-03-21T15:00:00Z", "time": "21 Mar | 08:30 PM", "pct": 5.771953794559681, "line": "H2H", "ways": 3, "sel": "Burnley", "odds": 6.7, "trueO": 6.334382376081825, "bk": "onexbet"}, {"match": "Sporting Lisbon vs Bod\u00f8/Glimt", "sport": "SOCCER UEFA CHAMPS LEAGUE", "raw_time": "2026-03-17T17:45:00Z", "time": "17 Mar | 11:15 PM", "pct": 5.473191964942203, "line": "H2H", "ways": 3, "sel": "Bod\u00f8/Glimt", "odds": 5.17, "trueO": 4.901719483106603, "bk": "onexbet"}, {"match": "Dallas Mavericks vs Cleveland Cavaliers", "sport": "BASKETBALL NBA", "raw_time": "2026-03-13T23:40:00Z", "time": "14 Mar | 05:10 AM", "pct": 5.457354758961652, "line": "H2H", "ways": 2, "sel": "Dallas Mavericks", "odds": 7.55, "trueO": 7.159292035398233, "bk": "onexbet"}, {"match": "Barcelona vs Newcastle United", "sport": "SOCCER UEFA CHAMPS LEAGUE", "raw_time": "2026-03-18T17:45:00Z", "time": "18 Mar | 11:15 PM", "pct": 5.407664891978703, "line": "H2H", "ways": 3, "sel": "Newcastle United", "odds": 5.3, "trueO": 5.0280973451327435, "bk": "unibet"}, {"match": "Detroit Pistons vs Memphis Grizzlies", "sport": "BASKETBALL NBA", "raw_time": "2026-03-13T23:40:00Z", "time": "14 Mar | 05:10 AM", "pct": 5.160662122687465, "line": "H2H", "ways": 2, "sel": "Memphis Grizzlies", "odds": 10.0, "trueO": 9.509259259259258, "bk": "onexbet"}, {"match": "CA Osasuna vs Girona", "sport": "SOCCER SPAIN LA LIGA", "raw_time": "2026-03-21T17:30:00Z", "time": "21 Mar | 11:00 PM", "pct": 4.010905762527028, "line": "H2H", "ways": 3, "sel": "Girona", "odds": 3.4, "trueO": 3.268887983499274, "bk": "unibet"}, {"match": "AC Milan vs Torino", "sport": "SOCCER ITALY SERIE A", "raw_time": "2026-03-21T17:00:00Z", "time": "21 Mar | 10:30 PM", "pct": 3.850303744673167, "line": "H2H", "ways": 3, "sel": "Torino", "odds": 9.1, "trueO": 8.762612791555528, "bk": "onexbet"}, {"match": "Real Madrid vs Elche CF", "sport": "SOCCER SPAIN LA LIGA", "raw_time": "2026-03-14T20:00:00Z", "time": "15 Mar | 01:30 AM", "pct": 2.4076580932121505, "line": "H2H", "ways": 3, "sel": "Elche CF", "odds": 8.9, "trueO": 8.690756302521008, "bk": "onexbet"}, {"match": "Elche CF vs Mallorca", "sport": "SOCCER SPAIN LA LIGA", "raw_time": "2026-03-21T13:00:00Z", "time": "21 Mar | 06:30 PM", "pct": 2.261482776303403, "line": "H2H", "ways": 3, "sel": "Mallorca", "odds": 3.9, "trueO": 3.8137526408953355, "bk": "unibet"}, {"match": "Bournemouth vs Manchester United", "sport": "SOCCER EPL", "raw_time": "2026-03-20T20:00:00Z", "time": "21 Mar | 01:30 AM", "pct": 1.8178309532998815, "line": "H2H", "ways": 3, "sel": "Bournemouth", "odds": 3.1, "trueO": 3.0446533490011753, "bk": "unibet"}, {"match": "Chelsea vs Newcastle United", "sport": "SOCCER EPL", "raw_time": "2026-03-14T17:30:00Z", "time": "14 Mar | 11:00 PM", "pct": 1.7815428098413966, "line": "H2H", "ways": 3, "sel": "Newcastle United", "odds": 4.1, "trueO": 4.028235264285623, "bk": "onexbet"}, {"match": "Arsenal vs Bayer Leverkusen", "sport": "SOCCER UEFA CHAMPS LEAGUE", "raw_time": "2026-03-17T20:00:00Z", "time": "18 Mar | 01:30 AM", "pct": 1.7564305335886043, "line": "H2H", "ways": 3, "sel": "Bayer Leverkusen", "odds": 10.5, "trueO": 10.318758180628272, "bk": "unibet"}, {"match": "Bournemouth vs Manchester United", "sport": "SOCCER EPL", "raw_time": "2026-03-20T20:00:00Z", "time": "21 Mar | 01:30 AM", "pct": 1.4272481667309656, "line": "H2H", "ways": 3, "sel": "Draw", "odds": 3.94, "trueO": 3.8845577211394313, "bk": "onexbet"}, {"match": "Al-Riyadh vs Al-Ittihad", "sport": "UPCOMING", "raw_time": "2026-03-13T19:00:00Z", "time": "14 Mar | 12:30 AM", "pct": 1.3246442136451542, "line": "H2H", "ways": 3, "sel": "Al-Riyadh", "odds": 5.25, "trueO": 5.1813653437857266, "bk": "unibet"}, {"match": "Aston Villa vs West Ham United", "sport": "SOCCER EPL", "raw_time": "2026-03-22T14:15:00Z", "time": "22 Mar | 07:45 PM", "pct": 1.2146444018472202, "line": "H2H", "ways": 3, "sel": "Draw", "odds": 3.95, "trueO": 3.902597320124469, "bk": "unibet"}, {"match": "Barcelona vs Newcastle United", "sport": "SOCCER UEFA CHAMPS LEAGUE", "raw_time": "2026-03-18T17:45:00Z", "time": "18 Mar | 11:15 PM", "pct": 1.160733928807156, "line": "H2H", "ways": 3, "sel": "Draw", "odds": 4.83, "trueO": 4.774579831932773, "bk": "onexbet"}, {"match": "Girona vs Athletic Bilbao", "sport": "SOCCER SPAIN LA LIGA", "raw_time": "2026-03-14T13:00:00Z", "time": "14 Mar | 06:30 PM", "pct": 1.1495507185766751, "line": "H2H", "ways": 3, "sel": "Draw", "odds": 3.46, "trueO": 3.420677576340981, "bk": "onexbet"}, {"match": "Bayern Munich vs Atalanta BC", "sport": "SOCCER UEFA CHAMPS LEAGUE", "raw_time": "2026-03-18T20:00:00Z", "time": "19 Mar | 01:30 AM", "pct": 1.0982908781350442, "line": "H2H", "ways": 3, "sel": "Draw", "odds": 6.4, "trueO": 6.330472992579695, "bk": "onexbet"}, {"match": "Lazio vs AC Milan", "sport": "SOCCER ITALY SERIE A", "raw_time": "2026-03-15T19:45:00Z", "time": "16 Mar | 01:15 AM", "pct": 1.051390678440578, "line": "H2H", "ways": 3, "sel": "AC Milan", "odds": 2.05, "trueO": 2.0286707448919548, "bk": "onexbet"}];
+
+            if(localStorage.getItem('savedBankroll')) {
+                document.getElementById('userBankroll').value = localStorage.getItem('savedBankroll');
+                document.getElementById('calcBank').value = localStorage.getItem('savedBankroll');
+            }
+
+            function saveBankroll() {
+                const val = document.getElementById('userBankroll').value;
+                localStorage.setItem('savedBankroll', val);
+                document.getElementById('calcBank').value = val;
+                renderAll(); runCalc();
+            }
+
             function ck() { 
-                if(document.getElementById('ps').value === currentSecret) { 
+                if(CryptoJS.SHA256(document.getElementById('ps').value).toString() === EXPECTED_HASH) { 
                     document.getElementById('lock-screen').style.display='none'; 
                     document.getElementById('content').style.display='block'; 
-                    // Save the actual password string as the token
-                    localStorage.setItem('auth', currentSecret); 
-                } else {
-                    document.getElementById('err').innerText = 'Incorrect Password';
-                }
+                    localStorage.setItem('auth_hash', EXPECTED_HASH); 
+                    renderAll();
+                } else { document.getElementById('err').innerText = 'Access Denied: Invalid Code'; }
             }
             
-            // Check if their saved token matches the CURRENT secret
-            if(localStorage.getItem('auth') === currentSecret) { 
+            if(localStorage.getItem('auth_hash') === EXPECTED_HASH) { 
                 document.getElementById('lock-screen').style.display='none'; 
                 document.getElementById('content').style.display='block'; 
+                renderAll();
             }
-            
-            function sw(i) { document.querySelectorAll('.tab').forEach((t,j)=>j==i?t.classList.add('active'):t.classList.remove('active')); document.querySelectorAll('.pane').forEach((p,j)=>j==i?p.classList.add('active-pane') : p.classList.remove('active-pane')); }
+
+            function sw(i) { document.querySelectorAll('.tab').forEach((t,j)=>j==i?t.classList.add('active'):t.classList.remove('active')); document.querySelectorAll('.pane').forEach((p,j)=>j==i?p.classList.add('active-pane') : p.classList.remove('active-pane')); window.scrollTo(0,0); }
+
+            function formatTimeDiff(iso) {
+                let d = new Date(iso) - new Date();
+                if(d < 0) return "LIVE NOW";
+                return `${Math.floor(d/3600000)}h ${Math.floor((d%3600000)/60000)}m`;
+            }
+
+            setInterval(() => {
+                document.querySelectorAll('.live-clock').forEach(el => el.innerText = '⏳ ' + formatTimeDiff(el.dataset.iso));
+            }, 1000);
+
+            function renderAll() {
+                const bank = parseFloat(document.getElementById('userBankroll').value) || 0;
+                
+                let arbHTML = "";
+                rawArbs.forEach((a, i) => {
+                    let profit = (bank / a.margin) - bank;
+                    let stability = a.pct < 8 ? "<span style='color:#10b981'>● STABLE</span>" : "<span style='color:#ef4444'>● VOLATILE</span>";
+                    let legs = "";
+                    
+                    a.sides.forEach(s => {
+                        let rawStk = (bank / a.margin) / s.pr;
+                        let roundedStk = Math.round(rawStk / 10) * 10; 
+                        
+                        legs += `<div style='display:flex; justify-content:space-between; align-items:center; background:#000; padding:10px; border-radius:6px; margin-top:6px; border:1px solid #222;'>
+                            <span>${s.sel} @ <b style='color:#f59e0b'>${s.pr}</b> <small style='color:#aaa'>(${s.bk.toUpperCase()})</small></span>
+                            <div style='text-align:right;'>
+                                <div style='color:#fff; font-weight:bold; font-size:16px;'>₹${roundedStk}</div>
+                                <div style='color:#666; font-size:9px;'>Exact: ₹${rawStk.toFixed(2)}</div>
+                            </div>
+                        </div>`;
+                    });
+
+                    arbHTML += `<div class='card' style='border-left: 4px solid #f59e0b;'>
+                        <div style='display:flex; justify-content:space-between; align-items:center;'>
+                            <div><span class='badge' style='background:#f59e0b;'>${a.pct.toFixed(2)}% ARB</span> <span style='font-size:9px; margin-left:5px;'>${stability}</span></div>
+                            <button class='btn btn-calc' onclick='sendToCalc(${a.sides[0]?.pr || 0}, ${a.sides[1]?.pr || 0})'>🧮 CALC</button>
+                        </div>
+                        <div style='font-size:16px; font-weight:bold; margin: 10px 0;'>${a.match}</div>
+                        <div style='display:flex; gap:10px; font-size:11px; margin-bottom:10px;'>
+                            <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 ${a.time}</span>
+                            <span class='live-clock clock' data-iso='${a.raw_time}'></span>
+                        </div>
+                        <div style='font-size:12px; color:#aaa;'>${a.line} (${a.ways}-Way)</div>
+                        ${legs}
+                        <div style='text-align:right; font-weight:bold; color:#10b981; margin-top:12px; font-size:18px;'>Est. Profit: ₹${profit.toFixed(0)}</div>
+                    </div>`;
+                });
+                document.getElementById('p0').innerHTML = arbHTML || "<div style='padding:20px; color:#aaa;'>No Locks Found.</div>";
+
+                let evHTML = "";
+                rawEvs.slice(0,50).forEach((e, i) => {
+                    let b = e.odds - 1; let p = 1 / e.trueO;
+                    let kelly = ((b * p - (1-p)) / b) * 0.30;
+                    let rawStk = Math.min(Math.max(20, bank * Math.min(kelly, 0.05)), 1000);
+                    let roundedStk = Math.round(rawStk / 10) * 10;
+                    
+                    evHTML += `<div class='card' style='border-left: 4px solid #06b6d4;'>
+                        <div style='display:flex; justify-content:space-between; align-items:center;'><span class='badge' style='background:#06b6d4;'>${e.pct.toFixed(2)}% EV</span><span class='live-clock clock' data-iso='${e.raw_time}'></span></div>
+                        <div style='font-size:16px; font-weight:bold; margin: 10px 0;'>${e.match}</div>
+                        <div style='background:#000; padding:12px; border-radius:6px; border:1px solid #222;'>Bet <b>${e.sel.toUpperCase()}</b> @ <b style='color:#06b6d4;'>${e.odds}</b> <span style='float:right; color:#888;'>${e.bk.toUpperCase()}</span></div>
+                        <div style='display:flex; justify-content:space-between; align-items:center; margin-top:10px;'>
+                            <div><div style='color:#fff; font-weight:bold;'>Stake: ₹${roundedStk}</div><div style='color:#666; font-size:9px;'>Exact: ₹${rawStk.toFixed(2)}</div></div>
+                            <span style='color:#444; font-size:11px;'>True: ${e.trueO.toFixed(3)}</span>
+                        </div>
+                    </div>`;
+                });
+                document.getElementById('p1').innerHTML = evHTML || "<div style='padding:20px; color:#aaa;'>No Value Bets.</div>";
+            }
+
+            function sendToCalc(o1, o2) { sw(2); document.getElementById('odd1').value = o1; document.getElementById('odd2').value = o2; runCalc(); }
+
+            function runCalc() {
+                const b = parseFloat(document.getElementById('calcBank').value) || 0;
+                const o1 = parseFloat(document.getElementById('odd1').value) || 0;
+                const o2 = parseFloat(document.getElementById('odd2').value) || 0;
+                if(o1 > 0 && o2 > 0) {
+                    let invSum = (1/o1) + (1/o2);
+                    let pct = (1 - invSum) * 100;
+                    let stk1 = (b/invSum) / o1;
+                    let stk2 = (b/invSum) / o2;
+                    let prof = (b/invSum) - b;
+                    let color = prof > 0 ? '#10b981' : '#ef4444';
+                    
+                    document.getElementById('calcResult').innerHTML = `
+                        <div style='display:flex; justify-content:space-between; margin-bottom:8px; color:#ccc;'><span>Leg 1 Exact:</span><b style='color:#fff;'>₹${stk1.toFixed(2)}</b></div>
+                        <div style='display:flex; justify-content:space-between; margin-bottom:10px; color:#ccc;'><span>Leg 2 Exact:</span><b style='color:#fff;'>₹${stk2.toFixed(2)}</b></div>
+                        <hr style='border:none; border-top:1px solid #333; margin:15px 0;'>
+                        <div style='display:flex; justify-content:space-between; margin-bottom:8px; color:${color};'><span>Arbitrage %:</span><b style='font-size:16px;'>${pct.toFixed(2)}%</b></div>
+                        <div style='display:flex; justify-content:space-between; color:${color}; align-items:center;'><span>Profit:</span><b style='font-size:24px;'>₹${prof.toFixed(0)}</b></div>
+                    `;
+                }
+            }
         </script>
     </body></html>
