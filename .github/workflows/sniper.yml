@@ -26,7 +26,10 @@ jobs:
 
       - name: Execute Cloud Scan & Publish
         env:
+          # 🔐 Pulling all 3 Bank-Grade Secrets from GitHub
           ODDS_API_KEYS: ${{ secrets.ODDS_API_KEYS }}
+          DASHBOARD_PASS: ${{ secrets.DASHBOARD_PASS }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python arb_sniper.py
 
       - name: Save Data to GitHub
@@ -37,9 +40,11 @@ jobs:
           # Add files safely (ignores them if they don't exist yet)
           git add index.html api_state.json alert_cache.json || true
           
-          git commit -m "Auto-Scan Completed [$(date '+%Y-%m-%d %H:%M IST')]" || exit 0
+          # Force the server to use Indian Standard Time for the commit log
+          export TZ="Asia/Kolkata"
+          git commit -m "Auto-Scan Completed [$(date '+%Y-%m-%d %I:%M %p IST')]" || exit 0
           
-          # 👇 THE CRITICAL FIX: Download Nikunj's manual code edits before uploading
+          # 👇 THE CRITICAL FIX: Download manual code edits before uploading
           git pull --rebase origin main
           
           # Finally, push the dashboard to the web
