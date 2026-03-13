@@ -218,7 +218,16 @@ def generate_ai_report(arbs):
 def generate_web(evs, arbs, ai_report):
     ist_now = (datetime.now(timezone.utc) + timedelta(hours=5.5)).strftime('%d %b, %I:%M %p IST')
     
-    keys_html = "".join([f"<div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid {'#06b6d4' if idx == api_state.get('active_index', 0) else '#3f3f46'}; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #{idx+1}</div><div style='font-family:monospace; color:#fff;'>{key[:4]}••••{key[-4:] if len(key)>8 else 'ERR'}</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>{api_state.get('stats', {{}}).get(str(idx), {{}}).get('remaining', '??')}</div></div></div>" for idx, key in enumerate(API_KEYS)])
+    # 🛠️ THE FIX: Cleanly extracting the keys logic to avoid f-string syntax errors
+    keys_html = ""
+    for idx, key in enumerate(API_KEYS):
+        stats = api_state.get('stats', {})
+        rem = stats.get(str(idx), {}).get('remaining', '??')
+        is_active = (idx == api_state.get('active_index', 0))
+        color = "#06b6d4" if is_active else "#3f3f46"
+        masked = f"{key[:4]}••••{key[-4:]}" if len(key) > 8 else "ERR"
+        
+        keys_html += f"<div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid {color}; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #{idx+1}</div><div style='font-family:monospace; color:#fff;'>{masked}</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>{rem}</div></div></div>"
 
     js_arbs_data = json.dumps(arbs)
     js_evs_data = json.dumps(evs)
@@ -339,9 +348,8 @@ def generate_web(evs, arbs, ai_report):
                     
                     a.sides.forEach(s => {{
                         let rawStk = (bank / a.margin) / s.pr;
-                        let roundedStk = Math.round(rawStk / 10) * 10; // 🛡️ STEALTH LOGIC
+                        let roundedStk = Math.round(rawStk / 10) * 10; 
                         
-                        // Shows EXACT and ROUNDED clearly
                         legs += `<div style='display:flex; justify-content:space-between; align-items:center; background:#000; padding:10px; border-radius:6px; margin-top:6px; border:1px solid #222;'>
                             <span>${{s.sel}} @ <b style='color:#f59e0b'>${{s.pr}}</b> <small style='color:#aaa'>(${{s.bk.toUpperCase()}})</small></span>
                             <div style='text-align:right;'>
