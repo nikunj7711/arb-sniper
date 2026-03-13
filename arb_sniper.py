@@ -210,7 +210,7 @@ def process_markets(results):
 # ==========================================
 def generate_web(evs, arbs):
     ist_now = (datetime.now(timezone.utc) + timedelta(hours=5.5)).strftime('%d %b, %I:%M %p IST')
-    SECRET_PASS = "OctoberNikunj2026" 
+    SECRET_PASS = "ARB2026" 
 
     # 🔑 Build the detailed Keys Tab HTML
     keys_html = ""
