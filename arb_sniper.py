@@ -199,7 +199,6 @@ def process_markets(results):
 # ==========================================
 def generate_ai_report(arbs):
     if not GEMINI_API_KEY:
-        print("🤖 Gemini Error: API Key missing from environment.")
         return "AI Module Offline: Please check your GitHub Secrets for GEMINI_API_KEY."
     
     if not arbs:
@@ -209,8 +208,8 @@ def generate_ai_report(arbs):
     prompt = f"Act as a professional sports betting quant. I just found these arbitrage opportunities: {top_arbs}. Write a punchy, 2-sentence market update for my dashboard users advising them to act fast. Do not use hashtags or asterisks."
     
     try:
-        # 🛠️ FIX: Added '-latest' to the model endpoint
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_API_KEY}"
+        # 🚀 UPGRADED TO GEMINI 2.5 FLASH 
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
         res = requests.post(url, json=payload, headers={'Content-Type': 'application/json'}, timeout=15)
         
@@ -223,7 +222,6 @@ def generate_ai_report(arbs):
     except Exception as e:
         print(f"🤖 Gemini Connection Exception: {e}")
         return "AI Module Offline: Connection timed out."
-
 
 # ==========================================
 #  6. DYNAMIC UI GENERATOR (LIVE JS ENGINE)
@@ -242,8 +240,6 @@ def generate_web(evs, arbs, ai_report):
 
     js_arbs_data = json.dumps(arbs)
     js_evs_data = json.dumps(evs)
-    
-    # Sanitize AI report for JS insertion
     safe_ai_report = ai_report.replace('"', '&quot;').replace('\n', ' ')
 
     HTML = f"""<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
@@ -317,7 +313,6 @@ def generate_web(evs, arbs, ai_report):
             const rawArbs = {js_arbs_data};
             const rawEvs = {js_evs_data};
             
-            // Inject AI report text cleanly
             document.getElementById('aiText').innerHTML = "{safe_ai_report}";
 
             if(localStorage.getItem('savedBankroll')) {{
@@ -375,9 +370,8 @@ def generate_web(evs, arbs, ai_report):
                     
                     a.sides.forEach(s => {{
                         let rawStk = (bank / a.margin) / s.pr;
-                        let roundedStk = Math.round(rawStk / 10) * 10; // 🛡️ STEALTH LOGIC
+                        let roundedStk = Math.round(rawStk / 10) * 10; 
                         
-                        // Shows EXACT and ROUNDED clearly
                         legs += `<div style='display:flex; justify-content:space-between; align-items:center; background:#000; padding:10px; border-radius:6px; margin-top:6px; border:1px solid #222;'>
                             <span>${{s.sel}} @ <b style='color:#f59e0b'>${{s.pr}}</b> <small style='color:#aaa'>(${{s.bk.toUpperCase()}})</small></span>
                             <div style='text-align:right;'>
@@ -512,12 +506,12 @@ if __name__ == "__main__":
     ai_report = generate_ai_report(arbs)
     generate_web(evs, arbs, ai_report)
     
-        # 🔔 NTFY PUSH NOTIFICATION (Fixed Emoji Encoding)
+    # 🔔 NTFY PUSH NOTIFICATION
     if arbs:
         top_arb = arbs[0]
         alert_msg = f"Sniper found {len(arbs)} Locks & {len(evs)} Value Bets.\nTop Match: {top_arb['match']} ({top_arb['pct']:.2f}%)\nLog in to the dashboard now!"
         try:
-            # 🛠️ FIX: Removed literal ⚡ from Title header. The 'zap' tag does it automatically!
+            # 🛠️ REMOVED THE LITERAL EMOJI FROM THE HEADER. 
             r = requests.post(f"https://ntfy.sh/{NTFY_CHANNEL}", 
                           data=alert_msg.encode('utf-8'), 
                           headers={"Title": "ARB SNIPER SYNCED", "Tags": "moneybag,zap"}, timeout=10)
