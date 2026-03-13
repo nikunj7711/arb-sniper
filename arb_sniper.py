@@ -512,14 +512,15 @@ if __name__ == "__main__":
     ai_report = generate_ai_report(arbs)
     generate_web(evs, arbs, ai_report)
     
-    # 🔔 NTFY PUSH NOTIFICATION (Fixed with timeout and debug logging)
+        # 🔔 NTFY PUSH NOTIFICATION (Fixed Emoji Encoding)
     if arbs:
         top_arb = arbs[0]
         alert_msg = f"Sniper found {len(arbs)} Locks & {len(evs)} Value Bets.\nTop Match: {top_arb['match']} ({top_arb['pct']:.2f}%)\nLog in to the dashboard now!"
         try:
+            # 🛠️ FIX: Removed literal ⚡ from Title header. The 'zap' tag does it automatically!
             r = requests.post(f"https://ntfy.sh/{NTFY_CHANNEL}", 
                           data=alert_msg.encode('utf-8'), 
-                          headers={"Title": "⚡ ARB SNIPER SYNCED", "Tags": "moneybag,zap"}, timeout=10)
+                          headers={"Title": "ARB SNIPER SYNCED", "Tags": "moneybag,zap"}, timeout=10)
             print(f"🔔 NTFY Alert Status: {r.status_code}")
         except Exception as e:
             print(f"❌ Failed to send NTFY alert: {e}")
