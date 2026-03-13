@@ -198,19 +198,30 @@ def process_markets(results):
 #  5. GEMINI AI MARKET REPORTER
 # ==========================================
 def generate_ai_report(arbs):
-    if not GEMINI_API_KEY or not arbs:
-        return "Market is scanning. No AI report generated at this time."
+    if not GEMINI_API_KEY:
+        print("🤖 Gemini Error: API Key missing from environment.")
+        return "AI Module Offline: Please check your GitHub Secrets for GEMINI_API_KEY."
+    
+    if not arbs:
+        return "Market is currently stable. No Arbitrage locks found right now. Keep your bankroll ready for the next wave."
     
     top_arbs = ", ".join([f"{a['match']} ({a['pct']:.1f}% Arb)" for a in arbs[:3]])
-    prompt = f"You are a professional sports betting analyst. I just found these arbitrage opportunities: {top_arbs}. Write a punchy, 2-sentence market update for my dashboard users. Do not use hashtags or asterisks."
+    prompt = f"Act as a professional sports betting quant. I just found these arbitrage opportunities: {top_arbs}. Write a punchy, 2-sentence market update for my dashboard users advising them to act fast. Do not use hashtags or asterisks."
     
     try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        res = requests.post(url, json=payload, headers={'Content-Type': 'application/json'})
-        return res.json()['candidates'][0]['content']['parts'][0]['text']
+        res = requests.post(url, json=payload, headers={'Content-Type': 'application/json'}, timeout=15)
+        
+        if res.status_code == 200:
+            print("🤖 Gemini AI Report Generated Successfully.")
+            return res.json()['candidates'][0]['content']['parts'][0]['text']
+        else:
+            print(f"🤖 Gemini API Error {res.status_code}: {res.text}")
+            return f"AI System Error (Code {res.status_code}). Please check GitHub Logs."
     except Exception as e:
-        return "AI Module Offline: Market data still processing normally."
+        print(f"🤖 Gemini Connection Exception: {e}")
+        return "AI Module Offline: Connection timed out."
 
 # ==========================================
 #  6. DYNAMIC UI GENERATOR (LIVE JS ENGINE)
@@ -218,7 +229,6 @@ def generate_ai_report(arbs):
 def generate_web(evs, arbs, ai_report):
     ist_now = (datetime.now(timezone.utc) + timedelta(hours=5.5)).strftime('%d %b, %I:%M %p IST')
     
-    # 🛠️ THE FIX: Cleanly extracting the keys logic to avoid f-string syntax errors
     keys_html = ""
     for idx, key in enumerate(API_KEYS):
         stats = api_state.get('stats', {})
@@ -226,11 +236,13 @@ def generate_web(evs, arbs, ai_report):
         is_active = (idx == api_state.get('active_index', 0))
         color = "#06b6d4" if is_active else "#3f3f46"
         masked = f"{key[:4]}••••{key[-4:]}" if len(key) > 8 else "ERR"
-        
         keys_html += f"<div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid {color}; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa;'>KEY #{idx+1}</div><div style='font-family:monospace; color:#fff;'>{masked}</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>{rem}</div></div></div>"
 
     js_arbs_data = json.dumps(arbs)
     js_evs_data = json.dumps(evs)
+    
+    # Sanitize AI report for JS insertion
+    safe_ai_report = ai_report.replace('"', '&quot;').replace('\n', ' ')
 
     HTML = f"""<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
@@ -262,7 +274,7 @@ def generate_web(evs, arbs, ai_report):
             
             <div style='background:rgba(245, 158, 11, 0.1); padding:15px; border-radius:12px; border:1px solid rgba(245, 158, 11, 0.3); margin-bottom:15px;'>
                 <h4 style='margin:0 0 5px 0; color:#f59e0b; font-size:12px;'>🤖 GEMINI AI MARKET REPORT</h4>
-                <p style='margin:0; font-size:13px; color:#ddd; line-height:1.4;'>{ai_report}</p>
+                <p id='aiText' style='margin:0; font-size:13px; color:#ddd; line-height:1.4;'></p>
             </div>
 
             <div style='background:#18181b; padding:15px; border-radius:12px; border:1px solid #27272a; margin-bottom:15px;'>
@@ -282,10 +294,15 @@ def generate_web(evs, arbs, ai_report):
             
             <div id='p2' class='pane'>
                 <div class='card'>
-                    <h3 style='margin-top:0; color:#06b6d4;'>Smart Calculator</h3>
+                    <h3 style='margin-top:0; color:#06b6d4;'>Advanced 2-Way/3-Way Calculator</h3>
+                    <label style='font-size:10px; color:#aaa;'>Investment Amount</label>
                     <input type='number' id='calcBank' class='input-box' placeholder='Investment Amount' oninput='runCalc()'>
+                    <label style='font-size:10px; color:#aaa;'>Odd 1</label>
                     <input type='number' id='odd1' class='input-box' placeholder='Odd 1' oninput='runCalc()'>
+                    <label style='font-size:10px; color:#aaa;'>Odd 2</label>
                     <input type='number' id='odd2' class='input-box' placeholder='Odd 2' oninput='runCalc()'>
+                    <label style='font-size:10px; color:#aaa;'>Odd 3 (Optional for 3-Way)</label>
+                    <input type='number' id='odd3' class='input-box' placeholder='Odd 3 (Optional)' oninput='runCalc()'>
                     <div id='calcResult' style='margin-top:5px; padding:15px; background:#000; border-radius:8px; border:1px solid #222;'>Awaiting Input...</div>
                 </div>
             </div>
@@ -297,6 +314,9 @@ def generate_web(evs, arbs, ai_report):
             const EXPECTED_HASH = '{SECRET_HASH}';
             const rawArbs = {js_arbs_data};
             const rawEvs = {js_evs_data};
+            
+            // Inject AI report text cleanly
+            document.getElementById('aiText').innerHTML = "{safe_ai_report}";
 
             if(localStorage.getItem('savedBankroll')) {{
                 document.getElementById('userBankroll').value = localStorage.getItem('savedBankroll');
@@ -337,6 +357,11 @@ def generate_web(evs, arbs, ai_report):
                 document.querySelectorAll('.live-clock').forEach(el => el.innerText = '⏳ ' + formatTimeDiff(el.dataset.iso));
             }}, 1000);
 
+            function copyText(txt) {{
+                navigator.clipboard.writeText(txt);
+                alert("Copied to clipboard: " + txt);
+            }}
+
             function renderAll() {{
                 const bank = parseFloat(document.getElementById('userBankroll').value) || 0;
                 
@@ -348,8 +373,9 @@ def generate_web(evs, arbs, ai_report):
                     
                     a.sides.forEach(s => {{
                         let rawStk = (bank / a.margin) / s.pr;
-                        let roundedStk = Math.round(rawStk / 10) * 10; 
+                        let roundedStk = Math.round(rawStk / 10) * 10; // 🛡️ STEALTH LOGIC
                         
+                        // Shows EXACT and ROUNDED clearly
                         legs += `<div style='display:flex; justify-content:space-between; align-items:center; background:#000; padding:10px; border-radius:6px; margin-top:6px; border:1px solid #222;'>
                             <span>${{s.sel}} @ <b style='color:#f59e0b'>${{s.pr}}</b> <small style='color:#aaa'>(${{s.bk.toUpperCase()}})</small></span>
                             <div style='text-align:right;'>
@@ -362,7 +388,10 @@ def generate_web(evs, arbs, ai_report):
                     arbHTML += `<div class='card' style='border-left: 4px solid #f59e0b;'>
                         <div style='display:flex; justify-content:space-between; align-items:center;'>
                             <div><span class='badge' style='background:#f59e0b;'>${{a.pct.toFixed(2)}}% ARB</span> <span style='font-size:9px; margin-left:5px;'>${{stability}}</span></div>
-                            <button class='btn btn-calc' onclick='sendToCalc(${{a.sides[0]?.pr || 0}}, ${{a.sides[1]?.pr || 0}})'>🧮 CALC</button>
+                            <div style='display:flex; gap:5px;'>
+                                <button class='btn btn-calc' onclick='sendToCalc(${{a.sides[0]?.pr || 0}}, ${{a.sides[1]?.pr || 0}}, ${{a.sides[2]?.pr || 0}})'>🧮 CALC</button>
+                                <button class='btn' style='background:#3f3f46;' onclick='copyText("${{a.match}}")'>📋 COPY</button>
+                            </div>
                         </div>
                         <div style='font-size:16px; font-weight:bold; margin: 10px 0;'>${{a.match}}</div>
                         <div style='display:flex; gap:10px; font-size:11px; margin-bottom:10px;'>
@@ -384,7 +413,13 @@ def generate_web(evs, arbs, ai_report):
                     let roundedStk = Math.round(rawStk / 10) * 10;
                     
                     evHTML += `<div class='card' style='border-left: 4px solid #06b6d4;'>
-                        <div style='display:flex; justify-content:space-between; align-items:center;'><span class='badge' style='background:#06b6d4;'>${{e.pct.toFixed(2)}}% EV</span><span class='live-clock clock' data-iso='${{e.raw_time}}'></span></div>
+                        <div style='display:flex; justify-content:space-between; align-items:center;'>
+                            <span class='badge' style='background:#06b6d4;'>${{e.pct.toFixed(2)}}% EV</span>
+                            <div style='display:flex; gap:5px; align-items:center;'>
+                                <span class='live-clock clock' data-iso='${{e.raw_time}}'></span>
+                                <button class='btn' style='background:#3f3f46;' onclick='copyText("${{e.match}}")'>📋 COPY</button>
+                            </div>
+                        </div>
                         <div style='font-size:16px; font-weight:bold; margin: 10px 0;'>${{e.match}}</div>
                         <div style='background:#000; padding:12px; border-radius:6px; border:1px solid #222;'>Bet <b>${{e.sel.toUpperCase()}}</b> @ <b style='color:#06b6d4;'>${{e.odds}}</b> <span style='float:right; color:#888;'>${{e.bk.toUpperCase()}}</span></div>
                         <div style='display:flex; justify-content:space-between; align-items:center; margin-top:10px;'>
@@ -396,27 +431,47 @@ def generate_web(evs, arbs, ai_report):
                 document.getElementById('p1').innerHTML = evHTML || "<div style='padding:20px; color:#aaa;'>No Value Bets.</div>";
             }}
 
-            function sendToCalc(o1, o2) {{ sw(2); document.getElementById('odd1').value = o1; document.getElementById('odd2').value = o2; runCalc(); }}
+            function sendToCalc(o1, o2, o3) {{ 
+                sw(2); 
+                document.getElementById('odd1').value = o1; 
+                document.getElementById('odd2').value = o2; 
+                document.getElementById('odd3').value = o3 > 0 ? o3 : ""; 
+                runCalc(); 
+            }}
 
             function runCalc() {{
                 const b = parseFloat(document.getElementById('calcBank').value) || 0;
                 const o1 = parseFloat(document.getElementById('odd1').value) || 0;
                 const o2 = parseFloat(document.getElementById('odd2').value) || 0;
+                const o3 = parseFloat(document.getElementById('odd3').value) || 0;
+                
                 if(o1 > 0 && o2 > 0) {{
-                    let invSum = (1/o1) + (1/o2);
+                    let invSum = (1/o1) + (1/o2) + (o3 > 0 ? (1/o3) : 0);
                     let pct = (1 - invSum) * 100;
                     let stk1 = (b/invSum) / o1;
                     let stk2 = (b/invSum) / o2;
+                    let stk3 = o3 > 0 ? ((b/invSum) / o3) : 0;
                     let prof = (b/invSum) - b;
                     let color = prof > 0 ? '#10b981' : '#ef4444';
                     
-                    document.getElementById('calcResult').innerHTML = `
+                    let resultHTML = `
                         <div style='display:flex; justify-content:space-between; margin-bottom:8px; color:#ccc;'><span>Leg 1 Exact:</span><b style='color:#fff;'>₹${{stk1.toFixed(2)}}</b></div>
                         <div style='display:flex; justify-content:space-between; margin-bottom:10px; color:#ccc;'><span>Leg 2 Exact:</span><b style='color:#fff;'>₹${{stk2.toFixed(2)}}</b></div>
+                    `;
+                    
+                    if(o3 > 0) {{
+                        resultHTML += `<div style='display:flex; justify-content:space-between; margin-bottom:10px; color:#ccc;'><span>Leg 3 Exact:</span><b style='color:#fff;'>₹${{stk3.toFixed(2)}}</b></div>`;
+                    }}
+                    
+                    resultHTML += `
                         <hr style='border:none; border-top:1px solid #333; margin:15px 0;'>
                         <div style='display:flex; justify-content:space-between; margin-bottom:8px; color:${{color}};'><span>Arbitrage %:</span><b style='font-size:16px;'>${{pct.toFixed(2)}}%</b></div>
                         <div style='display:flex; justify-content:space-between; color:${{color}}; align-items:center;'><span>Profit:</span><b style='font-size:24px;'>₹${{prof.toFixed(0)}}</b></div>
                     `;
+                    
+                    document.getElementById('calcResult').innerHTML = resultHTML;
+                }} else {{
+                    document.getElementById('calcResult').innerHTML = "Awaiting valid odds input...";
                 }}
             }}
         </script>
@@ -452,22 +507,19 @@ if __name__ == "__main__":
     evs.sort(key=lambda x: x['pct'], reverse=True)
     arbs.sort(key=lambda x: x['pct'], reverse=True)
     
-    # Generate AI Report based on results
     ai_report = generate_ai_report(arbs)
-    
-    # Generate Dashboard
     generate_web(evs, arbs, ai_report)
     
-    # 🔔 NTFY PUSH NOTIFICATION
+    # 🔔 NTFY PUSH NOTIFICATION (Fixed with timeout and debug logging)
     if arbs:
         top_arb = arbs[0]
         alert_msg = f"Sniper found {len(arbs)} Locks & {len(evs)} Value Bets.\nTop Match: {top_arb['match']} ({top_arb['pct']:.2f}%)\nLog in to the dashboard now!"
         try:
-            requests.post(f"https://ntfy.sh/{NTFY_CHANNEL}", 
+            r = requests.post(f"https://ntfy.sh/{NTFY_CHANNEL}", 
                           data=alert_msg.encode('utf-8'), 
-                          headers={"Title": "⚡ ARB SNIPER SYNCED", "Tags": "moneybag,zap"})
-            print("🔔 NTFY Alert Sent Successfully.")
+                          headers={"Title": "⚡ ARB SNIPER SYNCED", "Tags": "moneybag,zap"}, timeout=10)
+            print(f"🔔 NTFY Alert Status: {r.status_code}")
         except Exception as e:
-            print("Failed to send NTFY alert.")
+            print(f"❌ Failed to send NTFY alert: {e}")
 
     print(f"✅ Sync Complete. EV: {len(evs)} | ARB: {len(arbs)}")
