@@ -208,6 +208,9 @@ def process_markets(results):
 # ==========================================
 #  5. PRO DASHBOARD (WITH KEYS TAB)
 # ==========================================
+# ==========================================
+#  5. PRO DASHBOARD (WITH KEYS TAB & SECURE AUTH)
+# ==========================================
 def generate_web(evs, arbs):
     ist_now = (datetime.now(timezone.utc) + timedelta(hours=5.5)).strftime('%d %b, %I:%M %p IST')
     SECRET_PASS = "ARB2026" 
@@ -220,7 +223,7 @@ def generate_web(evs, arbs):
         color = "#06b6d4" if is_active else "#3f3f46"
         status = "ACTIVE" if is_active else "IDLE"
         masked = f"{key[:4]}••••••••••••{key[-4:]}" if len(key) > 8 else "INVALID_KEY"
-        
+
         keys_html += f"""
         <div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid {color}; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'>
             <div>
@@ -238,12 +241,12 @@ def generate_web(evs, arbs):
         color = "#f59e0b" if is_arb else "#06b6d4"
         stability = "STABLE" if item['pct'] < 8 else "VOLATILE"
         stability_color = "#10b981" if stability == "STABLE" else "#ef4444"
-        
+
         legs = ""
         if is_arb:
             for s in item['sides']:
                 legs += f"<div style='display:flex; justify-content:space-between; background:#000; padding:8px; border-radius:6px; margin-top:5px; border:1px solid #222;'><span>{s['sel']} @ <b style='color:{color}'>{s['pr']}</b> <small>({s['bk'].upper()})</small></span><span style='color:#fff'>₹{s['stk']:.0f}</span></div>"
-        
+
         return f"""
         <div class='card' style='border-left: 4px solid {color};'>
             <div style='display:flex; justify-content:space-between; align-items:start;'>
@@ -297,16 +300,26 @@ def generate_web(evs, arbs):
             <div id='p2' class='pane'>{keys_html}</div>
         </div>
         <script>
+            // The secret pass is injected directly into the JS variable
+            const currentSecret = '{SECRET_PASS}';
+            
             function ck() {{ 
-                if(document.getElementById('ps').value==='{SECRET_PASS}') {{ 
+                if(document.getElementById('ps').value === currentSecret) {{ 
                     document.getElementById('lock-screen').style.display='none'; 
                     document.getElementById('content').style.display='block'; 
-                    localStorage.setItem('auth','1'); 
+                    // Save the actual password string as the token
+                    localStorage.setItem('auth', currentSecret); 
                 }} else {{
                     document.getElementById('err').innerText = 'Incorrect Password';
                 }}
             }}
-            if(localStorage.getItem('auth')==='1') {{ document.getElementById('lock-screen').style.display='none'; document.getElementById('content').style.display='block'; }}
+            
+            // Check if their saved token matches the CURRENT secret
+            if(localStorage.getItem('auth') === currentSecret) {{ 
+                document.getElementById('lock-screen').style.display='none'; 
+                document.getElementById('content').style.display='block'; 
+            }}
+            
             function sw(i) {{ document.querySelectorAll('.tab').forEach((t,j)=>j==i?t.classList.add('active'):t.classList.remove('active')); document.querySelectorAll('.pane').forEach((p,j)=>j==i?p.classList.add('active-pane') : p.classList.remove('active-pane')); }}
         </script>
     </body></html>"""
