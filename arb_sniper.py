@@ -66,7 +66,7 @@ def update_key_stats(idx, rem):
         if rem is not None: api_state['stats'][str(idx)]['remaining'] = int(rem)
 
 # ==========================================
-#  3. DATA FETCHERS (UNRESTRICTED)
+#  3. DATA FETCHERS (RESTORED TOTALS)
 # ==========================================
 def fetch_bcgame_custom():
     headers = {'accept': '*/*', 'origin': 'https://bc.game', 'user-agent': 'Mozilla/5.0'}
@@ -88,10 +88,17 @@ def fetch_bcgame_custom():
             for k, n in [("1", c[0]['name']), ("2", c[1]['name']), ("3", "Draw")]:
                 if k in m1: h2h.append({'name': n, 'price': float(m1[k]["k"])})
 
+            # 🛠️ RESTORED OVER/UNDER MARKETS FOR BC GAME
+            m18 = mk.get("18", {})
+            for pk, pd in m18.items():
+                val = float(pk.replace("total=", ""))
+                if "12" in pd: tots.append({'name': 'Over', 'price': float(pd["12"]["k"]), 'point': val})
+                if "13" in pd: tots.append({'name': 'Under', 'price': float(pd["13"]["k"]), 'point': val})
+
             std.append({
                 'home_team': c[0]['name'], 'away_team': c[1]['name'],
                 'commence_time': datetime.fromtimestamp(d.get('scheduled', 0), tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                'bookmakers': [{'key': 'bcgame', 'title': 'BC.Game', 'markets': [{'key': 'h2h', 'outcomes': h2h}]}]
+                'bookmakers': [{'key': 'bcgame', 'title': 'BC.Game', 'markets': [{'key': 'h2h', 'outcomes': h2h}, {'key': 'totals', 'outcomes': tots}]}]
             })
         return std
     except: return []
@@ -114,16 +121,16 @@ def fetch_odds_api(url, params):
 
 def fetch_all_sports():
     results = {}
-    print("📡 Fetching Unrestricted Global Data...")
+    print("📡 Fetching Data...")
     with ThreadPoolExecutor(max_workers=4) as executor:
-        # Pulling US, UK, EU, AU to ensure NO matches are left behind
-        futures = {executor.submit(fetch_odds_api, f'https://api.the-odds-api.com/v4/sports/{sp}/odds', {'regions': 'eu,uk,us,au', 'markets': 'h2h'}): sp for sp in TARGET_SPORTS}
+        # 🛠️ RESTORED BOOKMAKERS FILTER AND TOTALS (h2h,totals)
+        futures = {executor.submit(fetch_odds_api, f'https://api.the-odds-api.com/v4/sports/{sp}/odds', {'regions': 'eu,uk,us,au', 'bookmakers': MY_BOOKIES, 'markets': 'h2h,totals'}): sp for sp in TARGET_SPORTS}
         for future in as_completed(futures):
             results[futures[future]] = future.result()
     return results
 
 # ==========================================
-#  4. AGGRESSIVE MATH ENGINE
+#  4. MATH ENGINE (AGGRESSIVE)
 # ==========================================
 def remove_vig(*odds):
     margin = sum(1/o for o in odds)
@@ -137,24 +144,18 @@ def format_ist(iso_str):
 
 def process_markets(results):
     all_evs, all_arbs = [], []
-    valid_bookies = [b.strip() for b in MY_BOOKIES.split(',')]
     
     for sport, events in results.items():
         if not events: continue
         
         for event in events:
             commence = event.get('commence_time', '')
-            # 🚀 GHOST ARB KILLER IS GONE. YOU SEE EVERYTHING NOW.
-
             home, away = event.get('home_team', 'A'), event.get('away_team', 'B')
             meta = {'match': f"{home} vs {away}", 'sport': sport.replace('_', ' ').upper(), 'raw_time': commence, 'time': format_ist(commence)}
 
             ev_lines, arb_lines = {}, {}
             for bookie in event.get('bookmakers', []):
                 b_name = bookie['key']
-                
-                if b_name not in valid_bookies and b_name != 'bcgame':
-                    continue 
                 
                 for market in bookie.get('markets', []):
                     m_type = market['key'].upper()
@@ -195,7 +196,7 @@ def process_markets(results):
     return all_evs, all_arbs
 
 # ==========================================
-#  5. DYNAMIC UI GENERATOR (NO AI)
+#  5. DYNAMIC UI GENERATOR
 # ==========================================
 def generate_web(evs, arbs):
     ist_now = (datetime.now(timezone.utc) + timedelta(hours=5.5)).strftime('%d %b, %I:%M %p IST')
@@ -210,7 +211,7 @@ def generate_web(evs, arbs):
         masked = f"{key[:4]}••••{key[-4:]}" if len(key) > 8 else "ERR"
         keys_html += f"<div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid {color}; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #{idx+1} <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:{color}; border:1px solid {color};'>{status}</span></div><div style='font-family:monospace; color:#fff;'>{masked}</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:{color};'>{rem}</div></div></div>"
 
-    js_arbs_data = json.dumps(arbs[:150]) # Increased capacity
+    js_arbs_data = json.dumps(arbs[:150]) 
     js_evs_data = json.dumps(evs[:150])
     
     HTML = f"""<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
@@ -351,6 +352,7 @@ def generate_web(evs, arbs):
                             <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 ${{a.time}}</span>
                             <span class='live-clock clock' data-iso='${{a.raw_time}}'></span>
                         </div>
+                        <div style='font-size:12px; color:#aaa;'>${{a.line}} (${{a.ways}}-Way)</div>
                         ${{legs}}
                         <div style='text-align:right; font-weight:bold; color:${{pColor}}; margin-top:12px; font-size:18px;'>Est. Profit: ₹${{profit.toFixed(0)}}</div>
                     </div>`;
