@@ -1,1950 +1,370 @@
-# =============================================================================
-#
-#   █████╗ ██████╗ ██████╗     ███████╗███╗   ██╗██╗██████╗ ███████╗██████╗
-#  ██╔══██╗██╔══██╗██╔══██╗    ██╔════╝████╗  ██║██║██╔══██╗██╔════╝██╔══██╗
-#  ███████║██████╔╝██████╔╝    ███████╗██╔██╗ ██║██║██████╔╝█████╗  ██████╔╝
-#  ██╔══██║██╔══██╗██╔══██╗    ╚════██║██║╚██╗██║██║██╔═══╝ ██╔══╝  ██╔══██╗
-#  ██║  ██║██║  ██║██████╔╝    ███████║██║ ╚████║██║██║     ███████╗██║  ██║
-#  ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝     ╚══════╝╚═╝  ╚═══╝╚═╝╚═╝     ╚══════╝╚═╝  ╚═╝
-#
-#   TERMINAL  v5.0  —  Quantitative Edge Platform
-#   © 2026 — Private Use Only
-#
-#   ARCHITECTURE:
-#     Python  = Build Script (factory) — runs on GitHub Actions
-#     Browser = Engine — all fetching, math, rendering run client-side
-#
-#   GOLDEN RULE:
-#     Never edit index.html directly. Only edit arb_sniper.py.
-#     GitHub Actions runs this script → writes a fresh index.html → done.
-#
-#   GITHUB SECRETS REQUIRED:
-#     ODDS_API_KEYS   — comma-separated Odds API keys (required)
-#     DASHBOARD_PASS  — plain-text password for lock screen (optional)
-#     GEMINI_API_KEY  — Google Gemini API key for AI report (optional)
-#
-# =============================================================================
-
-import os
-import json
-import hashlib
-import urllib.request
-import urllib.error
-import sys
+import os, json, requests, time, threading
 from datetime import datetime, timezone, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  SECTION 1 — API KEY INJECTION
-#  Reads comma-separated keys from GitHub Secret ODDS_API_KEYS.
-#  Serialised as a JS array literal → injected via __INJECTED_KEYS__ placeholder.
-#  The browser uses these to fetch The Odds API directly (zero-latency).
-# ─────────────────────────────────────────────────────────────────────────────
-_raw_keys  = os.getenv('ODDS_API_KEYS', '')
-_keys_list = [k.strip() for k in _raw_keys.split(',') if k.strip()]
-INJECTED_KEYS_JS = json.dumps(_keys_list)
+# ==========================================
+#  CONFIGURATION
+# ==========================================
+_raw_keys = os.getenv('ODDS_API_KEYS', '')
+API_KEYS = [k.strip() for k in _raw_keys.split(',') if k.strip()]
 
-if not _keys_list:
-    print("⚠  ODDS_API_KEYS not set — dashboard will prompt user on first scan.")
-else:
-    print(f"🔑  {len(_keys_list)} API key(s) loaded for injection.")
+NTFY_CHANNEL = 'nikunj_arb_alerts_2026'
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  SECTION 2 — PASSWORD LOCK SCREEN  (SHA-256, no external library)
-#  GitHub Secret: DASHBOARD_PASS (e.g. "sniper2026")
-#  Python hashes it here with hashlib — only the hex digest reaches the HTML.
-#  The browser uses SubtleCrypto (built-in, no CDN) to hash user input and compare.
-#  If DASHBOARD_PASS is not set → lock screen is silently disabled.
-# ─────────────────────────────────────────────────────────────────────────────
-_raw_pass = os.getenv('DASHBOARD_PASS', '').strip()
-if _raw_pass:
-    PASS_HASH = hashlib.sha256(_raw_pass.encode('utf-8')).hexdigest()
-    print(f"🔐  Password lock armed (SHA-256).")
-else:
-    PASS_HASH = ''
-    print("⚠  DASHBOARD_PASS not set — lock screen disabled.")
+# --- LIVE FIRE TEST THRESHOLDS ---
+TOTAL_BANKROLL = 1500
+MIN_EV_THRESHOLD = 0.0   # Set to 0.0 for testing
+MIN_ARB_THRESHOLD = 0.0  # Set to 0.0 for testing
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  SECTION 3 — GEMINI AI MARKET REPORT  (Python calls Gemini 2.5 Flash)
-#  GitHub Secret: GEMINI_API_KEY
-#  Python calls the Gemini API once per build → injects the 2-sentence report
-#  as a static string via __AI_REPORT__ placeholder.
-#  Uses only stdlib urllib — zero pip dependencies.
-#  If GEMINI_API_KEY is not set → graceful offline message shown instead.
-# ─────────────────────────────────────────────────────────────────────────────
-def fetch_gemini_report() -> str:
-    api_key = os.getenv('GEMINI_API_KEY', '').strip()
-    if not api_key:
-        return "AI Intelligence Module offline — add GEMINI_API_KEY to GitHub Secrets to enable live market briefings."
+MY_BOOKIES = 'pinnacle,onexbet,marathonbet,dafabet,stake,betfair_ex_eu,betway,bet365,unibet,williamhill,888sport,betclic'
 
-    prompt = (
-        "Act as a senior quantitative sports betting analyst. "
-        "Write a sharp, professional 2-sentence market briefing for a live arbitrage dashboard. "
-        "Advise the trader to stay disciplined and act fast on any mispriced lines. "
-        "Tone: confident, concise, Bloomberg-style. No hashtags, no asterisks. Under 45 words."
-    )
-    payload = json.dumps({
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.7, "maxOutputTokens": 120}
-    }).encode('utf-8')
+TARGET_SPORTS = [
+    'soccer_epl', 'soccer_uefa_champs_league', 'soccer_spain_la_liga', 'soccer_italy_serie_a', 'soccer_germany_bundesliga',
+    'basketball_nba', 'basketball_euroleague', 'basketball_ncaab',
+    'icehockey_nhl',
+    'tennis_atp', 'tennis_wta',
+    'americanfootball_nfl',
+    'mma_mixed_martial_arts'
+]
 
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.5-flash:generateContent?key={api_key}"
-    )
-    req = urllib.request.Request(
-        url, data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
+BOOK_CAPS = {
+    'betway': 300, 'stake': 500, 'onexbet': 400, 'marathonbet': 400, 'dafabet': 350,
+    'betfair_ex_eu': 600, 'pinnacle': 1000, 'bet365': 400, 'unibet': 350,
+    'williamhill': 350, '888sport': 350, 'betclic': 300
+}
+# ==========================================
+#  STATE & CACHE MANAGERS (BULLETPROOFED)
+# ==========================================
+api_lock = threading.Lock()
+
+def load_json(filepath, default):
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f: return json.load(f)
+        except: return default
+    return default
+
+def save_json(filepath, data):
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-            text = data['candidates'][0]['content']['parts'][0]['text'].strip()
-            # Normalise whitespace and truncate hard at 300 chars for safety
-            text = ' '.join(text.split())[:300]
-            print(f"🤖  Gemini report generated ({len(text)} chars).")
-            return text
-    except urllib.error.HTTPError as e:
-        body = e.read().decode('utf-8', errors='replace')[:200]
-        print(f"⚠  Gemini HTTP {e.code}: {body}")
-        return f"AI Module Error (HTTP {e.code}) — scan data below is live and accurate."
-    except Exception as e:
-        print(f"⚠  Gemini call failed: {e}")
-        return "Market intelligence module temporarily unavailable. All scan data is live and accurate."
+        with open(filepath, 'w', encoding='utf-8') as f: json.dump(data, f, indent=2)
+    except: pass
 
+# Load and strictly enforce the structure to prevent KeyErrors
+api_state = load_json('api_state.json', {})
+if 'active_index' not in api_state: api_state['active_index'] = 0
+if 'stats' not in api_state: api_state['stats'] = {}
 
-def _safe_ai(text: str) -> str:
-    """Escape AI report for safe injection into a JS string literal."""
-    return (text
-            .replace('\\', '\\\\')
-            .replace('"',  '\\"')
-            .replace("'",  "\\'")
-            .replace('\n', ' ')
-            .replace('\r', ''))
+alert_cache = load_json('alert_cache.json', {})
 
+# Clean old cache (6 hours)
+now_ts = time.time()
+alert_cache = {k: v for k, v in alert_cache.items() if isinstance(v, (int, float)) and (now_ts - v < 6*3600)}
 
-AI_REPORT      = fetch_gemini_report()
-AI_REPORT_SAFE = _safe_ai(AI_REPORT)
+def is_duplicate_alert(alert_key):
+    if alert_key in alert_cache: return True
+    alert_cache[alert_key] = time.time()
+    return False
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  SECTION 4 — BUILD METADATA
-# ─────────────────────────────────────────────────────────────────────────────
-_ist_now   = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
-BUILD_TIME = _ist_now.strftime('%d %b %Y · %I:%M %p IST')
-BUILD_VER  = "5.0"
+def get_active_api_key():
+    with api_lock:
+        idx = api_state['active_index']
+        if idx >= len(API_KEYS): return None, idx
+        return API_KEYS[idx], idx
 
-# =============================================================================
-#  SECTION 5 — THE COMPLETE SPA
-#
-#  Rules that must NEVER be broken:
-#    1. This is a standard """ string, NOT an f-string.
-#       No f-prefix → JS curly braces are never misinterpreted by Python.
-#    2. All dynamic values are injected via named __PLACEHOLDER__ tokens
-#       that are replaced by str.replace() at write time (see factory below).
-#    3. Never paste code directly into index.html — it will be overwritten.
-# =============================================================================
+def rotate_api_key(failed_idx):
+    with api_lock:
+        if api_state['active_index'] == failed_idx:
+            api_state['active_index'] += 1
+            save_json('api_state.json', api_state)
+            print(f"🔄 Key #{failed_idx + 1} Exhausted! Switching to Key #{api_state['active_index'] + 1}")
+        return api_state['active_index'] < len(API_KEYS)
 
-HTML = """<!DOCTYPE html>
+def update_key_telemetry(idx, rem):
+    with api_lock:
+        if str(idx) not in api_state['stats']: api_state['stats'][str(idx)] = {}
+        api_state['stats'][str(idx)]['remaining'] = int(rem)
+
+# ==========================================
+#  MATH ENGINE
+# ==========================================
+def remove_vig(*odds):
+    margin = sum(1/o for o in odds)
+    return tuple(1 / ((1/o) / margin) for o in odds)
+
+def calculate_kelly(soft_odds, true_odds, bankroll, bookie=None):
+    b, p = soft_odds - 1.0, 1.0 / true_odds
+    safe_kelly = ((b * p - (1-p)) / b) * 0.30
+    if safe_kelly <= 0: return 0
+    stake = max(20, bankroll * min(safe_kelly, 0.05))
+    return min(stake, BOOK_CAPS.get(bookie, 1000))
+
+# ==========================================
+#  CLOUD FETCHING
+# ==========================================
+def fetch_odds_with_retry(url, params):
+    while True:
+        key, idx = get_active_api_key()
+        if not key: return None
+        params['apiKey'] = key
+        try:
+            res = requests.get(url, params=params, timeout=15)
+        except: return None
+           
+        rem = res.headers.get('x-requests-remaining')
+        if rem: update_key_telemetry(idx, rem)
+
+        if res.status_code in [401, 429]:
+            if rotate_api_key(idx): continue
+            else: return None
+        elif res.status_code == 200:
+            return res.json()
+        return None
+
+def fetch_all_sports():
+    results = {}
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {executor.submit(fetch_odds_with_retry, f'https://api.the-odds-api.com/v4/sports/{sp}/odds', {'regions': 'eu', 'bookmakers': MY_BOOKIES, 'markets': 'totals,spreads', 'oddsFormat': 'decimal'}): sp for sp in TARGET_SPORTS}
+        for future in as_completed(futures):
+            results[futures[future]] = future.result()
+    return results
+
+def format_ist_time(iso_str):
+    try:
+        dt = datetime.strptime(iso_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        ist = dt.astimezone(timezone(timedelta(hours=5, minutes=30)))
+        return ist.strftime("%d %b, %I:%M %p")
+    except: return "Unknown Time"
+
+# ==========================================
+#  PROCESS MARKETS
+# ==========================================
+def process_markets(results):
+    all_evs, all_arbs = [], []
+    for sport, events in results.items():
+        if not events: continue
+        for event in events:
+            home = event.get('home_team', 'Team A')
+            away = event.get('away_team', 'Team B')
+            match_name = f"{home} vs {away}"
+            match_time = format_ist_time(event['commence_time'])
+           
+            ev_lines, arb_lines = {}, {}
+            for bookie in event.get('bookmakers', []):
+                b_name = bookie['key']
+                for market in bookie.get('markets', []):
+                    m_type = market['key'].upper()
+                    for outcome in market['outcomes']:
+                        point = str(outcome.get('point', '0'))
+                        name, price = outcome['name'], outcome['price']
+                        if b_name == 'betfair_ex_eu': price = 1 + (price - 1) * 0.97
+                        line_key = f"{m_type} {point}" if point != "0" else f"{m_type}"
+
+                        if line_key not in ev_lines: ev_lines[line_key] = {'pin': {}, 'softs': {}}
+                        if line_key not in arb_lines: arb_lines[line_key] = {}
+                       
+                        if b_name == 'pinnacle': ev_lines[line_key]['pin'][name] = price
+                        else:
+                            if name not in ev_lines[line_key]['softs']: ev_lines[line_key]['softs'][name] = {}
+                            ev_lines[line_key]['softs'][name][b_name] = price
+                               
+                        if name not in arb_lines[line_key] or price > arb_lines[line_key][name]['price']:
+                            arb_lines[line_key][name] = {'price': price, 'bookie': b_name}
+
+            # Evaluate EV
+            for lk, d in ev_lines.items():
+                pinny, softs = d['pin'], d['softs']
+                if len(pinny) == 2:
+                    s1, s2 = list(pinny.keys())
+                    t1, t2 = remove_vig(pinny[s1], pinny[s2])
+                    for side, true_odds in [(s1, t1), (s2, t2)]:
+                        if side in softs:
+                            best_bk = max(softs[side], key=softs[side].get)
+                            best_p = softs[side][best_bk]
+                            if best_p > true_odds:
+                                ev_pct = ((best_p / true_odds) - 1) * 100
+                                if ev_pct >= MIN_EV_THRESHOLD:
+                                    all_evs.append({
+                                        'pct': ev_pct, 'match': match_name, 'home': home, 'away': away, 'time': match_time, 'sport': sport.replace('_', ' ').upper(),
+                                        'line': lk, 'sel': side, 'odds': best_p, 'trueO': true_odds, 'bk': best_bk,
+                                        'stk': calculate_kelly(best_p, true_odds, TOTAL_BANKROLL, best_bk),
+                                        'conf': max(0, min(100, int((abs((1/best_p) - (1/true_odds)) / (1/true_odds)) * 500)))
+                                    })
+
+            # Evaluate ARB
+            for lk, outs in arb_lines.items():
+                keys = list(outs.keys())
+                for ways in [2, 3]:
+                    if len(keys) < ways: continue
+                    k_slice = keys[:ways]
+                    margin = sum(1/outs[k]['price'] for k in k_slice)
+                    if margin < 1.0 and (1-margin)*100 >= MIN_ARB_THRESHOLD:
+                        arb = {'pct': (1-margin)*100, 'match': match_name, 'home': home, 'away': away, 'time': match_time, 'sport': sport.replace('_', ' ').upper(), 'line': lk, 'ways': ways, 'profit': (TOTAL_BANKROLL/margin)-TOTAL_BANKROLL, 'sides': []}
+                        for k in k_slice:
+                            arb['sides'].append({'sel': k, 'pr': outs[k]['price'], 'bk': outs[k]['bookie'], 'stk': (TOTAL_BANKROLL/margin)/outs[k]['price']})
+                        all_arbs.append(arb)
+
+    all_evs.sort(key=lambda x: x['pct'], reverse=True)
+    all_arbs.sort(key=lambda x: x['pct'], reverse=True)
+    return all_evs, all_arbs
+
+# ==========================================
+#  WEBSITE GENERATOR
+# ==========================================
+def generate_web(evs, arbs):
+    ist_now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+    build_time = ist_now.strftime('%d %b %Y, %I:%M %p IST')
+   
+    # Generate API Cards
+    net_html = ""
+    for idx, key in enumerate(API_KEYS):
+        masked = f"{key[:4]}••••{key[-4:]}" if len(key) > 8 else "Invalid"
+        rem = api_state.get('stats', {}).get(str(idx), {}).get('remaining', 500)
+        status = "ACTIVE" if idx == api_state.get('active_index', 0) else ("EXHAUSTED" if rem == 0 else "STANDBY")
+        color = "#06b6d4" if status == "ACTIVE" else ("#ef4444" if status == "EXHAUSTED" else "#10b981")
+        net_html += f"""
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid {color}; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">{masked}</strong>
+                <span style="font-size:10px; font-weight:bold; color:{color};">{status}</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">{rem}/500</strong></div>
+        </div>"""
+
+    # Generate EV Cards
+    ev_html = ""
+    for e in evs[:50]: # Show top 50 to prevent massive files during test
+        ev_html += f"""
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 {e['sport']} &nbsp;|&nbsp; 📅 {e['time']}</span>
+                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">{e['pct']:.2f}% EV</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">{e['home']} <span style="font-size:12px; color:#a1a1aa;">vs</span> {e['away']}</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">{e['line']}</strong></div>
+               
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
+                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">{e['sel'].upper()} @ {e['odds']:.2f}</strong></div>
+                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">{e['bk'].title().replace('_',' ')}</div>
+                </div>
+               
+                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
+                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹{e['stk']:.0f}</strong></div>
+                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">{e['trueO']:.3f} | {e['conf']}/100</strong></div>
+                </div>
+            </div>
+        </div>"""
+
+    # Generate ARB Cards
+    arb_html = ""
+    for a in arbs[:50]: # Show top 50
+        legs_html = ""
+        for s in a['sides']:
+            legs_html += f"""
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>{s['sel'].upper()} @ <strong style="color:#f59e0b;">{s['pr']:.2f}</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">{s['bk'].title().replace('_',' ')}</span></span>
+                <strong style="color:#06b6d4;">₹{s['stk']:.0f}</strong>
+            </div>"""
+           
+        arb_html += f"""
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 {a['sport']} &nbsp;|&nbsp; 📅 {a['time']}</span>
+                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">{a['pct']:.2f}% ARB</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">{a['home']} <span style="font-size:12px; color:#a1a1aa;">vs</span> {a['away']}</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">{a['line']}</strong> ({a['ways']}-Way)</div>
+                {legs_html}
+                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹{a['profit']:.0f}</strong></div>
+            </div>
+        </div>"""
+
+    if not ev_html: ev_html = "<div style='text-align:center; padding:40px; color:#a1a1aa;'>No EV edges detected right now.</div>"
+    if not arb_html: arb_html = "<div style='text-align:center; padding:40px; color:#a1a1aa;'>No Arbitrage locks detected right now.</div>"
+
+    HTML = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta name="theme-color" content="#03050b">
-<title>ARB SNIPER ⚡ v__BUILD_VER__</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
-
+<title>ARB SNIPER | Auto-Terminal</title>
 <style>
-/* ═══════════════════════════════════════════════════
-   DESIGN TOKENS
-═══════════════════════════════════════════════════ */
-:root {
-  --bg:    #03050b;
-  --surf:  #080d14;
-  --surf2: #0c1320;
-  --surf3: #101929;
-  --b1: #141f2e;
-  --b2: #1a2840;
-  --b3: #223352;
-  --cyan:   #00d4ff;
-  --cyan2:  #0099bb;
-  --green:  #00e87a;
-  --green2: #00b55f;
-  --gold:   #ffc800;
-  --gold2:  #cc9f00;
-  --red:    #ff2d4e;
-  --red2:   #cc1f3b;
-  --purple: #b76fff;
-  --orange: #ff8800;
-  --blue:   #4d9fff;
-  --text:  #d8e8f8;
-  --text2: #7a98b8;
-  --text3: #3d5870;
-}
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { font-size: 14px; scroll-behavior: smooth; }
-body {
-  font-family: 'Syne', sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  min-height: 100vh;
-  overflow-x: hidden;
-}
-button { font-family: inherit; cursor: pointer; }
-input  { font-family: inherit; }
-
-/* Ambient grid */
-body::before {
-  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
-  background-image:
-    linear-gradient(rgba(0,212,255,.016) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,212,255,.016) 1px, transparent 1px);
-  background-size: 40px 40px;
-}
-body::after {
-  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
-  background:
-    radial-gradient(ellipse 70% 55% at  8% 15%, #00d4ff07, transparent 55%),
-    radial-gradient(ellipse 55% 60% at 92% 80%, #00e87a05, transparent 55%),
-    radial-gradient(ellipse 45% 45% at 50% 50%, #b76fff04, transparent 65%);
-  animation: ambPulse 16s ease-in-out infinite alternate;
-}
-@keyframes ambPulse { from { opacity: .45; } to { opacity: 1; } }
-
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--b3); border-radius: 2px; }
-
-.wrap { position: relative; z-index: 1; max-width: 940px; margin: 0 auto; padding: 0 14px 100px; }
-
-/* ═══════════════════════════════════════════════════
-   LOCK SCREEN
-═══════════════════════════════════════════════════ */
-#lockScreen {
-  position: fixed; inset: 0; z-index: 9999;
-  background: var(--bg);
-  display: none;
-  flex-direction: column; align-items: center; justify-content: center;
-  gap: 16px; padding: 24px;
-}
-.lock-bg {
-  position: absolute; inset: 0; pointer-events: none;
-  background-image:
-    linear-gradient(rgba(0,212,255,.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,212,255,.018) 1px, transparent 1px);
-  background-size: 40px 40px;
-}
-.lock-glow {
-  position: absolute; inset: 0; pointer-events: none;
-  background:
-    radial-gradient(ellipse 60% 60% at 50% 40%, #00d4ff08, transparent 60%),
-    radial-gradient(ellipse 50% 50% at 50% 80%, #b76fff06, transparent 55%);
-}
-.lock-body {
-  position: relative; z-index: 1;
-  display: flex; flex-direction: column; align-items: center; gap: 14px;
-  width: 100%;
-}
-.lock-icon {
-  font-size: 52px;
-  animation: iconGlow 3s ease-in-out infinite;
-  filter: drop-shadow(0 0 18px #00d4ff55);
-}
-.lock-logo {
-  font-size: 24px; font-weight: 800; letter-spacing: 1.5px;
-  background: linear-gradient(90deg, var(--cyan), var(--green));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-.lock-sub {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9px; letter-spacing: 3px; color: var(--text3);
-  text-transform: uppercase;
-}
-.lock-inp {
-  background: var(--surf2); border: 1px solid var(--b2);
-  border-radius: 12px; padding: 14px 20px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 16px; font-weight: 700; color: var(--text);
-  outline: none; text-align: center; letter-spacing: 6px;
-  width: min(300px, 84vw);
-  transition: border-color .2s, box-shadow .2s;
-}
-.lock-inp:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px #00d4ff16; }
-.lock-inp.shake { animation: shake .4s ease; border-color: var(--red) !important; }
-@keyframes shake {
-  0%,100% { transform: translateX(0); }
-  20%,60% { transform: translateX(-7px); }
-  40%,80% { transform: translateX(7px); }
-}
-.lock-btn {
-  background: linear-gradient(135deg, var(--cyan), var(--green));
-  border: none; color: #000;
-  padding: 13px 0; border-radius: 12px;
-  font-family: 'Syne', sans-serif;
-  font-size: 14px; font-weight: 800; letter-spacing: .6px;
-  cursor: pointer; width: min(300px, 84vw);
-  transition: all .2s;
-  box-shadow: 0 4px 22px #00d4ff22;
-}
-.lock-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 32px #00d4ff33; }
-.lock-err {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px; color: var(--red);
-  letter-spacing: 1px; min-height: 16px;
-  animation: fadeIn .25s ease;
-}
-.lock-ver {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9px; color: var(--b3); letter-spacing: 1px;
-  margin-top: 8px;
-}
-
-/* ═══════════════════════════════════════════════════
-   HEADER
-═══════════════════════════════════════════════════ */
-.hdr {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 0 12px; border-bottom: 1px solid var(--b2); gap: 12px; flex-wrap: wrap;
-}
-.hdr-brand { display: flex; align-items: center; gap: 12px; }
-.brand-icon {
-  width: 40px; height: 40px;
-  background: linear-gradient(135deg, #00d4ff18, #00e87a0e);
-  border: 1px solid var(--cyan); border-radius: 12px;
-  display: flex; align-items: center; justify-content: center; font-size: 19px;
-  box-shadow: 0 0 22px #00d4ff1e; flex-shrink: 0;
-  animation: iconGlow 3s ease-in-out infinite;
-}
-@keyframes iconGlow {
-  0%,100% { box-shadow: 0 0 22px #00d4ff1e; }
-  50%      { box-shadow: 0 0 42px #00d4ff3a; }
-}
-.brand-name {
-  font-size: 20px; font-weight: 800; letter-spacing: .7px;
-  background: linear-gradient(90deg, var(--cyan), var(--green));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  background-clip: text; line-height: 1;
-}
-.brand-sub  { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 2.5px; color: var(--text3); text-transform: uppercase; margin-top: 2px; }
-.brand-ver  { font-family: 'JetBrains Mono', monospace; font-size: 8px; color: var(--b3); margin-top: 1px; }
-
-.ticker {
-  display: flex; align-items: center; gap: 16px;
-  font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text3); flex-wrap: wrap;
-}
-.tk { display: flex; align-items: center; gap: 5px; }
-.tv { font-weight: 700; }
-.tv.c { color: var(--cyan); }   .tv.g { color: var(--green); }
-.tv.gold { color: var(--gold); } .tv.r { color: var(--red); }
-
-.pip {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--green); box-shadow: 0 0 8px var(--green);
-  animation: pipAnim 1.5s ease-in-out infinite;
-}
-@keyframes pipAnim { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.6)} }
-
-.logout-btn {
-  background: rgba(255,45,78,.1); border: 1px solid rgba(255,45,78,.3);
-  color: var(--red); padding: 4px 11px; border-radius: 6px;
-  font-family: 'JetBrains Mono', monospace; font-size: 9px;
-  font-weight: 700; letter-spacing: 1.2px; cursor: pointer;
-  transition: all .2s;
-}
-.logout-btn:hover { background: rgba(255,45,78,.2); border-color: var(--red); }
-
-/* ═══════════════════════════════════════════════════
-   AI REPORT PANEL
-═══════════════════════════════════════════════════ */
-.ai-panel {
-  background: linear-gradient(135deg, rgba(255,200,0,.06), rgba(255,136,0,.03));
-  border: 1px solid rgba(255,200,0,.22);
-  border-radius: 14px; padding: 14px 17px;
-  margin: 13px 0; position: relative; overflow: hidden;
-  animation: slideDown .5s .2s ease both;
-}
-.ai-panel::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, var(--gold), var(--orange), var(--gold));
-}
-.ai-label {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 8px; letter-spacing: 2.5px; color: var(--gold2);
-  text-transform: uppercase; margin-bottom: 8px;
-  display: flex; align-items: center; gap: 7px;
-}
-.ai-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--gold); box-shadow: 0 0 8px var(--gold);
-  animation: pipAnim 2s ease-in-out infinite;
-}
-.ai-text {
-  font-size: 13px; color: var(--text2); line-height: 1.65; font-style: italic;
-}
-
-/* ═══════════════════════════════════════════════════
-   CONFIG PANEL
-═══════════════════════════════════════════════════ */
-.cfg {
-  background: var(--surf); border: 1px solid var(--b2);
-  border-radius: 16px; padding: 18px 20px; margin: 14px 0;
-  position: relative; overflow: hidden;
-  animation: slideDown .45s ease both;
-}
-.cfg::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, var(--cyan), var(--green), var(--gold));
-}
-@keyframes slideDown { from{opacity:0;transform:translateY(-12px)} to{opacity:1;transform:translateY(0)} }
-
-.cfg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-@media(max-width:580px){ .cfg-grid { grid-template-columns: 1fr; } }
-.cfg-g { display: flex; flex-direction: column; gap: 6px; }
-.cfg-g.wide { grid-column: 1/-1; }
-
-.lbl {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9px; font-weight: 700; letter-spacing: 2px;
-  text-transform: uppercase; color: var(--text3);
-}
-.inp {
-  background: var(--surf2); border: 1px solid var(--b2); border-radius: 9px;
-  padding: 9px 12px; font-family: 'JetBrains Mono', monospace;
-  font-size: 13px; font-weight: 600; color: var(--text);
-  outline: none; transition: border-color .2s, box-shadow .2s; width: 100%;
-}
-.inp:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px #00d4ff14; }
-.inp.gold   { color: var(--gold); }
-.inp.gold:focus { border-color: var(--gold); box-shadow: 0 0 0 2px #ffc80014; }
-
-.key-status {
-  display: flex; align-items: center; gap: 10px;
-  background: var(--surf2); border: 1px solid var(--b2);
-  border-radius: 9px; padding: 9px 13px; min-height: 40px;
-}
-.key-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--green); box-shadow: 0 0 10px var(--green);
-  flex-shrink: 0; transition: background .3s, box-shadow .3s;
-}
-.key-msg {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px; font-weight: 600; color: var(--green); transition: color .3s;
-}
-
-.cfg-foot { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
-.slider-g { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 170px; }
-.slider {
-  flex: 1; -webkit-appearance: none; height: 4px; border-radius: 2px;
-  outline: none; cursor: pointer;
-  background: linear-gradient(90deg, var(--cyan) var(--p,30%), var(--b2) var(--p,30%));
-}
-.slider::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
-  background: var(--bg); border: 2px solid var(--cyan);
-  box-shadow: 0 0 10px var(--cyan); cursor: pointer; transition: transform .15s;
-}
-.slider::-webkit-slider-thumb:active { transform: scale(1.3); }
-.kelly-v {
-  font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 800;
-  color: var(--cyan); text-shadow: 0 0 12px var(--cyan); min-width: 44px; text-align: right;
-}
-.al-lbl {
-  display: flex; align-items: center; gap: 6px; cursor: pointer;
-  user-select: none; white-space: nowrap;
-  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
-  letter-spacing: 1.5px; color: var(--text3); transition: color .2s;
-}
-.al-lbl:hover { color: var(--cyan); }
-.al-lbl input { width: 14px; height: 14px; accent-color: var(--cyan); cursor: pointer; }
-.loop-cd {
-  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
-  color: var(--gold); min-width: 68px; display: none;
-}
-
-/* ═══════════════════════════════════════════════════
-   BUTTONS
-═══════════════════════════════════════════════════ */
-.btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 10px 18px; border-radius: 10px; border: 1px solid;
-  font-size: 13px; font-weight: 700; cursor: pointer;
-  transition: all .2s ease; white-space: nowrap;
-  position: relative; overflow: hidden;
-}
-.btn::after {
-  content: ''; position: absolute; top:-50%; left:-70%; width:40%; height:200%;
-  background: linear-gradient(105deg,transparent,rgba(255,255,255,.055),transparent);
-  transform: skewX(-20deg); transition: left .5s ease;
-}
-.btn:hover::after { left: 140%; }
-.btn:disabled { opacity: .35; cursor: not-allowed; }
-.btn:active:not(:disabled) { transform: scale(.97); }
-.btn-c { background:linear-gradient(135deg,#00d4ff14,#00e87a0e); border-color:var(--cyan); color:var(--cyan); text-shadow:0 0 12px var(--cyan); box-shadow:0 0 16px #00d4ff0e,inset 0 1px 0 #00d4ff1c; }
-.btn-c:hover:not(:disabled) { background:linear-gradient(135deg,#00d4ff22,#00e87a16); box-shadow:0 0 28px #00d4ff22; transform:translateY(-1px); }
-.btn-r { background:linear-gradient(135deg,#ff2d4e14,#ff880010); border-color:var(--red); color:var(--red); text-shadow:0 0 10px var(--red); }
-.btn-r:hover:not(:disabled) { background:linear-gradient(135deg,#ff2d4e22,#ff880018); transform:translateY(-1px); }
-.btn-gold { background:linear-gradient(135deg,#ffc80014,#ff880010); border-color:var(--gold); color:var(--gold); text-shadow:0 0 10px var(--gold); }
-.btn-gold:hover:not(:disabled) { background:linear-gradient(135deg,#ffc80022,#ff880018); transform:translateY(-1px); }
-.btn-sm { padding:7px 13px; font-size:12px; border-radius:7px; }
-
-/* ═══════════════════════════════════════════════════
-   SCAN BAR
-═══════════════════════════════════════════════════ */
-.scan-bar { background:var(--surf); border:1px solid var(--b2); border-radius:12px; padding:12px 16px; margin-bottom:14px; display:none; animation:slideDown .3s ease both; }
-.scan-bar.on { display:block; }
-.scan-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:8px; }
-.scan-sport { font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; color:var(--cyan); letter-spacing:1px; }
-.scan-pct   { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text3); }
-.prog-track { height:3px; background:var(--b2); border-radius:2px; overflow:hidden; }
-.prog-fill  { height:100%; border-radius:2px; background:linear-gradient(90deg,var(--cyan),var(--green)); box-shadow:0 0 10px var(--cyan); transition:width .4s cubic-bezier(.4,0,.2,1); }
-.scan-log   { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text3); margin-top:8px; max-height:58px; overflow-y:auto; line-height:1.8; }
-.ll { animation:fadeIn .25s ease; }
-.lok{color:var(--green)}.lerr{color:var(--red)}.linf{color:var(--cyan)}.lwarn{color:var(--gold)}
-@keyframes fadeIn { from{opacity:0}to{opacity:1} }
-
-/* ═══════════════════════════════════════════════════
-   TABS
-═══════════════════════════════════════════════════ */
-.tabs {
-  display:flex; gap:3px; background:var(--surf); border:1px solid var(--b1);
-  border-radius:12px; padding:4px; margin-bottom:16px;
-  animation:slideDown .45s .1s ease both; overflow-x:auto;
-}
-.tab { flex:1; min-width:0; text-align:center; padding:9px 6px; font-size:12px; font-weight:700; color:var(--text3); cursor:pointer; border-radius:8px; transition:all .2s; user-select:none; white-space:nowrap; }
-.tab:hover { color:var(--text2); background:var(--surf2); }
-.tab.ev.on  { color:#000; background:linear-gradient(135deg,#00d4ff,#009ec0); box-shadow:0 2px 16px #00d4ff44; }
-.tab.arb.on { color:#000; background:linear-gradient(135deg,#b76fff,#7c1ede); box-shadow:0 2px 16px #b76fff44; }
-.tab.calc.on{ color:#000; background:linear-gradient(135deg,#ffc800,#ff8800); box-shadow:0 2px 16px #ffc80044; }
-.tab.an.on  { color:#000; background:linear-gradient(135deg,#00e87a,#00a85a); box-shadow:0 2px 16px #00e87a44; }
-.tab.net.on { color:#000; background:linear-gradient(135deg,#b76fff,#4d9fff); box-shadow:0 2px 16px #b76fff44; }
-.tbadge { display:inline-block; background:rgba(0,0,0,.22); border-radius:7px; padding:1px 6px; font-size:10px; margin-left:3px; font-weight:800; }
-.pane { display:none; }
-.pane.on { display:block; animation:fadeIn .3s ease; }
-
-/* ═══════════════════════════════════════════════════
-   CARDS
-═══════════════════════════════════════════════════ */
-.card {
-  background:var(--surf); border:1px solid var(--b1);
-  border-radius:16px; margin-bottom:14px; overflow:hidden;
-  position:relative; transition:border-color .2s,transform .18s,box-shadow .2s;
-  animation:cardIn .38s ease both;
-}
-.card:hover { border-color:var(--b3); transform:translateY(-2px); box-shadow:0 10px 36px #00000060; }
-@keyframes cardIn { from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)} }
-
-.stripe { height:2px; width:100%; background-size:200%!important; animation:shimmer 2.2s linear infinite; }
-.st-ev     { background:linear-gradient(90deg,var(--cyan),var(--green),var(--cyan)); }
-.st-arb    { background:linear-gradient(90deg,var(--purple),var(--cyan),var(--purple)); }
-.st-gold   { background:linear-gradient(90deg,var(--gold),var(--orange),var(--gold)); }
-.st-silver { background:linear-gradient(90deg,#94a3b8,#e2e8f0,#94a3b8); }
-.st-bronze { background:linear-gradient(90deg,#b56b27,#e8a870,#b56b27); }
-@keyframes shimmer { 0%{background-position:-200%}100%{background-position:200%} }
-
-.c-head { display:flex; align-items:flex-start; justify-content:space-between; padding:14px 16px 10px; gap:11px; }
-.c-head-l { display:flex; align-items:flex-start; gap:10px; flex:1; min-width:0; }
-.spt { font-size:22px; flex-shrink:0; margin-top:1px; }
-.mtitle { font-size:14px; font-weight:700; color:var(--text); line-height:1.3; overflow-wrap:break-word; }
-.mmeta  { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text3); margin-top:2px; letter-spacing:.4px; }
-.ev-badge { font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:800; border:1px solid currentColor; border-radius:9px; padding:5px 12px; min-width:78px; text-align:center; background:rgba(0,0,0,.28); flex-shrink:0; line-height:1.1; }
-.arb-badge { display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0; }
-.arb-pct  { font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:800; }
-.ways-pill { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; padding:2px 8px; border-radius:6px; border:1px solid; letter-spacing:1px; }
-
-.c-body { padding:0 16px 15px; }
-
-/* Match actions row (countdown + copy) */
-.match-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
-.countdown {
-  font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:700;
-  padding:3px 9px; border-radius:6px;
-  background:rgba(0,0,0,.28); border:1px solid var(--b2); color:var(--text3);
-  transition:color .3s, border-color .3s;
-}
-.countdown.live { color:var(--red); border-color:rgba(255,45,78,.4); animation:pipAnim .9s ease-in-out infinite; }
-.copy-btn {
-  font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:700;
-  letter-spacing:1px; padding:3px 9px; border-radius:6px;
-  background:rgba(0,0,0,.28); border:1px solid var(--b2);
-  color:var(--text3); cursor:pointer; transition:all .2s;
-}
-.copy-btn:hover   { border-color:var(--cyan); color:var(--cyan); }
-.copy-btn.copied  { border-color:var(--green); color:var(--green); }
-
-.chip { display:inline-block; font-family:'JetBrains Mono',monospace; font-size:10px; padding:3px 10px; border-radius:14px; border:1px solid; letter-spacing:1px; margin-bottom:10px; }
-.chip-ev  { background:#00d4ff0c; border-color:#00d4ff26; color:var(--cyan); }
-.chip-arb { background:#b76fff0c; border-color:#b76fff26; color:var(--purple); }
-
-.bet-box { display:flex; align-items:center; justify-content:space-between; background:var(--surf2); border:1px solid var(--b1); border-radius:9px; padding:10px 14px; margin-bottom:10px; gap:8px; flex-wrap:wrap; }
-.bet-l   { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.blbl    { font-family:'JetBrains Mono',monospace; font-size:8px; letter-spacing:2px; color:var(--text3); }
-.bsel    { font-size:15px; font-weight:800; letter-spacing:.4px; }
-.bpt     { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text2); }
-.bodds   { font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:var(--gold); text-shadow:0 0 8px #ffc80055; }
-.book-tag { background:linear-gradient(135deg,#ffc80010,#ff880008); border:1px solid #ffc80026; color:var(--gold); font-size:11px; font-weight:700; padding:3px 10px; border-radius:7px; white-space:nowrap; }
-
-.mrow { display:flex; gap:10px; margin-bottom:10px; }
-.mbox { flex:1; background:var(--surf2); border:1px solid var(--b1); border-radius:9px; padding:9px 12px; }
-.mlbl { font-family:'JetBrains Mono',monospace; font-size:8px; letter-spacing:1.5px; color:var(--text3); display:block; margin-bottom:2px; text-transform:uppercase; }
-.mval { font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:800; display:block; transition:all .25s; }
-.sv { color:var(--gold); text-shadow:0 0 16px #ffc80050; }
-.tv2{ color:var(--text2); font-size:17px !important; }
-.pv { color:var(--green); text-shadow:0 0 16px #00e87a50; }
-
-.crow { display:flex; align-items:center; gap:8px; margin-bottom:7px; flex-wrap:wrap; }
-.cbar-out { display:flex; align-items:center; gap:7px; flex:1; min-width:140px; }
-.ctag   { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:800; letter-spacing:1px; min-width:30px; }
-.ctrack { flex:1; height:5px; background:var(--b2); border-radius:3px; overflow:hidden; }
-.cfill  { height:100%; border-radius:3px; animation:barFill .8s ease both; }
-@keyframes barFill { from{width:0!important} }
-.cscore { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:800; min-width:22px; text-align:right; }
-
-.bd-wrap { margin-top:9px; border:1px solid var(--b1); border-radius:9px; overflow:hidden; }
-.bd-tbl  { width:100%; border-collapse:collapse; font-size:11px; }
-.bd-tbl th { font-family:'JetBrains Mono',monospace; font-size:8px; letter-spacing:1.5px; color:var(--text3); padding:7px 12px; text-align:left; background:var(--surf2); text-transform:uppercase; }
-.bd-tbl td { padding:6px 12px; border-top:1px solid var(--b1); color:var(--text2); }
-.bd-tbl tr:hover td { background:var(--surf2); }
-.bk-best td { color:var(--cyan)!important; font-weight:700; }
-
-.legs { background:var(--surf2); border:1px solid var(--b1); border-radius:9px; overflow:hidden; margin-bottom:10px; }
-.leg  { display:grid; grid-template-columns:1fr auto auto auto; gap:10px; align-items:center; padding:10px 14px; border-bottom:1px solid var(--b1); }
-.leg:last-child { border-bottom:none; }
-.lsel  { font-size:13px; font-weight:800; }
-.lodds { font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; color:var(--gold); }
-.lstake{ font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:800; color:var(--cyan); text-shadow:0 0 8px #00d4ff50; transition:all .25s; }
-.lbook { font-size:10px; color:var(--text3); background:var(--surf); border:1px solid var(--b2); padding:2px 8px; border-radius:5px; white-space:nowrap; }
-
-.prof-banner { display:flex; align-items:center; justify-content:space-between; background:linear-gradient(135deg,#00e87a0c,#00d4ff06); border:1px solid #00e87a26; border-radius:9px; padding:12px 16px; }
-.pb-lbl { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:2px; color:var(--text3); }
-.pb-val { font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:800; color:var(--green); text-shadow:0 0 20px #00e87a60; }
-
-/* ═══════════════════════════════════════════════════
-   EMPTY STATES
-═══════════════════════════════════════════════════ */
-.empty { text-align:center; padding:60px 20px; background:var(--surf); border:1px dashed var(--b2); border-radius:16px; animation:cardIn .4s ease both; }
-.ei { font-size:48px; margin-bottom:14px; opacity:.3; animation:float 3s ease-in-out infinite; }
-@keyframes float { 0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)} }
-.et { font-size:15px; font-weight:700; color:var(--text2); margin-bottom:5px; }
-.es { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text3); letter-spacing:1px; }
-
-/* ═══════════════════════════════════════════════════
-   CALC TAB
-═══════════════════════════════════════════════════ */
-.calc-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-@media(max-width:550px){ .calc-grid { grid-template-columns:1fr; } }
-.calc-card { background:var(--surf); border:1px solid var(--b2); border-radius:16px; padding:18px; animation:cardIn .4s ease both; }
-.cc-title  { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--text3); margin-bottom:14px; display:flex; align-items:center; gap:7px; }
-.cc-title::before { content:''; flex:1; height:1px; background:var(--b2); }
-.cf { margin-bottom:10px; }
-.ci { background:var(--surf2); border:1px solid var(--b2); border-radius:7px; padding:8px 11px; font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:600; color:var(--text); outline:none; transition:border-color .2s,box-shadow .2s; width:100%; }
-.ci:focus { border-color:var(--cyan); box-shadow:0 0 0 2px #00d4ff12; }
-.rg  { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
-.rb  { background:var(--surf2); border:1px solid var(--b1); border-radius:9px; padding:9px 11px; }
-.rl  { font-family:'JetBrains Mono',monospace; font-size:8px; letter-spacing:1.5px; color:var(--text3); display:block; margin-bottom:3px; }
-.rv  { font-family:'JetBrains Mono',monospace; font-size:17px; font-weight:800; display:block; }
-.rdiv{ grid-column:1/-1; height:1px; background:var(--b1); }
-.full{ grid-column:1/-1; }
-
-/* ═══════════════════════════════════════════════════
-   ANALYTICS TAB
-═══════════════════════════════════════════════════ */
-.kpi-row { display:flex; gap:10px; overflow-x:auto; margin-bottom:14px; padding-bottom:3px; scrollbar-width:thin; }
-.kpi { background:var(--surf); border:1px solid var(--b2); border-radius:12px; padding:13px 15px; flex:1; min-width:108px; text-align:center; animation:cardIn .4s ease both; transition:all .2s; }
-.kpi:hover { border-color:var(--b3); transform:translateY(-2px); }
-.ki  { font-family:'JetBrains Mono',monospace; font-size:10px; margin-bottom:4px; opacity:.8; }
-.kv  { font-family:'JetBrains Mono',monospace; font-size:18px; font-weight:800; line-height:1.1; margin-bottom:3px; }
-.kl  { font-size:10px; color:var(--text3); font-family:'JetBrains Mono',monospace; }
-.an-row  { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
-@media(max-width:560px){ .an-row { grid-template-columns:1fr; } }
-.an-card { background:var(--surf); border:1px solid var(--b1); border-radius:14px; padding:17px; animation:cardIn .4s ease both; }
-.an-title{ font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:2px; color:var(--text3); text-transform:uppercase; margin-bottom:14px; }
-.hrow { display:flex; align-items:center; gap:7px; margin-bottom:9px; }
-.hlbl { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--text3); width:35px; flex-shrink:0; }
-.htrack { flex:1; height:12px; background:var(--b2); border-radius:6px; overflow:hidden; }
-.hbar   { height:100%; border-radius:6px; animation:barFill .8s ease both; min-width:2px; }
-.hcnt   { font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; color:var(--text2); width:18px; text-align:right; }
-.brow   { display:flex; align-items:center; gap:7px; margin-bottom:8px; }
-.blbl2  { font-size:11px; color:var(--text2); width:88px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.btrack { flex:1; height:10px; background:var(--b2); border-radius:5px; overflow:hidden; }
-.bfill  { height:100%; border-radius:5px; animation:barFill .8s ease both; }
-.bcnt   { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text3); min-width:50px; text-align:right; }
-.mini-stats { display:flex; border-top:1px solid var(--b1); padding-top:10px; margin-top:10px; }
-.ms { flex:1; text-align:center; }  .ms+.ms { border-left:1px solid var(--b1); }
-.msl { font-family:'JetBrains Mono',monospace; font-size:8px; letter-spacing:1px; color:var(--text3); display:block; margin-bottom:2px; }
-.msv { font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:800; }
-.donut-wrap { display:flex; align-items:center; justify-content:center; gap:20px; padding:8px 0; }
-.donut { width:76px; height:76px; border-radius:50%; flex-shrink:0; background:conic-gradient(var(--cyan) var(--tw,50%),var(--purple) var(--tw,50%)); box-shadow:0 0 22px #00d4ff18; position:relative; }
-.donut::after { content:''; position:absolute; inset:15px; background:var(--surf); border-radius:50%; }
-.dl  { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-.dld { width:9px; height:9px; border-radius:3px; flex-shrink:0; }
-.dll { font-size:12px; color:var(--text2); flex:1; }
-.dlv { font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:800; }
-
-/* ═══════════════════════════════════════════════════
-   NETWORK TAB
-═══════════════════════════════════════════════════ */
-.net-sect  { margin-bottom:14px; }
-.net-title { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--text3); margin-bottom:10px; }
-.net-desc  { font-size:12px; color:var(--text3); margin-bottom:14px; line-height:1.6; }
-.net-grid  { display:flex; flex-direction:column; gap:10px; }
-.loop-card { background:var(--surf); border:1px solid var(--b1); border-radius:12px; padding:17px; }
-.loop-msg  { font-family:'JetBrains Mono',monospace; font-size:13px; transition:color .3s; }
-.loop-meta { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:1px; color:var(--text3); margin-top:10px; line-height:1.8; }
-
-/* ═══════════════════════════════════════════════════
-   BANKROLL MODAL
-═══════════════════════════════════════════════════ */
-.modal { display:none; position:fixed; inset:0; z-index:999; background:rgba(3,5,11,.88); backdrop-filter:blur(10px); align-items:center; justify-content:center; }
-.modal.open { display:flex; animation:fadeIn .2s ease; }
-.mbox  { background:var(--surf); border:1px solid var(--b3); border-radius:20px; padding:28px 26px; width:min(360px,92vw); position:relative; box-shadow:0 0 70px #00d4ff12,0 28px 90px rgba(0,0,0,.8); animation:modalIn .28s ease both; }
-@keyframes modalIn { from{opacity:0;transform:scale(.91)translateY(-12px)}to{opacity:1;transform:scale(1)translateY(0)} }
-.mstripe { position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,var(--cyan),var(--green),var(--gold)); border-radius:20px 20px 0 0; }
-.mey   { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:3px; color:var(--text3); margin-bottom:5px; }
-.mttl  { font-size:20px; font-weight:800; margin-bottom:20px; }
-.mlbl  { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--text3); display:block; margin-bottom:7px; }
-.minp-w{ position:relative; margin-bottom:16px; }
-.mpfx  { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--gold); font-size:17px; font-weight:800; }
-.minp  { width:100%; background:var(--surf2); border:1px solid var(--b2); border-radius:10px; padding:11px 12px 11px 30px; font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:800; color:var(--gold); outline:none; transition:border-color .2s,box-shadow .2s; }
-.minp:focus { border-color:var(--gold); box-shadow:0 0 0 2px #ffc80016; }
-.mbr   { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
-.mnote { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--text3); text-align:center; margin-top:9px; }
-
-/* ═══════════════════════════════════════════════════
-   TELEMETRY & BUILD BAR
-═══════════════════════════════════════════════════ */
-.tele { margin-top:36px; padding:13px 18px; background:var(--surf); border:1px solid var(--b1); border-radius:12px; font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text3); letter-spacing:1px; display:flex; flex-wrap:wrap; gap:7px 20px; align-items:center; justify-content:center; position:relative; overflow:hidden; }
-.tele::before { content:''; position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,var(--b2),transparent); }
-.t3 { color:var(--cyan); font-weight:700; }
-.build-bar { text-align:center; margin-top:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--b3); letter-spacing:1px; }
-
-/* ═══════════════════════════════════════════════════
-   RESPONSIVE
-═══════════════════════════════════════════════════ */
-@media(max-width:480px){
-  .brand-name { font-size:17px; } .ev-badge,.arb-pct { font-size:17px; }
-  .leg { grid-template-columns:1fr auto auto; } .lbook { display:none; }
-  .ticker { display:none; } .kpi { min-width:90px; }
-}
+    body {{ background: #09090b; color: #f4f4f5; font-family: system-ui, -apple-system, sans-serif; padding: 15px; max-width: 800px; margin: auto; }}
+    .hdr {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; padding-bottom: 15px; margin-bottom: 20px; }}
+    .title {{ font-size: 24px; font-weight: 800; color: #06b6d4; margin:0; }}
+    .subtitle {{ font-size: 11px; color: #a1a1aa; font-family: monospace; }}
+    .time-badge {{ background: rgba(16,185,129,0.1); border: 1px solid #10b981; color: #10b981; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: bold; font-family: monospace; }}
+   
+    .tabs {{ display: flex; gap: 5px; background: #18181b; padding: 5px; border-radius: 10px; border: 1px solid #27272a; margin-bottom: 20px; }}
+    .tab {{ flex: 1; text-align: center; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; color: #a1a1aa; font-size: 13px; transition: 0.2s; }}
+    .tab.active {{ background: #3f3f46; color: #fff; }}
+    .pane {{ display: none; }} .pane.active {{ display: block; }}
 </style>
 </head>
 <body>
 
-<!-- ═══════════ LOCK SCREEN ═══════════
-     Displayed when DASHBOARD_PASS secret is set.
-     Completely hidden when PASS_HASH is empty string.
-     Uses browser SubtleCrypto — zero external dependencies.
- ═══════════════════════════════════════ -->
-<div id="lockScreen">
-  <div class="lock-bg"></div>
-  <div class="lock-glow"></div>
-  <div class="lock-body">
-    <div class="lock-icon">🔐</div>
-    <div class="lock-logo">ARB SNIPER</div>
-    <div class="lock-sub">Authorization Required</div>
-    <input class="lock-inp" type="password" id="lockPass"
-           placeholder="Enter access code"
-           onkeydown="if(event.key==='Enter')unlockDash()">
-    <button class="lock-btn" onclick="unlockDash()">ENTER SYSTEM</button>
-    <div class="lock-err" id="lockErr"></div>
-    <div class="lock-ver">v__BUILD_VER__ · __BUILD_TIME__ · SHA-256</div>
-  </div>
+<div class="hdr">
+    <div>
+        <h1 class="title">⚡ ARB SNIPER</h1>
+        <div class="subtitle">Cloud Scanning Active · Updates Every Hour</div>
+    </div>
+    <div class="time-badge">SYNCED: {build_time}</div>
 </div>
 
-<!-- ═══════════ BANKROLL MODAL ═══════════ -->
-<div class="modal" id="bkModal">
-  <div class="mbox">
-    <div class="mstripe"></div>
-    <div class="mey">Configure</div>
-    <div class="mttl">💰 Edit Bankroll</div>
-    <label class="mlbl">Total Bankroll (₹)</label>
-    <div class="minp-w">
-      <span class="mpfx">₹</span>
-      <input class="minp" id="bkIn" type="number" min="100" step="100" value="1500">
-    </div>
-    <div class="mbr">
-      <button class="btn btn-gold" onclick="saveBK()">💾 Apply</button>
-      <button class="btn btn-c" onclick="closeBK()">Cancel</button>
-    </div>
-    <div class="mnote">Saved in browser · instantly recalculates all Kelly stakes</div>
-  </div>
+<div class="tabs">
+    <div class="tab active" onclick="showPane('ev')">💎 EV Edges ({len(evs)})</div>
+    <div class="tab" onclick="showPane('arb')">🔒 Arbitrage ({len(arbs)})</div>
+    <div class="tab" onclick="showPane('net')">📡 API Network</div>
 </div>
 
-<!-- ═══════════ MAIN APP ═══════════ -->
-<div class="wrap">
+<div id="pane-ev" class="pane active">{ev_html}</div>
+<div id="pane-arb" class="pane">{arb_html}</div>
+<div id="pane-net" class="pane">{net_html}</div>
 
-  <!-- HEADER -->
-  <div class="hdr">
-    <div class="hdr-brand">
-      <div class="brand-icon">⚡</div>
-      <div>
-        <div class="brand-name">ARB SNIPER</div>
-        <div class="brand-sub">Quantitative Edge Terminal</div>
-        <div class="brand-ver">v__BUILD_VER__ · __BUILD_TIME__</div>
-      </div>
-    </div>
-    <div class="ticker">
-      <div class="tk"><div class="pip"></div><span id="tTime" class="tv c">--:-- IST</span></div>
-      <div class="tk">QUOTA <span id="tQuota" class="tv gold">--</span></div>
-      <div class="tk">EV <span id="tEV" class="tv g">0</span></div>
-      <div class="tk">ARB <span id="tARB" class="tv c">0</span></div>
-      <div class="tk">BURN <span id="tBurn" class="tv r">0</span></div>
-      <div class="tk" id="logoutWrap" style="display:none">
-        <button class="logout-btn" onclick="doLogout()">LOGOUT</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- GEMINI AI MARKET REPORT -->
-  <div class="ai-panel">
-    <div class="ai-label"><span class="ai-dot"></span>GEMINI 2.5 FLASH · AI MARKET INTELLIGENCE</div>
-    <div class="ai-text" id="aiText">__AI_REPORT__</div>
-  </div>
-
-  <!-- CONFIG PANEL -->
-  <div class="cfg">
-    <div class="cfg-grid">
-      <div class="cfg-g wide">
-        <label class="lbl">🔑 API Keys</label>
-        <div class="key-status">
-          <span class="key-dot" id="keyDot"></span>
-          <span class="key-msg" id="keyMsg">Checking keys…</span>
-        </div>
-      </div>
-      <div class="cfg-g">
-        <label class="lbl">💰 Bankroll (₹) <span style="color:var(--text3);cursor:pointer;font-size:10px;margin-left:4px" onclick="openBK()">✏️</span></label>
-        <input class="inp gold" id="cfgBK" type="number" value="1500" min="100" step="100" oninput="onBKChange()">
-      </div>
-      <div class="cfg-g">
-        <label class="lbl">📡 Bookmakers</label>
-        <input class="inp" id="cfgBooks" value="pinnacle,onexbet,marathonbet,dafabet,stake,betfair_ex_eu,betway">
-      </div>
-      <div class="cfg-g">
-        <label class="lbl">⚡ Min EV %</label>
-        <input class="inp" id="cfgEV" type="number" value="1.5" step="0.1" min="0">
-      </div>
-      <div class="cfg-g">
-        <label class="lbl">🔒 Min ARB %</label>
-        <input class="inp" id="cfgARB" type="number" value="1.0" step="0.1" min="0">
-      </div>
-      <div class="cfg-g wide">
-        <label class="lbl">🔔 NTFY Push Channel → Phone</label>
-        <input class="inp" id="cfgNtfy" value="nikunj_arb_alerts_2026" placeholder="your_ntfy_channel_name">
-      </div>
-    </div>
-    <div class="cfg-foot">
-      <div class="slider-g">
-        <span class="lbl">KELLY</span>
-        <input type="range" class="slider" id="kellyR" min="1" max="100" value="30"
-               oninput="onKelly(this.value)" style="--p:30%">
-        <span class="kelly-v" id="kellyV">30%</span>
-      </div>
-      <label class="al-lbl">
-        <input type="checkbox" id="autoLoop"> AUTO-LOOP
-      </label>
-      <span class="loop-cd" id="loopCd"></span>
-      <button class="btn btn-c"    id="btnStart" onclick="startScan()">▶ Start Sweep</button>
-      <button class="btn btn-r"    id="btnStop"  onclick="stopScan(true)" style="display:none">⏹ Stop</button>
-      <button class="btn btn-gold btn-sm" onclick="exportCSV()">⬇ CSV</button>
-    </div>
-  </div>
-
-  <!-- SCAN BAR -->
-  <div class="scan-bar" id="scanBar">
-    <div class="scan-top">
-      <span class="scan-sport" id="scanSport">Initializing…</span>
-      <span class="scan-pct"   id="scanPct">0/6</span>
-    </div>
-    <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0"></div></div>
-    <div class="scan-log" id="scanLog"></div>
-  </div>
-
-  <!-- TABS -->
-  <div class="tabs">
-    <div class="tab ev on"  id="tab-ev"   onclick="switchTab('ev')">  ⚡ EV  <span class="tbadge" id="bEV">0</span></div>
-    <div class="tab arb"    id="tab-arb"  onclick="switchTab('arb')"> 🔒 ARB <span class="tbadge" id="bARB">0</span></div>
-    <div class="tab calc"   id="tab-calc" onclick="switchTab('calc')">🧮 Calc</div>
-    <div class="tab an"     id="tab-an"   onclick="switchTab('an')">  📊 Analytics</div>
-    <div class="tab net"    id="tab-net"  onclick="switchTab('net')"> 📡 Network</div>
-  </div>
-
-  <!-- EV PANE -->
-  <div class="pane on" id="pane-ev">
-    <div style="display:flex;gap:8px;margin-bottom:11px;flex-wrap:wrap">
-      <button class="btn btn-sm" id="top5Btn"     onclick="toggleTop5()"  style="background:var(--surf);border-color:var(--b2);color:var(--text2)">🔝 Top 5</button>
-      <button class="btn btn-sm" id="sortBtn"     onclick="toggleSort()"  style="background:var(--surf);border-color:var(--b2);color:var(--text2)">↕ Sort EV%</button>
-      <button class="btn btn-sm" id="filterHCBtn" onclick="toggleHC()"    style="background:var(--surf);border-color:var(--b2);color:var(--text2)">🎯 High Conf</button>
-    </div>
-    <div id="ev-cards"></div>
-  </div>
-
-  <!-- ARB PANE -->
-  <div class="pane" id="pane-arb">
-    <div style="display:flex;gap:8px;margin-bottom:11px;flex-wrap:wrap">
-      <button class="btn btn-sm" id="arb3Btn"    onclick="toggleArb3()"    style="background:var(--surf);border-color:var(--b2);color:var(--text2)">🔱 3-Way Only</button>
-      <button class="btn btn-sm" id="arbSortBtn" onclick="toggleArbSort()" style="background:var(--surf);border-color:var(--b2);color:var(--text2)">↕ Sort ARB%</button>
-    </div>
-    <div id="arb-cards"></div>
-  </div>
-
-  <!-- CALC PANE -->
-  <div class="pane" id="pane-calc">
-    <div class="calc-grid">
-      <div class="calc-card">
-        <div class="cc-title">⚡ EV Calculator</div>
-        <div class="cf"><label class="lbl">Soft Book Odds</label><input class="ci" id="cSoft" type="number" step="0.01" value="2.10" oninput="calcEV()"></div>
-        <div class="cf"><label class="lbl">Pinnacle Side A</label><input class="ci" id="cPinA" type="number" step="0.01" value="1.95" oninput="calcEV()"></div>
-        <div class="cf"><label class="lbl">Pinnacle Side B</label><input class="ci" id="cPinB" type="number" step="0.01" value="2.08" oninput="calcEV()"></div>
-        <div class="rg">
-          <div class="rb"><span class="rl">TRUE ODDS</span>   <span class="rv" id="rTO" style="color:var(--text2)">--</span></div>
-          <div class="rb"><span class="rl">EV %</span>        <span class="rv" id="rEV" style="color:var(--cyan)">--</span></div>
-          <div class="rb"><span class="rl">KELLY STAKE</span> <span class="rv" id="rKS" style="color:var(--gold)">--</span></div>
-          <div class="rb"><span class="rl">CONFIDENCE</span>  <span class="rv" id="rCF" style="color:var(--green)">--</span></div>
-        </div>
-      </div>
-      <div class="calc-card">
-        <div class="cc-title">🔒 ARB Calculator</div>
-        <div class="cf"><label class="lbl">Side A Odds</label>               <input class="ci" id="cAA" type="number" step="0.01" value="2.15" oninput="calcARB()"></div>
-        <div class="cf"><label class="lbl">Side B Odds</label>               <input class="ci" id="cAB" type="number" step="0.01" value="2.10" oninput="calcARB()"></div>
-        <div class="cf"><label class="lbl">Side C (3-way, optional)</label>  <input class="ci" id="cAC" type="number" step="0.01" placeholder="leave blank" oninput="calcARB()"></div>
-        <div class="rg">
-          <div class="rb"><span class="rl">MARGIN</span><span class="rv" id="rAM" style="color:var(--text2)">--</span></div>
-          <div class="rb"><span class="rl">ARB %</span> <span class="rv" id="rAP" style="color:var(--purple)">--</span></div>
-          <div class="rb"><span class="rl">STAKE A</span><span class="rv" id="rAS" style="color:var(--cyan)">--</span></div>
-          <div class="rb"><span class="rl">STAKE B</span><span class="rv" id="rAB" style="color:var(--cyan)">--</span></div>
-          <div class="rdiv"></div>
-          <div class="rb full"><span class="rl">GUARANTEED PROFIT</span><span class="rv" id="rAG" style="color:var(--green);font-size:20px">--</span></div>
-        </div>
-      </div>
-      <div class="calc-card">
-        <div class="cc-title">💚 Green-Up / Hedge</div>
-        <div class="cf"><label class="lbl">Back Stake (₹)</label>    <input class="ci" id="gBS" type="number" value="500" oninput="calcGU()"></div>
-        <div class="cf"><label class="lbl">Back Odds</label>          <input class="ci" id="gBO" type="number" step="0.01" value="2.10" oninput="calcGU()"></div>
-        <div class="cf"><label class="lbl">Lay / Current Odds</label> <input class="ci" id="gLO" type="number" step="0.01" value="1.95" oninput="calcGU()"></div>
-        <div class="rg">
-          <div class="rb"><span class="rl">LAY STAKE</span>    <span class="rv" id="rGL" style="color:var(--cyan)">--</span></div>
-          <div class="rb"><span class="rl">GREEN PROFIT</span> <span class="rv" id="rGP" style="color:var(--green)">--</span></div>
-        </div>
-      </div>
-      <div class="calc-card">
-        <div class="cc-title">📐 Kelly Criterion</div>
-        <div class="cf"><label class="lbl">Win Probability (0–1)</label><input class="ci" id="kP" type="number" step="0.01" value="0.55" min="0.01" max="0.99" oninput="calcKelly()"></div>
-        <div class="cf"><label class="lbl">Decimal Odds</label>         <input class="ci" id="kO" type="number" step="0.01" value="2.10" oninput="calcKelly()"></div>
-        <div class="cf"><label class="lbl">Bankroll (₹)</label>          <input class="ci" id="kB" type="number" value="1500" oninput="calcKelly()"></div>
-        <div class="rg">
-          <div class="rb"><span class="rl">FULL KELLY %</span>      <span class="rv" id="rFK" style="color:var(--text2)">--</span></div>
-          <div class="rb"><span class="rl">FRAC 30%</span>          <span class="rv" id="rFR" style="color:var(--gold)">--</span></div>
-          <div class="rdiv"></div>
-          <div class="rb full"><span class="rl">RECOMMENDED STAKE</span><span class="rv" id="rKA" style="color:var(--green);font-size:20px">--</span></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ANALYTICS PANE -->
-  <div class="pane" id="pane-an">
-    <div class="kpi-row">
-      <div class="kpi"><div class="ki" style="color:var(--cyan)">⚡ EV</div>    <div class="kv" id="anTE"  style="color:var(--cyan)">0</div>    <div class="kl">Edges</div></div>
-      <div class="kpi"><div class="ki" style="color:var(--green)">AVG</div>     <div class="kv" id="anAE"  style="color:var(--green)">0%</div>   <div class="kl">Avg EV%</div></div>
-      <div class="kpi"><div class="ki" style="color:var(--gold)">PEAK</div>     <div class="kv" id="anPE"  style="color:var(--gold)">0%</div>    <div class="kl">Peak EV%</div></div>
-      <div class="kpi"><div class="ki" style="color:var(--purple)">🔒 ARB</div><div class="kv" id="anTA"  style="color:var(--purple)">0</div>   <div class="kl">ARB Opps</div></div>
-      <div class="kpi"><div class="ki" style="color:var(--green)">₹</div>       <div class="kv" id="anAP"  style="color:var(--green)">₹0</div>   <div class="kl">ARB Profit</div></div>
-      <div class="kpi"><div class="ki" style="color:var(--orange)">ROI</div>    <div class="kv" id="anROI" style="color:var(--orange)">0%</div>   <div class="kl">ARB ROI</div></div>
-    </div>
-    <div class="an-row">
-      <div class="an-card"><div class="an-title">⚡ EV Distribution</div>  <div id="anEH"></div><div class="mini-stats" id="anES"></div></div>
-      <div class="an-card"><div class="an-title">🔒 ARB Distribution</div> <div id="anAH"></div><div class="mini-stats" id="anAS"></div></div>
-    </div>
-    <div class="an-row">
-      <div class="an-card"><div class="an-title">⚽ EV by Sport</div>  <div id="anESP"></div></div>
-      <div class="an-card"><div class="an-title">🔒 ARB by Sport</div> <div id="anASP"></div></div>
-    </div>
-    <div class="an-row">
-      <div class="an-card"><div class="an-title">📚 Top EV Bookmakers</div><div id="anEB"></div></div>
-      <div class="an-card"><div class="an-title">🔗 Top ARB Pairs</div>    <div id="anAPR"></div></div>
-    </div>
-    <div class="an-row">
-      <div class="an-card">
-        <div class="an-title">📐 ARB Structure</div>
-        <div class="donut-wrap">
-          <div class="donut" id="anDonut"></div>
-          <div>
-            <div class="dl"><span class="dld" style="background:var(--cyan)"></span>  <span class="dll">2-Way</span><span class="dlv" id="an2w" style="color:var(--cyan)">0</span></div>
-            <div class="dl"><span class="dld" style="background:var(--purple)"></span><span class="dll">3-Way</span><span class="dlv" id="an3w" style="color:var(--purple)">0</span></div>
-          </div>
-        </div>
-        <div class="mini-stats" id="anAMeta"></div>
-      </div>
-      <div class="an-card"><div class="an-title">🎯 Confidence Spread</div><div id="anCS"></div></div>
-    </div>
-  </div>
-
-  <!-- NETWORK PANE -->
-  <div class="pane" id="pane-net">
-    <div class="net-sect">
-      <div class="net-title">📡 API Key Sequential Matrix</div>
-      <div class="net-desc">Keys are consumed in order. On 429 rate-limit or 401 rejection, the engine automatically fails over to the next key. Quota updates live after every sport fetch.</div>
-      <div class="net-grid" id="netGrid"></div>
-    </div>
-    <div class="loop-card">
-      <div class="net-title" style="margin-bottom:9px">⏱ Auto-Loop Engine</div>
-      <div class="loop-msg" id="loopStatusMsg">Auto-Loop is OFF — enable the checkbox next to Start Sweep.</div>
-      <div class="loop-meta">LOOP INTERVAL: 5 MIN &nbsp;·&nbsp; DEDUP CACHE TTL: 6 HRS<br>SESSION RESUME: ON PAGE RELOAD &nbsp;·&nbsp; STATE: localStorage</div>
-    </div>
-  </div>
-
-  <!-- TELEMETRY FOOTER -->
-  <div class="tele">
-    <span>🔑 KEYS <span class="t3" id="telKey">--</span></span>
-    <span>📡 QUOTA <span class="t3" id="telQ">--/500</span></span>
-    <span>⚡ BURN <span class="t3" id="telB">0</span></span>
-    <span>🏦 BANKROLL <span class="t3" id="telBK">₹1500</span></span>
-    <span>🔔 ALERTS <span class="t3" id="telAlerts">0</span></span>
-    <span>⏱ SCAN <span class="t3" id="telT">--</span></span>
-  </div>
-  <div class="build-bar">
-    ARB SNIPER v__BUILD_VER__ · BUILT __BUILD_TIME__ · GITHUB ACTIONS · PURE CLIENT-SIDE SPA
-  </div>
-
-</div><!-- /wrap -->
-
-<!-- ═══════════════════════════════════════════════════
-     JAVASCRIPT ENGINE
-     All fetching, math, rendering, and alerting run
-     entirely in the browser. Zero server round-trips.
-═══════════════════════════════════════════════════ -->
 <script>
-'use strict';
-
-/* ─────────────────────────────────────────────
-   INJECTED BY PYTHON AT BUILD TIME
-   These placeholders are replaced by .replace()
-   in the factory section below. Never edit index.html.
-───────────────────────────────────────────── */
-const API_KEYS  = __INJECTED_KEYS__;   // e.g. ["key1","key2"]
-const PASS_HASH = '__PASS_HASH__';     // SHA-256 hex or '' if disabled
-// AI report is injected directly into the DOM element — see #aiText below
-
-/* ─────────────────────────────────────────────
-   CONSTANTS
-───────────────────────────────────────────── */
-const SPORTS = [
-  {k:'soccer_epl',               l:'⚽ EPL'},
-  {k:'soccer_uefa_champs_league', l:'⚽ UCL'},
-  {k:'basketball_nba',           l:'🏀 NBA'},
-  {k:'icehockey_nhl',            l:'🏒 NHL'},
-  {k:'tennis_atp',               l:'🎾 ATP'},
-  {k:'tennis_wta',               l:'🎾 WTA'},
-];
-const CAPS = {betway:300,stake:500,onexbet:400,marathonbet:400,dafabet:350,betfair_ex_eu:600,pinnacle:1000};
-const BKNAMES = {onexbet:'1xBet',pinnacle:'Pinnacle',marathonbet:'Marathon',dafabet:'Dafabet',stake:'Stake.com',betfair_ex_eu:'Betfair',betway:'Betway'};
-const SICONS  = {soccer:'⚽',basketball:'🏀',icehockey:'🏒',tennis:'🎾',baseball:'⚾',football:'🏈'};
-
-/* ─────────────────────────────────────────────
-   APP STATE
-───────────────────────────────────────────── */
-let EVS=[], ARBS=[];
-let scanning=false, sportIdx=0, scanT0=null, creditT0=null;
-let keyIdx=0, quotaRem='--';
-const keyQuota={};
-let alertCount=0;
-let loopTick=null;
-let top5=false, sortOn=false, hcFilter=false, arb3=false, arbSort=false;
-
-/* ─────────────────────────────────────────────
-   UTILITIES
-───────────────────────────────────────────── */
-const $   = id => document.getElementById(id);
-const bk  = k  => BKNAMES[k] || k.replace(/_/g,' ');
-const si  = s  => { for(const[k,v]of Object.entries(SICONS))if(s.includes(k))return v; return'🎯'; };
-const fmt = n  => '₹'+Math.round(n).toLocaleString('en-IN');
-const fp  = n  => n.toFixed(2)+'%';
-const sleep=ms => new Promise(r=>setTimeout(r,ms));
-const getBK     = () => parseFloat($('cfgBK').value)  || 1500;
-const getKF     = () => parseFloat($('kellyR').value) / 100;
-const getMinEV  = () => parseFloat($('cfgEV').value)  || 1.5;
-const getMinARB = () => parseFloat($('cfgARB').value) || 1.0;
-const getBooks  = () => $('cfgBooks').value.split(',').map(s=>s.trim()).filter(Boolean);
-
-function IST(){
-  return new Date(Date.now()+5.5*36e5)
-    .toLocaleTimeString('en-IN',{hour12:true,timeZone:'UTC'});
-}
-function fmtIST(iso){
-  try{
-    return new Date(iso).toLocaleString('en-IN',{
-      timeZone:'Asia/Kolkata',day:'2-digit',month:'short',
-      hour:'2-digit',minute:'2-digit',hour12:true
-    });
-  }catch{return'?'}
-}
-
-/* ─────────────────────────────────────────────
-   MATH ENGINE
-───────────────────────────────────────────── */
-function devig(o1,o2){
-  const i1=1/o1,i2=1/o2,m=i1+i2;
-  return[1/(i1/m),1/(i2/m)];
-}
-function kelly(soft,trueO,bankroll,kf,book=null){
-  const b=soft-1,p=1/trueO,q=1-p;
-  let k=((b*p-q)/b)*kf;
-  if(k<=0)return 0;
-  if(k>.05)k=.05;
-  let s=Math.max(20,bankroll*k);
-  if(book&&CAPS[book])s=Math.min(s,CAPS[book]);
-  return s;
-}
-function confScore(soft,trueO){
-  return Math.max(0,Math.min(100,Math.round(Math.abs(1/soft-1/trueO)/(1/trueO)*500)));
-}
-
-/* ─────────────────────────────────────────────
-   LOCK SCREEN  (SHA-256 via SubtleCrypto — no CDN needed)
-───────────────────────────────────────────── */
-function initLock(){
-  if(!PASS_HASH){
-    // No password set → skip lock entirely
-    if($('logoutWrap'))$('logoutWrap').style.display='none';
-    return;
-  }
-  const saved=localStorage.getItem('arb_auth');
-  if(saved===PASS_HASH){
-    $('lockScreen').style.display='none';
-    $('logoutWrap').style.display='';
-    return;
-  }
-  $('lockScreen').style.display='flex';
-}
-
-async function unlockDash(){
-  const val=$('lockPass').value.trim();
-  if(!val){$('lockErr').textContent='Enter your access code.';return;}
-  try{
-    const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(val));
-    const hex=Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-    if(hex===PASS_HASH){
-      localStorage.setItem('arb_auth',PASS_HASH);
-      $('lockScreen').style.display='none';
-      $('logoutWrap').style.display='';
-      $('lockErr').textContent='';
-    } else {
-      $('lockErr').textContent='Access Denied — Invalid Code';
-      $('lockPass').value='';
-      $('lockPass').classList.add('shake');
-      setTimeout(()=>$('lockPass').classList.remove('shake'),450);
-      $('lockPass').focus();
-    }
-  }catch(e){
-    $('lockErr').textContent='Auth error: '+e.message;
-  }
-}
-
-function doLogout(){
-  localStorage.removeItem('arb_auth');
-  $('lockScreen').style.display='flex';
-  $('logoutWrap').style.display='none';
-  $('lockPass').value='';
-  $('lockErr').textContent='';
-  $('lockPass').focus();
-}
-
-/* ─────────────────────────────────────────────
-   COPY BET TO CLIPBOARD
-───────────────────────────────────────────── */
-function copyBet(btn,text){
-  const label=btn.textContent.includes('ARB')?'📋 COPY ARB':'📋 COPY BET';
-  const done=()=>{
-    btn.textContent='✅ COPIED';
-    btn.classList.add('copied');
-    setTimeout(()=>{btn.textContent=label;btn.classList.remove('copied');},2200);
-  };
-  if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(done).catch(()=>{
-      // Fallback: execCommand
-      const ta=document.createElement('textarea');
-      ta.value=text;ta.style.cssText='position:fixed;opacity:0;pointer-events:none;';
-      document.body.appendChild(ta);ta.select();
-      document.execCommand('copy');document.body.removeChild(ta);done();
-    });
-  } else {
-    const ta=document.createElement('textarea');
-    ta.value=text;ta.style.cssText='position:fixed;opacity:0;pointer-events:none;';
-    document.body.appendChild(ta);ta.select();
-    document.execCommand('copy');document.body.removeChild(ta);done();
-  }
-}
-
-/* ─────────────────────────────────────────────
-   LIVE COUNTDOWN TIMER  (ticks every second)
-───────────────────────────────────────────── */
-function fmtCountdown(iso){
-  if(!iso)return'';
-  const diff=new Date(iso)-Date.now();
-  if(diff<=0)return'LIVE';
-  const h=Math.floor(diff/3600000);
-  const m=Math.floor((diff%3600000)/60000);
-  const s=Math.floor((diff%60000)/1000);
-  if(h>0) return h+'h '+m+'m';
-  if(m>0) return m+'m '+s+'s';
-  return s+'s';
-}
-setInterval(()=>{
-  document.querySelectorAll('.countdown[data-iso]').forEach(el=>{
-    const iso=el.dataset.iso;
-    if(!iso){el.style.display='none';return;}
-    const t=fmtCountdown(iso);
-    if(!t){el.style.display='none';return;}
-    el.style.display='';
-    if(t==='LIVE'){
-      el.textContent='🔴 LIVE';
-      el.classList.add('live');
-    } else {
-      el.textContent='⏳ '+t;
-      el.classList.remove('live');
-    }
-  });
-},1000);
-
-/* ─────────────────────────────────────────────
-   NTFY PUSH ALERTS
-───────────────────────────────────────────── */
-function getNtfyCh(){return $('cfgNtfy').value.trim()||'';}
-function sendNtfy(title,body){
-  const ch=getNtfyCh();if(!ch)return;
-  fetch('https://ntfy.sh/'+ch,{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({topic:ch,title,message:body,tags:['gem','moneybag'],priority:5})
-  }).catch(e=>console.warn('[ntfy]',e.message));
-}
-
-/* ─────────────────────────────────────────────
-   DEDUP ALERT CACHE  (localStorage, 6h TTL)
-───────────────────────────────────────────── */
-function isDupe(key){
-  let cache;
-  try{cache=JSON.parse(localStorage.getItem('arb_alert_cache')||'{}');}
-  catch{cache={};}
-  const now=Date.now();
-  for(const k in cache)if(now-cache[k]>21600000)delete cache[k];
-  if(cache[key]){localStorage.setItem('arb_alert_cache',JSON.stringify(cache));return true;}
-  cache[key]=now;localStorage.setItem('arb_alert_cache',JSON.stringify(cache));return false;
-}
-function fireEVAlert(ev){
-  const key='EV|'+ev.match+'|'+ev.line+'|'+ev.sel+'|'+ev.odds.toFixed(2);
-  if(isDupe(key))return;
-  alertCount++;$('telAlerts').textContent=alertCount;
-  const title='📈 '+ev.pct.toFixed(2)+'% EV — '+ev.match;
-  const body=ev.sport.replace(/_/g,' ').toUpperCase()+' · '+ev.time
-    +'\n\n💰 BET: '+ev.sel.toUpperCase()+' @ '+ev.odds.toFixed(2)+' on '+bk(ev.bookie)
-    +'\n📐 Kelly Stake: '+fmt(ev.stake)
-    +'\n🧠 True Odds: '+ev.true.toFixed(3)+' | Conf: '+ev.conf+'/100';
-  sendNtfy(title,body);
-}
-function fireARBAlert(arb){
-  const key='ARB|'+arb.match+'|'+arb.line+'|'+arb.pct.toFixed(2);
-  if(isDupe(key))return;
-  alertCount++;$('telAlerts').textContent=alertCount;
-  const title='🚨 '+arb.pct.toFixed(2)+'% ARB — '+arb.match;
-  let body=arb.sport.replace(/_/g,' ').toUpperCase()+' · '+arb.time+'\n';
-  arb.sides.forEach(s=>{body+='\n🔵 '+fmt(s.stake)+' on '+s.sel.toUpperCase()+' @ '+s.price.toFixed(2)+' ['+bk(s.bookie)+']';});
-  body+='\n\n✅ Guaranteed profit: '+fmt(arb.profit);
-  sendNtfy(title,body);
-}
-
-/* ─────────────────────────────────────────────
-   CLOCK
-───────────────────────────────────────────── */
-setInterval(()=>$('tTime').textContent=IST(),1000);
-
-/* ─────────────────────────────────────────────
-   SCAN LOG
-───────────────────────────────────────────── */
-function log(msg,cls=''){
-  const el=$('scanLog'),d=document.createElement('div');
-  d.className='ll '+(cls||'');d.textContent='['+IST()+'] '+msg;
-  el.appendChild(d);el.scrollTop=el.scrollHeight;
-}
-
-/* ─────────────────────────────────────────────
-   API KEY MANAGEMENT
-───────────────────────────────────────────── */
-function getKey(){return API_KEYS[keyIdx%Math.max(API_KEYS.length,1)];}
-function rotateKey(){
-  keyQuota[keyIdx]=0;
-  keyIdx++;
-  log('🔄 Key #'+keyIdx+' exhausted — rotating to key #'+(keyIdx+1),'lwarn');
-  renderNetwork();
-}
-
-/* ─────────────────────────────────────────────
-   KELLY SLIDER
-───────────────────────────────────────────── */
-function onKelly(v){
-  $('kellyV').textContent=v+'%';
-  $('kellyR').style.setProperty('--p',v+'%');
-  recalc();calcEV();
-}
-
-/* ─────────────────────────────────────────────
-   BANKROLL
-───────────────────────────────────────────── */
-function onBKChange(){
-  localStorage.setItem('arb_bk',$('cfgBK').value);
-  $('telBK').textContent=fmt(getBK());
-  recalc();
-}
-function recalc(){
-  const bkv=getBK(),kf=getKF();
-  $('telBK').textContent=fmt(bkv);
-  document.querySelectorAll('.sdyn').forEach(el=>{
-    const s=kelly(parseFloat(el.dataset.soft)||2,parseFloat(el.dataset.true)||1.9,bkv,kf,el.dataset.book||null);
-    el.textContent=fmt(s);
-  });
-  document.querySelectorAll('.ldyn').forEach(el=>{
-    el.textContent=fmt(parseFloat(el.dataset.base)*(bkv/1500));
-  });
-}
-function openBK(){$('bkIn').value=getBK();$('bkModal').classList.add('open');setTimeout(()=>$('bkIn').focus(),100);}
-function closeBK(){$('bkModal').classList.remove('open');}
-function saveBK(){
-  const v=parseFloat($('bkIn').value);
-  if(!v||v<100){alert('Enter a valid bankroll (min ₹100)');return;}
-  $('cfgBK').value=v;$('kB').value=v;
-  localStorage.setItem('arb_bk',v);
-  onBKChange();closeBK();
-  $('cfgBK').style.color='var(--green)';
-  setTimeout(()=>$('cfgBK').style.color='var(--gold)',700);
-}
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeBK();});
-$('bkModal').addEventListener('click',e=>{if(e.target===$('bkModal'))closeBK();});
-
-/* ─────────────────────────────────────────────
-   TABS
-───────────────────────────────────────────── */
-function switchTab(t){
-  ['ev','arb','calc','an','net'].forEach(id=>{
-    $('tab-'+id).classList.remove('on');
-    $('pane-'+id).classList.remove('on');
-  });
-  $('tab-'+t).classList.add('on');
-  $('pane-'+t).classList.add('on');
-  if(t==='an')renderAn();
-  if(t==='net')renderNetwork();
-}
-
-/* ─────────────────────────────────────────────
-   SCAN ENGINE  — Start / Stop
-───────────────────────────────────────────── */
-function startScan(){
-  if(!API_KEYS.length){
-    const k=prompt('No API keys injected. Enter your Odds API key to scan:');
-    if(!k)return;
-    API_KEYS.push(k.trim());
-  }
-  EVS=[];ARBS=[];sportIdx=0;scanning=true;scanT0=Date.now();creditT0=null;keyIdx=0;
-  $('btnStart').style.display='none';$('btnStop').style.display='';
-  $('scanBar').classList.add('on');$('scanLog').innerHTML='';
-  $('ev-cards').innerHTML='';$('arb-cards').innerHTML='';
-  updateBadges();
-  log('Sweep starting — '+API_KEYS.length+' key(s) available','linf');
-  runNext();
-}
-
-function stopScan(manual=false){
-  scanning=false;
-  if(loopTick){clearInterval(loopTick);loopTick=null;}
-  $('loopCd').style.display='none';$('loopCd').textContent='';
-  $('btnStart').style.display='';$('btnStop').style.display='none';
-  $('progFill').style.width='100%';
-  const elapsed=((Date.now()-scanT0)/1000).toFixed(1);
-  $('telT').textContent=elapsed+'s';
-  if(EVS.length||ARBS.length)renderAn();
-  renderNetwork();
-
-  if(manual){
-    sessionStorage.removeItem('auto_resume');
-    log('Sweep stopped by user.','lerr');
-    return;
-  }
-
-  log('✅ Complete — EV:'+EVS.length+' ARB:'+ARBS.length+' Time:'+elapsed+'s','lok');
-
-  // ── AUTO-LOOP ──
-  if($('autoLoop').checked){
-    sessionStorage.setItem('auto_resume','true');
-    let secs=300;
-    $('loopCd').style.display='';
-    loopTick=setInterval(()=>{
-      secs--;
-      const m=Math.floor(secs/60),s=String(secs%60).padStart(2,'0');
-      $('loopCd').textContent='⏳ '+m+':'+s;
-      if(secs<=0){
-        clearInterval(loopTick);loopTick=null;
-        $('loopCd').textContent='';$('loopCd').style.display='none';
-        startScan();
-      }
-    },1000);
-    log('🔄 Auto-Loop armed — next sweep in 5 min','linf');
-  } else {
-    sessionStorage.removeItem('auto_resume');
-  }
-  renderNetwork();
-}
-
-/* ─────────────────────────────────────────────
-   SCAN ENGINE  — Sport Loop
-───────────────────────────────────────────── */
-async function runNext(){
-  if(!scanning||sportIdx>=SPORTS.length){stopScan(false);return;}
-  const sp=SPORTS[sportIdx];
-  $('scanSport').textContent=sp.l;
-  $('scanPct').textContent=(sportIdx+1)+'/'+SPORTS.length;
-  $('progFill').style.width=Math.round(sportIdx/SPORTS.length*100)+'%';
-  log('Fetching '+sp.l+'…');
-  try{
-    const key=getKey();
-    const books=getBooks().join(',');
-    const url=`https://api.the-odds-api.com/v4/sports/${sp.k}/odds?apiKey=${key}&regions=eu&bookmakers=${encodeURIComponent(books)}&markets=totals,spreads&oddsFormat=decimal`;
-    const res=await fetch(url);
-    const rem=res.headers.get('x-requests-remaining');
-    const used=res.headers.get('x-requests-used');
-    if(rem){quotaRem=rem;keyQuota[keyIdx]=parseInt(rem);$('tQuota').textContent=rem+'/500';$('telQ').textContent=rem+'/500';}
-    if(used){
-      if(!creditT0)creditT0=parseInt(used)-1;
-      const burn=parseInt(used)-creditT0;
-      $('tBurn').textContent=burn;$('telB').textContent=burn;
-    }
-    if(res.status===401){
-      log('❌ Key #'+(keyIdx+1)+' rejected (401)','lerr');
-      if(keyIdx+1<API_KEYS.length){rotateKey();runNext();return;}
-      else{log('❌ All keys rejected — check ODDS_API_KEYS secret','lerr');stopScan(false);return;}
-    }
-    if(res.status===429){
-      log('⚠ Key #'+(keyIdx+1)+' rate-limited (429)','lwarn');
-      if(keyIdx+1<API_KEYS.length){rotateKey();setTimeout(runNext,400);return;}
-      else{log('⚠ All keys rate-limited — waiting 6s','lwarn');await sleep(6000);runNext();return;}
-    }
-    if(!res.ok){log('⚠ HTTP '+res.status+' on '+sp.l,'lwarn');sportIdx++;setTimeout(runNext,1200);return;}
-    const events=await res.json();
-    log('📦 '+events.length+' events (key #'+(keyIdx+1)+')','lok');
-    processEvents(events,sp.k);
-  }catch(e){log('❌ '+e.message,'lerr');}
-  sportIdx++;
-  setTimeout(runNext,1500);
-}
-
-/* ─────────────────────────────────────────────
-   MATH ENGINE  — Market Processing
-───────────────────────────────────────────── */
-function processEvents(events,sport){
-  const books=getBooks(),minEV=getMinEV(),minARB=getMinARB();
-  const bankroll=getBK(),kf=getKF();
-  events.forEach(event=>{
-    const match=event.home_team+' vs '+event.away_team;
-    const mt=fmtIST(event.commence_time);
-    const rawTime=event.commence_time||'';
-    const bookmakers=event.bookmakers||[];
-    const EL={},AL={};
-    bookmakers.forEach(b=>{
-      if(!books.includes(b.key))return;
-      (b.markets||[]).forEach(m=>{
-        if(!['totals','spreads'].includes(m.key))return;
-        const mk=m.key.toUpperCase();
-        m.outcomes.forEach(o=>{
-          const pt=String(o.point||'0'),name=o.name;
-          let price=o.price;
-          if(b.key==='betfair_ex_eu')price=1+(price-1)*.97; // 3% commission
-          const lk=mk+'_'+pt;
-          if(!EL[lk])EL[lk]={pin:{},best:{},all:{}};
-          if(!AL[lk])AL[lk]={};
-          if(b.key==='pinnacle'){
-            EL[lk].pin[name]=price;
-          } else {
-            if(!EL[lk].best[name]||price>EL[lk].best[name].price)
-              EL[lk].best[name]={price,bookie:b.key};
-            if(!EL[lk].all[name])EL[lk].all[name]={};
-            EL[lk].all[name][b.key]=price;
-          }
-          if(!AL[lk][name]||price>AL[lk][name].price)
-            AL[lk][name]={price,bookie:b.key};
-        });
-      });
-    });
-
-    // ── EV Detection ──
-    Object.entries(EL).forEach(([lk,d])=>{
-      const sides=Object.keys(d.pin);
-      if(sides.length<2)return;
-      const[s1,s2]=sides;
-      const[t1,t2]=devig(d.pin[s1],d.pin[s2]);
-      [[s1,t1],[s2,t2]].forEach(([side,trueO])=>{
-        if(!d.best[side])return;
-        const sp=d.best[side].price;
-        if(sp<=trueO)return;
-        const evp=((sp/trueO)-1)*100;
-        if(evp<minEV)return;
-        const stake=kelly(sp,trueO,bankroll,kf,d.best[side].bookie);
-        const cf=confScore(sp,trueO);
-        const bd=buildBD(d,side,trueO);
-        const ev={pct:evp,match,time:mt,rawTime,sport,line:lk,sel:side,
-                  odds:sp,true:trueO,bookie:d.best[side].bookie,stake,conf:cf,bd};
-        EVS.push(ev);renderEV(ev,EVS.length-1);
-        fireEVAlert(ev);
-      });
-    });
-
-    // ── ARB Detection ──
-    Object.entries(AL).forEach(([lk,outs])=>{
-      const keys=Object.keys(outs);
-      for(let ways=2;ways<=3;ways++){
-        if(keys.length<ways)continue;
-        const k=keys.slice(0,ways);
-        const margin=k.reduce((s,ki)=>s+1/outs[ki].price,0);
-        if(margin>=1)continue;
-        const pct=(1-margin)*100;
-        if(pct<minARB)continue;
-        const arb={pct,match,time:mt,rawTime,sport,line:lk,ways,margin,
-          sides:k.map(ki=>({sel:ki,price:outs[ki].price,bookie:outs[ki].bookie,
-                            stake:(bankroll/margin)/outs[ki].price})),
-          profit:(bankroll/margin)-bankroll};
-        ARBS.push(arb);renderARB(arb,ARBS.length-1);
-        fireARBAlert(arb);
-      }
-    });
-
-    $('tEV').textContent=EVS.length;$('tARB').textContent=ARBS.length;
-    updateBadges();
-  });
-}
-
-function buildBD(d,side,trueO){
-  const rows=[];
-  if(d.pin[side])rows.push({bookie:'pinnacle',odds:d.pin[side],ev:0,best:false});
-  const all=d.all[side]||{};
-  let bEV=-999,bBk=null;
-  Object.entries(all).forEach(([bk,odds])=>{
-    const e=((odds/trueO)-1)*100;
-    rows.push({bookie:bk,odds,ev:e,best:false});
-    if(e>bEV){bEV=e;bBk=bk;}
-  });
-  rows.forEach(r=>{if(r.bookie===bBk)r.best=true;});
-  return rows;
-}
-
-/* ─────────────────────────────────────────────
-   CARD RENDERING  — EV
-───────────────────────────────────────────── */
-function renderEV(ev,idx){
-  const c=$('ev-cards');
-  if(c.querySelector('.empty'))c.innerHTML='';
-  const eColor=ev.pct>=10?'var(--red)':ev.pct>=5?'var(--gold)':'var(--green)';
-  const stripe=idx===0?'st-gold':idx===1?'st-silver':idx===2?'st-bronze':'st-ev';
-  const cColor=ev.conf>=70?'var(--green)':ev.conf>=40?'var(--gold)':'var(--red)';
-  const cLbl=ev.conf>=70?'HIGH':ev.conf>=40?'MED':'LOW';
-  let bd='';
-  if(ev.bd&&ev.bd.length){
-    const rows=ev.bd.map(r=>`<tr class="${r.best?'bk-best':''}"><td>${bk(r.bookie)}</td><td>${r.odds.toFixed(3)}</td><td>${r.ev>=0?'+':''}${r.ev.toFixed(2)}%</td></tr>`).join('');
-    bd=`<div class="bd-wrap"><table class="bd-tbl"><thead><tr><th>Book</th><th>Odds</th><th>EV%</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-  }
-  // Build copy payload — exact bet instruction for one-tap clipboard
-  const copyTxt=ev.match+' — BET '+ev.sel.toUpperCase()+' @ '+ev.odds.toFixed(2)+' on '+bk(ev.bookie)+' | Kelly: '+fmt(ev.stake)+' | EV: '+fp(ev.pct)+' | True: '+ev.true.toFixed(3);
-  const safeCP=copyTxt.replace(/'/g,"\\'");
-
-  const card=document.createElement('div');
-  card.className='card ev-card';card.style.animationDelay=(idx*.045)+'s';
-  card.dataset.pct=ev.pct;card.dataset.conf=ev.conf;
-  card.innerHTML=`<div class="stripe ${stripe}"></div>
-    <div class="c-head">
-      <div class="c-head-l"><span class="spt">${si(ev.sport)}</span>
-        <div>
-          <div class="mtitle">${ev.match}</div>
-          <div class="mmeta">${ev.sport.replace(/_/g,' ').toUpperCase()} · ${ev.time}</div>
-        </div>
-      </div>
-      <div class="ev-badge" style="color:${eColor};border-color:${eColor}44;text-shadow:0 0 12px ${eColor}88">${fp(ev.pct)}</div>
-    </div>
-    <div class="c-body">
-      <div class="match-actions">
-        <span class="countdown" data-iso="${ev.rawTime}">⏳ --</span>
-        <button class="copy-btn" onclick="copyBet(this,'${safeCP}')">📋 COPY BET</button>
-      </div>
-      <div class="chip chip-ev">${ev.line}</div>
-      <div class="bet-box">
-        <div class="bet-l">
-          <span class="blbl">BET</span>
-          <span class="bsel">${ev.sel.toUpperCase()}</span>
-          <span class="bpt">@ ${ev.line.split('_')[1]||''}</span>
-          <span class="bodds">× ${ev.odds.toFixed(2)}</span>
-        </div>
-        <span class="book-tag">${bk(ev.bookie)}</span>
-      </div>
-      <div class="mrow">
-        <div class="mbox">
-          <span class="mlbl">KELLY STAKE</span>
-          <span class="mval sv sdyn" data-soft="${ev.odds}" data-true="${ev.true}" data-book="${ev.bookie}">${fmt(ev.stake)}</span>
-        </div>
-        <div class="mbox">
-          <span class="mlbl">TRUE ODDS</span>
-          <span class="mval tv2">${ev.true.toFixed(3)}</span>
-        </div>
-      </div>
-      <div class="crow">
-        <span class="mlbl" style="font-size:8px">CONF</span>
-        <div class="cbar-out">
-          <span class="ctag" style="color:${cColor}">${cLbl}</span>
-          <div class="ctrack"><div class="cfill" style="width:${ev.conf}%;background:${cColor};box-shadow:0 0 8px ${cColor}66"></div></div>
-          <span class="cscore" style="color:${cColor}">${ev.conf}</span>
-        </div>
-      </div>
-      ${bd}
-    </div>`;
-  c.appendChild(card);applyFilters();
-}
-
-/* ─────────────────────────────────────────────
-   CARD RENDERING  — ARB
-───────────────────────────────────────────── */
-function renderARB(arb,idx){
-  const c=$('arb-cards');
-  if(c.querySelector('.empty'))c.innerHTML='';
-  const wc=arb.ways===2?'var(--cyan)':'var(--purple)';
-  const legs=arb.sides.map(s=>`
-    <div class="leg">
-      <span class="lsel">${s.sel.toUpperCase()}</span>
-      <span class="lodds">@ ${s.price.toFixed(2)}</span>
-      <span class="lstake ldyn" data-base="${s.stake.toFixed(2)}">${fmt(s.stake)}</span>
-      <span class="lbook">${bk(s.bookie)}</span>
-    </div>`).join('');
-  const copyTxt=arb.match+' — '+arb.ways+'W ARB '+fp(arb.pct)+' | '
-    +arb.sides.map(s=>s.sel.toUpperCase()+' @ '+s.price.toFixed(2)+' ('+bk(s.bookie)+') = '+fmt(s.stake)).join(' | ')
-    +' | Profit: '+fmt(arb.profit);
-  const safeCP=copyTxt.replace(/'/g,"\\'");
-
-  const card=document.createElement('div');
-  card.className='card arb-card';card.style.animationDelay=(idx*.045)+'s';
-  card.dataset.pct=arb.pct;card.dataset.ways=arb.ways;
-  card.innerHTML=`<div class="stripe st-arb"></div>
-    <div class="c-head">
-      <div class="c-head-l"><span class="spt">${si(arb.sport)}</span>
-        <div>
-          <div class="mtitle">${arb.match}</div>
-          <div class="mmeta">${arb.sport.replace(/_/g,' ').toUpperCase()} · ${arb.time}</div>
-        </div>
-      </div>
-      <div class="arb-badge">
-        <span class="arb-pct" style="color:${wc};font-family:'JetBrains Mono',monospace">${fp(arb.pct)}</span>
-        <span class="ways-pill" style="color:${wc};border-color:${wc}44;background:${wc}14">${arb.ways}W</span>
-      </div>
-    </div>
-    <div class="c-body">
-      <div class="match-actions">
-        <span class="countdown" data-iso="${arb.rawTime}">⏳ --</span>
-        <button class="copy-btn" onclick="copyBet(this,'${safeCP}')">📋 COPY ARB</button>
-      </div>
-      <div class="chip chip-arb">${arb.line}</div>
-      <div class="legs">${legs}</div>
-      <div class="prof-banner">
-        <span class="pb-lbl">GUARANTEED PROFIT</span>
-        <span class="pb-val">${fmt(arb.profit)}</span>
-      </div>
-    </div>`;
-  c.appendChild(card);applyArbFilters();
-}
-
-/* ─────────────────────────────────────────────
-   BADGES & EMPTY STATES
-───────────────────────────────────────────── */
-function updateBadges(){$('bEV').textContent=EVS.length;$('bARB').textContent=ARBS.length;}
-function initEmpty(){
-  $('ev-cards').innerHTML=`<div class="empty"><div class="ei">📡</div><div class="et">No EV edges yet</div><div class="es">Configure your key and tap Start Sweep</div></div>`;
-  $('arb-cards').innerHTML=`<div class="empty"><div class="ei">🔒</div><div class="et">No arbitrage windows</div><div class="es">All sports will be scanned on sweep</div></div>`;
-}
-initEmpty();
-
-/* ─────────────────────────────────────────────
-   EV FILTERS
-───────────────────────────────────────────── */
-function applyFilters(){
-  const cards=[...$('ev-cards').querySelectorAll('.ev-card')];
-  if(sortOn)cards.sort((a,b)=>parseFloat(b.dataset.pct)-parseFloat(a.dataset.pct));
-  cards.forEach((c,i)=>{
-    let hide=false;
-    if(top5&&i>=5)hide=true;
-    if(hcFilter&&parseFloat(c.dataset.conf)<60)hide=true;
-    c.style.display=hide?'none':'';
-  });
-}
-function applyArbFilters(){
-  const cards=[...$('arb-cards').querySelectorAll('.arb-card')];
-  if(arbSort)cards.sort((a,b)=>parseFloat(b.dataset.pct)-parseFloat(a.dataset.pct));
-  cards.forEach(c=>{
-    c.style.display=(arb3&&parseInt(c.dataset.ways)!==3)?'none':'';
-  });
-}
-function toggleTop5(){top5=!top5;$('top5Btn').style.borderColor=top5?'var(--cyan)':'var(--b2)';applyFilters();}
-function toggleSort(){sortOn=!sortOn;$('sortBtn').style.borderColor=sortOn?'var(--cyan)':'var(--b2)';applyFilters();}
-function toggleHC(){hcFilter=!hcFilter;$('filterHCBtn').style.borderColor=hcFilter?'var(--cyan)':'var(--b2)';applyFilters();}
-function toggleArb3(){arb3=!arb3;$('arb3Btn').style.borderColor=arb3?'var(--purple)':'var(--b2)';applyArbFilters();}
-function toggleArbSort(){arbSort=!arbSort;$('arbSortBtn').style.borderColor=arbSort?'var(--purple)':'var(--b2)';applyArbFilters();}
-
-/* ─────────────────────────────────────────────
-   NETWORK TAB
-───────────────────────────────────────────── */
-function renderNetwork(){
-  const grid=$('netGrid');if(!grid)return;
-  if(!API_KEYS.length){
-    grid.innerHTML='<div style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--red);padding:10px 0">No API keys injected. Deploy via GitHub Actions with ODDS_API_KEYS secret.</div>';
-    return;
-  }
-  grid.innerHTML=API_KEYS.map((k,i)=>{
-    const masked=k.length>10?k.slice(0,4)+'••••'+k.slice(-4):'••••';
-    const rem=keyQuota[i]!==undefined?keyQuota[i]:'?';
-    const isActive=i===keyIdx;
-    const isExh=keyQuota[i]===0;
-    const sc=isActive?'var(--cyan)':isExh?'var(--red)':'var(--green)';
-    const sl=isActive?'ACTIVE':isExh?'EXHAUSTED':'STANDBY';
-    const sb=isActive?'#00d4ff14':isExh?'#ff2d4e14':'#00e87a08';
-    const barW=rem==='?'?50:Math.min(100,Math.round((parseInt(rem)/500)*100));
-    return `<div style="background:${sb};border:1px solid ${sc}44;border-radius:12px;padding:13px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;transition:all .2s">
-      <div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:2px;color:${sc};margin-bottom:4px">KEY #${i+1} · ${sl}</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--text)">${masked}</div>
-      </div>
-      <div style="text-align:right;min-width:90px">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-bottom:5px">QUOTA REMAINING</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:800;color:${sc}">${rem}/500</div>
-        <div style="height:3px;background:var(--b2);border-radius:2px;margin-top:5px;overflow:hidden">
-          <div style="height:100%;width:${barW}%;background:${sc};border-radius:2px;transition:width .5s ease"></div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-
-  const lm=$('loopStatusMsg');
-  if(lm){
-    const on=$('autoLoop')&&$('autoLoop').checked;
-    lm.textContent=on
-      ?'Auto-Loop is ACTIVE — 5-minute cooldown between sweeps fires automatically.'
-      :'Auto-Loop is OFF — enable the checkbox next to Start Sweep to activate.';
-    lm.style.color=on?'var(--cyan)':'var(--text2)';
-  }
-}
-
-/* ─────────────────────────────────────────────
-   CSV EXPORT
-───────────────────────────────────────────── */
-function exportCSV(){
-  let rows=['Type,Match,Sport,Time,Line,Selection,Odds,True Odds,EV%,Kelly Stake,Confidence,Bookmaker'];
-  EVS.forEach(e=>{rows.push(['EV',e.match,e.sport,e.time,e.line,e.sel,e.odds.toFixed(3),e.true.toFixed(3),e.pct.toFixed(2),Math.round(kelly(e.odds,e.true,getBK(),getKF(),e.bookie)),e.conf,e.bookie].join(','));});
-  ARBS.forEach(a=>{
-    a.sides.forEach(s=>{
-      rows.push(['ARB',a.match,a.sport,a.time,a.line,s.sel,s.price.toFixed(3),'',a.pct.toFixed(2),Math.round(s.stake),'',s.bookie].join(','));
-    });
-  });
-  const blob=new Blob([rows.join('\n')],{type:'text/csv'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='arb_sniper_'+new Date().toISOString().slice(0,10)+'.csv';
-  a.click();
-}
-
-/* ─────────────────────────────────────────────
-   CALCULATORS
-───────────────────────────────────────────── */
-function calcEV(){
-  const soft=parseFloat($('cSoft').value),pA=parseFloat($('cPinA').value),pB=parseFloat($('cPinB').value);
-  if(!soft||!pA||!pB){rst(['rTO','rEV','rKS','rCF']);return;}
-  const[t]=devig(pA,pB);
-  const evP=((soft/t)-1)*100;
-  const stake=kelly(soft,t,getBK(),getKF());
-  const cf=confScore(soft,t);
-  $('rTO').textContent=t.toFixed(4);$('rTO').style.color='var(--text2)';
-  $('rEV').textContent=(evP>=0?'+':'')+evP.toFixed(2)+'%';$('rEV').style.color=evP>0?'var(--cyan)':'var(--red)';
-  $('rKS').textContent=stake>0?fmt(stake):'No edge';$('rKS').style.color=stake>0?'var(--gold)':'var(--red)';
-  $('rCF').textContent=cf+'/100';$('rCF').style.color=cf>=70?'var(--green)':cf>=40?'var(--gold)':'var(--red)';
-}
-function calcARB(){
-  const a=parseFloat($('cAA').value),b2=parseFloat($('cAB').value),c=parseFloat($('cAC').value)||0;
-  const bk=getBK();
-  if(!a||!b2){rst(['rAM','rAP','rAS','rAB','rAG']);return;}
-  const inv=1/a+1/b2+(c>0?1/c:0);
-  const pct=(1-inv)*100;
-  const sA=(bk/inv)/a,sB=(bk/inv)/b2;
-  const prof=(bk/inv)-bk;
-  const col=prof>0?'var(--green)':'var(--red)';
-  $('rAM').textContent=(inv*100).toFixed(3)+'%';$('rAM').style.color='var(--text2)';
-  $('rAP').textContent=pct.toFixed(2)+'%';$('rAP').style.color=pct>0?'var(--purple)':'var(--red)';
-  $('rAS').textContent=fmt(sA);$('rAS').style.color='var(--cyan)';
-  $('rAB').textContent=fmt(sB);$('rAB').style.color='var(--cyan)';
-  $('rAG').textContent=fmt(prof);$('rAG').style.color=col;
-}
-function calcGU(){
-  const bs=parseFloat($('gBS').value),bo=parseFloat($('gBO').value),lo=parseFloat($('gLO').value);
-  if(!bs||!bo||!lo){rst(['rGL','rGP']);return;}
-  const lay=(bs*bo)/lo;
-  const profit=(bs*(bo-1))-(lay*(lo-1));
-  $('rGL').textContent=fmt(lay);$('rGL').style.color='var(--cyan)';
-  $('rGP').textContent=fmt(profit);$('rGP').style.color=profit>=0?'var(--green)':'var(--red)';
-}
-function calcKelly(){
-  const p=parseFloat($('kP').value),o=parseFloat($('kO').value),bkv=parseFloat($('kB').value)||getBK();
-  if(!p||!o){rst(['rFK','rFR','rKA']);return;}
-  const b=o-1,q=1-p;
-  const fk=((b*p-q)/b)*100;
-  const fr=fk*0.30;
-  const stake=fk>0?Math.max(20,bkv*(fr/100)):0;
-  $('rFK').textContent=fk.toFixed(2)+'%';$('rFK').style.color='var(--text2)';
-  $('rFR').textContent=fr.toFixed(2)+'%';$('rFR').style.color='var(--gold)';
-  $('rKA').textContent=stake>0?fmt(stake):'No edge';$('rKA').style.color=stake>0?'var(--green)':'var(--red)';
-}
-function rst(ids){ids.forEach(id=>{$(id).textContent='--';$(id).style.color='';});}
-calcEV();calcARB();calcGU();calcKelly();
-
-/* ─────────────────────────────────────────────
-   ANALYTICS
-───────────────────────────────────────────── */
-function renderAn(){
-  const evs=EVS,arbs=ARBS;
-  const totP=arbs.reduce((s,a)=>s+a.profit,0);
-  const totS=arbs.reduce((s,a)=>s+a.sides.reduce((x,y)=>x+y.stake,0),0);
-  const roi=totS>0?(totP/totS*100):0;
-  const avgEV=evs.length?evs.reduce((s,e)=>s+e.pct,0)/evs.length:0;
-  const pkEV=evs.length?Math.max(...evs.map(e=>e.pct)):0;
-  const avgARB=arbs.length?arbs.reduce((s,a)=>s+a.pct,0)/arbs.length:0;
-  const pkARB=arbs.length?Math.max(...arbs.map(a=>a.pct)):0;
-  $('anTE').textContent=evs.length;$('anAE').textContent=avgEV.toFixed(2)+'%';$('anPE').textContent=pkEV.toFixed(2)+'%';
-  $('anTA').textContent=arbs.length;$('anAP').textContent=fmt(totP);$('anROI').textContent=roi.toFixed(2)+'%';
-  const eh=[{l:'0–2%',c:evs.filter(e=>e.pct<2).length,g:'linear-gradient(90deg,#4d9fff,#00d4ff)'},
-            {l:'2–5%',c:evs.filter(e=>e.pct>=2&&e.pct<5).length,g:'linear-gradient(90deg,#00e87a,#00d4ff)'},
-            {l:'5–10%',c:evs.filter(e=>e.pct>=5&&e.pct<10).length,g:'linear-gradient(90deg,#ffc800,#ff8800)'},
-            {l:'10%+',c:evs.filter(e=>e.pct>=10).length,g:'linear-gradient(90deg,#ff2d4e,#ff6b35)'}];
-  hist('anEH',eh);
-  $('anES').innerHTML=ms('AVG','var(--green)',avgEV.toFixed(2)+'%')+ms('PEAK','var(--gold)',pkEV.toFixed(2)+'%')+ms('COUNT','var(--cyan)',evs.length);
-  const ah=[{l:'0–1%',c:arbs.filter(a=>a.pct<1).length,g:'linear-gradient(90deg,#64748b,#94a3b8)'},
-            {l:'1–2%',c:arbs.filter(a=>a.pct>=1&&a.pct<2).length,g:'linear-gradient(90deg,#b76fff,#7e22ce)'},
-            {l:'2–5%',c:arbs.filter(a=>a.pct>=2&&a.pct<5).length,g:'linear-gradient(90deg,#00d4ff,#b76fff)'},
-            {l:'5%+',c:arbs.filter(a=>a.pct>=5).length,g:'linear-gradient(90deg,#00e87a,#00d4ff)'}];
-  hist('anAH',ah);
-  $('anAS').innerHTML=ms('AVG','var(--purple)',avgARB.toFixed(2)+'%')+ms('PEAK','var(--cyan)',pkARB.toFixed(2)+'%')+ms('COUNT','var(--green)',arbs.length);
-  bars('anESP',groupBy(evs,e=>sFmt(e.sport)),'linear-gradient(90deg,var(--cyan),var(--green))',v=>v.length,v=>v.length+' | avg '+(v.reduce((s,e)=>s+e.pct,0)/v.length).toFixed(1)+'%');
-  bars('anASP',groupBy(arbs,a=>sFmt(a.sport)),'linear-gradient(90deg,var(--purple),var(--cyan))',v=>v.length,v=>v.length);
-  barsColor('anEB',groupBy(evs,e=>bk(e.bookie)),['var(--cyan)','var(--green)','var(--gold)','var(--purple)','var(--red)'],v=>v.length,v=>v.length+' | avg '+(v.reduce((s,e)=>s+e.pct,0)/v.length).toFixed(1)+'%');
-  const pm={};arbs.forEach(a=>{const p=a.sides.map(s=>bk(s.bookie)).join(' + ');pm[p]=(pm[p]||0)+1;});
-  const ps=Object.entries(pm).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  const maxP=ps[0]?ps[0][1]:1;
-  $('anAPR').innerHTML=ps.map(([p,cnt])=>`<div class="brow"><span class="blbl2" style="font-size:10px">${p}</span><div class="btrack"><div class="bfill" style="width:${Math.round(cnt/maxP*100)}%;background:linear-gradient(90deg,var(--purple),var(--cyan))"></div></div><span class="bcnt" style="color:var(--purple)">${cnt}</span></div>`).join('')||empty2();
-  const tw=arbs.filter(a=>a.ways===2).length,th=arbs.filter(a=>a.ways===3).length,tot=Math.max(tw+th,1);
-  $('anDonut').style.setProperty('--tw',Math.round(tw/tot*100)+'%');
-  $('an2w').textContent=tw;$('an3w').textContent=th;
-  $('anAMeta').innerHTML=ms('STAKE','var(--gold)',fmt(totS))+ms('PROFIT','var(--green)',fmt(totP))+ms('ROI','var(--orange)',roi.toFixed(2)+'%');
-  const cb=[{l:'0–29',c:evs.filter(e=>e.conf<30).length,cl:'var(--red)'},
-            {l:'30–59',c:evs.filter(e=>e.conf>=30&&e.conf<60).length,cl:'var(--gold)'},
-            {l:'60–79',c:evs.filter(e=>e.conf>=60&&e.conf<80).length,cl:'var(--cyan)'},
-            {l:'80+',c:evs.filter(e=>e.conf>=80).length,cl:'var(--green)'}];
-  const mc=Math.max(...cb.map(b=>b.c),1);
-  const hc=evs.filter(e=>e.conf>=60).length;
-  const hcP=evs.length?Math.round(hc/evs.length*100):0;
-  $('anCS').innerHTML=cb.map(b=>`<div class="hrow"><span class="hlbl">${b.l}</span><div class="htrack"><div class="hbar" style="width:${Math.round(b.c/mc*100)}%;background:${b.cl};box-shadow:0 0 6px ${b.cl}55"></div></div><span class="hcnt" style="color:${b.cl}">${b.c}</span></div>`).join('')
-    +`<div class="mini-stats" style="margin-top:10px;border-top:1px solid var(--b1);padding-top:9px;">${ms('HIGH CONF','var(--green)',hcP+'%')}${ms('SCORED','var(--cyan)',evs.length)}</div>`;
-}
-function ms(l,c,v){return`<div class="ms"><span class="msl">${l}</span><span class="msv" style="color:${c}">${v}</span></div>`;}
-function sFmt(s){return s.replace(/_/g,' ').split(' ').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ');}
-function groupBy(arr,fn){const m={};arr.forEach(x=>{const k=fn(x);(m[k]=m[k]||[]).push(x);});return Object.entries(m).sort((a,b)=>b[1].length-a[1].length).slice(0,5);}
-function hist(id,buckets){const max=Math.max(...buckets.map(b=>b.c),1);$(id).innerHTML=buckets.map(b=>`<div class="hrow"><span class="hlbl">${b.l}</span><div class="htrack"><div class="hbar" style="width:${Math.round(b.c/max*100)}%;background:${b.g}"></div></div><span class="hcnt">${b.c}</span></div>`).join('');}
-function bars(id,entries,grad,vFn,lFn){if(!entries.length){$(id).innerHTML=empty2();return;}const max=Math.max(...entries.map(([,v])=>vFn(v)),1);$(id).innerHTML=entries.map(([k,v])=>`<div class="brow"><span class="blbl2">${k}</span><div class="btrack"><div class="bfill" style="width:${Math.round(vFn(v)/max*100)}%;background:${grad}"></div></div><span class="bcnt">${lFn(v)}</span></div>`).join('');}
-function barsColor(id,entries,cols,vFn,lFn){if(!entries.length){$(id).innerHTML=empty2();return;}const max=Math.max(...entries.map(([,v])=>vFn(v)),1);$(id).innerHTML=entries.map(([k,v],i)=>{const col=cols[i%cols.length];return`<div class="brow"><span class="blbl2" style="color:${col}">${k}</span><div class="btrack"><div class="bfill" style="width:${Math.round(vFn(v)/max*100)}%;background:${col}"></div></div><span class="bcnt" style="color:${col}">${lFn(v)}</span></div>`;}).join('');}
-function empty2(){return'<div style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--text3);padding:10px 0">No data yet</div>';}
-
-/* ─────────────────────────────────────────────
-   INITIALISATION
-───────────────────────────────────────────── */
-(()=>{
-  // Restore persisted preferences
-  const bkv=localStorage.getItem('arb_bk');
-  if(bkv){$('cfgBK').value=bkv;$('kB').value=bkv;$('telBK').textContent=fmt(parseFloat(bkv));}
-  const ntfy=localStorage.getItem('arb_ntfy');
-  if(ntfy)$('cfgNtfy').value=ntfy;
-  const loopPref=localStorage.getItem('arb_autoloop');
-  if(loopPref==='1')$('autoLoop').checked=true;
-
-  // Key status indicator
-  if(API_KEYS.length===0){
-    $('keyDot').style.background='var(--red)';
-    $('keyDot').style.boxShadow='0 0 8px var(--red)';
-    $('keyMsg').style.color='var(--red)';
-    $('keyMsg').textContent='No keys injected — deploy via GitHub Actions or enter key on first scan';
-  } else {
-    $('keyMsg').textContent=API_KEYS.length+' key'+(API_KEYS.length>1?'s':'')+' injected via GitHub Secrets — ready ✓';
-    $('telKey').textContent=API_KEYS.length+' key'+(API_KEYS.length>1?'s':'');
-  }
-
-  // Network tab initial render
-  renderNetwork();
-
-  // Lock screen (runs after all DOM is ready)
-  initLock();
-
-  // Session auto-resume: if we were mid-loop and page reloaded
-  if(sessionStorage.getItem('auto_resume')==='true' && $('autoLoop').checked){
-    log('🔄 Session resumed — next sweep in 5 min','linf');
-    $('loopCd').style.display='';
-    let secs=300;
-    loopTick=setInterval(()=>{
-      secs--;
-      const m=Math.floor(secs/60),s=String(secs%60).padStart(2,'0');
-      $('loopCd').textContent='⏳ '+m+':'+s;
-      if(secs<=0){
-        clearInterval(loopTick);loopTick=null;
-        $('loopCd').textContent='';$('loopCd').style.display='none';
-        startScan();
-      }
-    },1000);
-  }
-})();
-
-// Persist preferences on change
-$('autoLoop').addEventListener('change',()=>localStorage.setItem('arb_autoloop',$('autoLoop').checked?'1':'0'));
-$('cfgBK').addEventListener('change',()=>{localStorage.setItem('arb_bk',$('cfgBK').value);$('kB').value=$('cfgBK').value;});
-$('cfgNtfy').addEventListener('change',()=>localStorage.setItem('arb_ntfy',$('cfgNtfy').value));
-
+    function showPane(p) {{
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.pane').forEach(t => t.classList.remove('active'));
+        event.target.classList.add('active');
+        document.getElementById('pane-'+p).classList.add('active');
+    }}
+    // Auto-refresh the page every 5 minutes to fetch the latest GitHub build
+    setInterval(() => window.location.reload(true), 300000);
 </script>
 </body>
 </html>"""
 
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(HTML)
 
-# =============================================================================
-#  SECTION 6 — THE FACTORY
-#  Replaces all __PLACEHOLDER__ tokens and writes index.html.
-#  This is the ONLY place index.html is ever written.
-#  Every placeholder must be handled here — nothing else touches the output file.
-# =============================================================================
+# ==========================================
+#  MAIN EXECUTION
+# ==========================================
+if __name__ == "__main__":
+    print("🚀 Cloud Engine Booting...")
+    results = fetch_all_sports()
+    evs, arbs = process_markets(results)
+   
+    # High-Detail NTFY Alerts
+    for a in arbs:
+        alert_key = f"ARB|{a['match']}|{a['line']}|{a['pct']:.2f}"
+        if not is_duplicate_alert(alert_key):
+            msg = f"🏆 {a['sport']}\n📅 {a['time']}\n📈 {a['line']}\n\n"
+            for s in a['sides']:
+                msg += f"🔵 ₹{s['stk']:.0f} on {s['sel'].upper()} @ {s['pr']:.2f} [{s['bk'].title().replace('_',' ')}]\n"
+            msg += f"\n✨ Guaranteed Profit: ₹{a['profit']:.0f}"
+            requests.post("https://ntfy.sh/", json={"topic": NTFY_CHANNEL, "message": msg, "title": f"🚨 {a['pct']:.2f}% ARB | {a['match']}", "tags": ["gem", "moneybag"], "priority": 5}, timeout=5)
 
-output = (HTML
-    .replace('__INJECTED_KEYS__', INJECTED_KEYS_JS)
-    .replace('__PASS_HASH__',     PASS_HASH)
-    .replace('__AI_REPORT__',     AI_REPORT_SAFE)
-    .replace('__BUILD_VER__',     BUILD_VER)
-    .replace('__BUILD_TIME__',    BUILD_TIME)
-)
+    for e in evs:
+        alert_key = f"EV|{e['match']}|{e['line']}|{e['sel']}|{e['odds']:.2f}"
+        if not is_duplicate_alert(alert_key):
+            msg = f"🏆 {e['sport']}\n📅 {e['time']}\n📈 {e['line']}\n\n"
+            msg += f"💰 BET EXACTLY: ₹{e['stk']:.0f}\n"
+            msg += f"👉 {e['sel'].upper()} @ {e['odds']:.2f} on {e['bk'].title().replace('_',' ')}\n\n"
+            msg += f"🧠 True Odds: {e['trueO']:.3f} | Confidence: {e['conf']}/100"
+            requests.post("https://ntfy.sh/", json={"topic": NTFY_CHANNEL, "message": msg, "title": f"📈 {e['pct']:.2f}% EV | {e['match']}", "tags": ["gem", "moneybag"], "priority": 5}, timeout=5)
 
-# Sanity check — no placeholders should survive to the output
-import re
-remaining = re.findall(r'__[A-Z_]+__', output)
-if remaining:
-    print(f"⚠  WARNING: Unreplaced placeholders in output: {set(remaining)}")
-else:
-    print("✅  All placeholders resolved.")
-
-output_path = "index.html"
-with open(output_path, "w", encoding="utf-8") as f:
-    f.write(output)
-
-print(f"✅  index.html written — {len(output):,} chars")
-print(f"   API keys  : {len(_keys_list)} key(s) injected")
-print(f"   Password  : {'SHA-256 lock armed' if PASS_HASH else 'disabled (DASHBOARD_PASS not set)'}")
-print(f"   AI Report : {AI_REPORT[:60]}{'…' if len(AI_REPORT)>60 else ''}")
-print(f"   Build     : v{BUILD_VER} · {BUILD_TIME}")
+    save_json('api_state.json', api_state)
+    save_json('alert_cache.json', alert_cache)
+    generate_web(evs, arbs)
+    print(f"✅ Global Terminal Synced. Found {len(evs)} EV and {len(arbs)} ARBs.")
