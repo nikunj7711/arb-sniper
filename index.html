@@ -1,544 +1,196 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ARB SNIPER | Auto-Terminal</title>
-<style>
-    body { background: #09090b; color: #f4f4f5; font-family: system-ui, -apple-system, sans-serif; padding: 15px; max-width: 800px; margin: auto; }
-    .hdr { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; padding-bottom: 15px; margin-bottom: 20px; }
-    .title { font-size: 24px; font-weight: 800; color: #06b6d4; margin:0; }
-    .subtitle { font-size: 11px; color: #a1a1aa; font-family: monospace; }
-    .time-badge { background: rgba(16,185,129,0.1); border: 1px solid #10b981; color: #10b981; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: bold; font-family: monospace; }
-   
-    .tabs { display: flex; gap: 5px; background: #18181b; padding: 5px; border-radius: 10px; border: 1px solid #27272a; margin-bottom: 20px; }
-    .tab { flex: 1; text-align: center; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; color: #a1a1aa; font-size: 13px; transition: 0.2s; }
-    .tab.active { background: #3f3f46; color: #fff; }
-    .pane { display: none; } .pane.active { display: block; }
-</style>
-</head>
-<body>
+<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body { background:#09090b; color:#fff; font-family:-apple-system, sans-serif; padding:15px; max-width:600px; margin:auto; }
+        .card { background:#18181b; border:1px solid #27272a; padding:15px; border-radius:12px; margin-bottom:12px; }
+        .tab { flex:1; text-align:center; padding:12px; background:#18181b; border-radius:8px; cursor:pointer; font-size:12px; color:#666; font-weight:bold; border:1px solid transparent; }
+        .tab.active { background:#3f3f46; color:#fff; border-color:#06b6d4; }
+        .pane { display:none; } .active-pane { display:block; }
+        .btn { background:#27272a; color:#fff; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:11px; }
+        .btn-calc { background: rgba(6,182,212,0.2); color:#06b6d4; border:1px solid #06b6d4; }
+        .badge { font-size:10px; padding:3px 7px; border-radius:5px; font-weight:bold; color:#000; }
+        .input-box { background:#000; border:1px solid #27272a; color:#10b981; padding:12px; border-radius:8px; width:100%; font-size:16px; font-weight:bold; margin-bottom:15px; box-sizing:border-box; outline:none; }
+        .input-box:focus { border-color: #06b6d4; }
+        .clock { background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px; font-family:monospace; }
+    </style></head><body>
+        <div id='lock-screen' style='position:fixed; top:0; left:0; width:100%; height:100%; background:#09090b; z-index:999; display:flex; flex-direction:column; align-items:center; justify-content:center;'>
+            <h2 style='color:#06b6d4; letter-spacing: 2px;'>⚡ SNIPER TERMINAL</h2>
+            <input type='password' id='ps' style='background:#18181b; border:1px solid #27272a; color:#fff; padding:12px; border-radius:8px; text-align:center; margin-bottom:10px; width:200px;' placeholder='Authorization Code'>
+            <button onclick='ck()' style='background:#06b6d4; color:#000; border:none; padding:10px 20px; border-radius:8px; font-weight:bold; cursor:pointer; width:225px;'>ENTER SYSTEM</button>
+            <p id='err' style='color:#ef4444; font-size:12px; margin-top:10px;'></p>
+        </div>
 
-<div class="hdr">
-    <div>
-        <h1 class="title">⚡ ARB SNIPER</h1>
-        <div class="subtitle">Cloud Scanning Active · Updates Every Hour</div>
-    </div>
-    <div class="time-badge">SYNCED: 14 Mar 2026, 10:22 AM IST</div>
-</div>
+        <div id='content' style='display:none;'>
+            <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;'>
+                <div><h2 style='color:#06b6d4; margin:0;'>⚡ SNIPER PRO</h2><small style='color:#444;'>Synced: 14 Mar, 10:24 AM IST</small></div>
+                <button onclick='localStorage.clear(); location.reload();' class='btn' style='background:#ef4444;'>LOGOUT</button>
+            </div>
+            
+            <div style='background:rgba(245, 158, 11, 0.1); padding:15px; border-radius:12px; border:1px solid rgba(245, 158, 11, 0.3); margin-bottom:15px;'>
+                <h4 style='margin:0 0 5px 0; color:#f59e0b; font-size:12px;'>🤖 GEMINI AI MARKET REPORT</h4>
+                <p id='aiText' style='margin:0; font-size:13px; color:#ddd; line-height:1.4;'></p>
+            </div>
 
-<div class="tabs">
-    <div class="tab active" onclick="showPane('ev')">💎 EV Edges (10)</div>
-    <div class="tab" onclick="showPane('arb')">🔒 Arbitrage (8)</div>
-    <div class="tab" onclick="showPane('net')">📡 API Network</div>
-</div>
+            <div style='background:#18181b; padding:15px; border-radius:12px; border:1px solid #27272a; margin-bottom:15px;'>
+                <label style='font-size:11px; color:#a1a1aa; font-weight:bold; display:block; margin-bottom:8px;'>MASTER BANKROLL (₹)</label>
+                <input type='number' id='userBankroll' class='input-box' value='5000' style='margin-bottom:0;' oninput='saveBankroll()'>
+            </div>
 
-<div id="pane-ev" class="pane active">
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 04:30 AM</span>
-                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">10.06% EV</span>
+            <div style='display:flex; gap:5px; margin-bottom:20px; position:sticky; top:0; z-index:10; background:#09090b; padding-bottom:10px;'>
+                <div class='tab active' onclick='sw(0)'>ARBS (1)</div>
+                <div class='tab' onclick='sw(1)'>EV (56)</div>
+                <div class='tab' onclick='sw(2)'>CALC</div>
+                <div class='tab' onclick='sw(3)'>KEYS</div>
             </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Tampa Bay Lightning <span style="font-size:12px; color:#a1a1aa;">vs</span> Carolina Hurricanes</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.5</strong></div>
-               
-                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
-                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 2.29</strong></div>
-                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Onexbet</div>
-                </div>
-               
-                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
-                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹35</strong></div>
-                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">2.081 | 45/100</strong></div>
-                </div>
-            </div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 14 Mar, 10:30 PM</span>
-                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">9.64% EV</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Ottawa Senators <span style="font-size:12px; color:#a1a1aa;">vs</span> Anaheim Ducks</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.5</strong></div>
-               
-                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
-                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 2.21</strong></div>
-                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Onexbet</div>
-                </div>
-               
-                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
-                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹36</strong></div>
-                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">2.016 | 43/100</strong></div>
-                </div>
-            </div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 04:30 AM</span>
-                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">9.37% EV</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Montréal Canadiens <span style="font-size:12px; color:#a1a1aa;">vs</span> San Jose Sharks</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.5</strong></div>
-               
-                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
-                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 2.06</strong></div>
-                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Onexbet</div>
-                </div>
-               
-                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
-                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹40</strong></div>
-                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">1.883 | 42/100</strong></div>
-                </div>
-            </div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 04:30 AM</span>
-                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">9.36% EV</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Buffalo Sabres <span style="font-size:12px; color:#a1a1aa;">vs</span> Toronto Maple Leafs</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.5</strong></div>
-               
-                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
-                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 2.08</strong></div>
-                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Onexbet</div>
-                </div>
-               
-                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
-                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹39</strong></div>
-                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">1.902 | 42/100</strong></div>
-                </div>
-            </div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 MMA MIXED MARTIAL ARTS &nbsp;|&nbsp; 📅 15 Mar, 04:30 AM</span>
-                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">5.17% EV</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Josh Emmett <span style="font-size:12px; color:#a1a1aa;">vs</span> Kevin Vallejos</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 3.5</strong></div>
-               
-                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
-                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 2.12</strong></div>
-                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Onexbet</div>
-                </div>
-               
-                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
-                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹21</strong></div>
-                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">2.016 | 24/100</strong></div>
-                </div>
-            </div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 07:30 AM</span>
-                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">3.84% EV</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Vegas Golden Knights <span style="font-size:12px; color:#a1a1aa;">vs</span> Chicago Blackhawks</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.0</strong></div>
-               
-                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
-                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 2.04</strong></div>
-                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Unibet</div>
-                </div>
-               
-                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
-                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹20</strong></div>
-                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">1.964 | 18/100</strong></div>
-                </div>
-            </div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 06:30 AM</span>
-                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">3.32% EV</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Utah Mammoth <span style="font-size:12px; color:#a1a1aa;">vs</span> Pittsburgh Penguins</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.0</strong></div>
-               
-                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
-                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 2.04</strong></div>
-                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Unibet</div>
-                </div>
-               
-                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
-                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹20</strong></div>
-                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">1.974 | 16/100</strong></div>
-                </div>
-            </div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 03:30 AM</span>
-                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">2.32% EV</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Minnesota Wild <span style="font-size:12px; color:#a1a1aa;">vs</span> New York Rangers</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.0</strong></div>
-               
-                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
-                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 1.97</strong></div>
-                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Unibet</div>
-                </div>
-               
-                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
-                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹20</strong></div>
-                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">1.925 | 11/100</strong></div>
-                </div>
-            </div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 07:30 AM</span>
-                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">2.26% EV</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Vancouver Canucks <span style="font-size:12px; color:#a1a1aa;">vs</span> Seattle Kraken</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.0</strong></div>
-               
-                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
-                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 2.04</strong></div>
-                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Unibet</div>
-                </div>
-               
-                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
-                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹20</strong></div>
-                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">1.995 | 11/100</strong></div>
-                </div>
-            </div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 12:30 AM</span>
-                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">0.79% EV</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Washington Capitals <span style="font-size:12px; color:#a1a1aa;">vs</span> Boston Bruins</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.0</strong></div>
-               
-                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
-                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 1.96</strong></div>
-                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Unibet</div>
-                </div>
-               
-                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
-                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹20</strong></div>
-                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">1.945 | 3/100</strong></div>
-                </div>
-            </div>
-        </div></div>
-<div id="pane-arb" class="pane">
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 04:30 AM</span>
-                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">2.91% ARB</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Montréal Canadiens <span style="font-size:12px; color:#a1a1aa;">vs</span> San Jose Sharks</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.5</strong> (2-Way)</div>
-                
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>OVER @ <strong style="color:#f59e0b;">2.06</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Onexbet</span></span>
-                <strong style="color:#06b6d4;">₹750</strong>
-            </div>
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>UNDER @ <strong style="color:#f59e0b;">2.06</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Pinnacle</span></span>
-                <strong style="color:#06b6d4;">₹750</strong>
-            </div>
-                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹45</strong></div>
-            </div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 04:30 AM</span>
-                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">2.90% ARB</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Buffalo Sabres <span style="font-size:12px; color:#a1a1aa;">vs</span> Toronto Maple Leafs</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.5</strong> (2-Way)</div>
-                
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>OVER @ <strong style="color:#f59e0b;">2.08</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Onexbet</span></span>
-                <strong style="color:#06b6d4;">₹743</strong>
-            </div>
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>UNDER @ <strong style="color:#f59e0b;">2.04</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Pinnacle</span></span>
-                <strong style="color:#06b6d4;">₹757</strong>
-            </div>
-                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹45</strong></div>
-            </div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 14 Mar, 10:30 PM</span>
-                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">2.67% ARB</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Ottawa Senators <span style="font-size:12px; color:#a1a1aa;">vs</span> Anaheim Ducks</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.5</strong> (2-Way)</div>
-                
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>OVER @ <strong style="color:#f59e0b;">2.21</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Onexbet</span></span>
-                <strong style="color:#06b6d4;">₹697</strong>
-            </div>
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>UNDER @ <strong style="color:#f59e0b;">1.92</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Pinnacle</span></span>
-                <strong style="color:#06b6d4;">₹803</strong>
-            </div>
-                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹41</strong></div>
-            </div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 04:30 AM</span>
-                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">2.57% ARB</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Tampa Bay Lightning <span style="font-size:12px; color:#a1a1aa;">vs</span> Carolina Hurricanes</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.5</strong> (2-Way)</div>
-                
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>OVER @ <strong style="color:#f59e0b;">2.29</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Onexbet</span></span>
-                <strong style="color:#06b6d4;">₹672</strong>
-            </div>
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>UNDER @ <strong style="color:#f59e0b;">1.86</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Pinnacle</span></span>
-                <strong style="color:#06b6d4;">₹828</strong>
-            </div>
-                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹40</strong></div>
-            </div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 SOCCER UEFA CHAMPS LEAGUE &nbsp;|&nbsp; 📅 19 Mar, 01:30 AM</span>
-                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">1.27% ARB</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Tottenham Hotspur <span style="font-size:12px; color:#a1a1aa;">vs</span> Atlético Madrid</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 2.5</strong> (2-Way)</div>
-                
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>OVER @ <strong style="color:#f59e0b;">1.81</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Onexbet</span></span>
-                <strong style="color:#06b6d4;">₹839</strong>
-            </div>
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>UNDER @ <strong style="color:#f59e0b;">2.30</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Unibet</span></span>
-                <strong style="color:#06b6d4;">₹661</strong>
-            </div>
-                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹19</strong></div>
-            </div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 SOCCER UEFA CHAMPS LEAGUE &nbsp;|&nbsp; 📅 18 Mar, 11:15 PM</span>
-                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">0.23% ARB</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Barcelona <span style="font-size:12px; color:#a1a1aa;">vs</span> Newcastle United</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 3.5</strong> (2-Way)</div>
-                
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>OVER @ <strong style="color:#f59e0b;">2.16</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Unibet</span></span>
-                <strong style="color:#06b6d4;">₹696</strong>
-            </div>
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>UNDER @ <strong style="color:#f59e0b;">1.87</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Onexbet</span></span>
-                <strong style="color:#06b6d4;">₹804</strong>
-            </div>
-                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹3</strong></div>
-            </div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 07:30 AM</span>
-                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">0.22% ARB</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Vegas Golden Knights <span style="font-size:12px; color:#a1a1aa;">vs</span> Chicago Blackhawks</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.0</strong> (2-Way)</div>
-                
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>OVER @ <strong style="color:#f59e0b;">2.04</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Unibet</span></span>
-                <strong style="color:#06b6d4;">₹737</strong>
-            </div>
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>UNDER @ <strong style="color:#f59e0b;">1.97</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Pinnacle</span></span>
-                <strong style="color:#06b6d4;">₹763</strong>
-            </div>
-                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹3</strong></div>
-            </div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 MMA MIXED MARTIAL ARTS &nbsp;|&nbsp; 📅 15 Mar, 04:30 AM</span>
-                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">0.20% ARB</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Josh Emmett <span style="font-size:12px; color:#a1a1aa;">vs</span> Kevin Vallejos</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 3.5</strong> (2-Way)</div>
-                
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>OVER @ <strong style="color:#f59e0b;">2.12</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Onexbet</span></span>
-                <strong style="color:#06b6d4;">₹709</strong>
-            </div>
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>UNDER @ <strong style="color:#f59e0b;">1.90</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Pinnacle</span></span>
-                <strong style="color:#06b6d4;">₹791</strong>
-            </div>
-                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹3</strong></div>
-            </div>
-        </div></div>
-<div id="pane-net" class="pane">
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #ef4444; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">c5c5••••e127</strong>
-                <span style="font-size:10px; font-weight:bold; color:#ef4444;">EXHAUSTED</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">0/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">4130••••e50b</strong>
-                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">85/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #06b6d4; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">dd73••••db34</strong>
-                <span style="font-size:10px; font-weight:bold; color:#06b6d4;">ACTIVE</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">303/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">5df6••••6bdf</strong>
-                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">0c68••••e8a2</strong>
-                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">2c49••••f3b0</strong>
-                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">0a51••••fc96</strong>
-                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">087f••••f22e</strong>
-                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">1727••••81db</strong>
-                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">baa5••••474c</strong>
-                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">a58d••••75ce</strong>
-                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">7513••••a79e</strong>
-                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">b148••••95d4</strong>
-                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">f633••••fc2c</strong>
-                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">4ed1••••93cf</strong>
-                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">d29c••••ac67</strong>
-                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">97f5••••0b1d</strong>
-                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">26f8••••9f6e</strong>
-                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
-        </div>
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">2596••••e1c4</strong>
-                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
-        </div></div>
 
-<script>
-    function showPane(p) {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.pane').forEach(t => t.classList.remove('active'));
-        event.target.classList.add('active');
-        document.getElementById('pane-'+p).classList.add('active');
-    }
-    // Auto-refresh the page every 5 minutes to fetch the latest GitHub build
-    setInterval(() => window.location.reload(true), 300000);
-</script>
-</body>
-</html>
+            <div id='p0' class='pane active-pane'></div>
+            <div id='p1' class='pane'></div>
+            
+            <div id='p2' class='pane'>
+                <div class='card'>
+                    <h3 style='margin-top:0; color:#06b6d4;'>Advanced 2-Way/3-Way Calculator</h3>
+                    <label style='font-size:10px; color:#aaa;'>Investment Amount</label>
+                    <input type='number' id='calcBank' class='input-box' placeholder='Investment Amount' oninput='runCalc()'>
+                    <label style='font-size:10px; color:#aaa;'>Odd 1</label>
+                    <input type='number' id='odd1' class='input-box' placeholder='Odd 1' oninput='runCalc()'>
+                    <label style='font-size:10px; color:#aaa;'>Odd 2</label>
+                    <input type='number' id='odd2' class='input-box' placeholder='Odd 2' oninput='runCalc()'>
+                    <label style='font-size:10px; color:#aaa;'>Odd 3 (Optional for 3-Way)</label>
+                    <input type='number' id='odd3' class='input-box' placeholder='Odd 3 (Optional)' oninput='runCalc()'>
+                    <div id='calcResult' style='margin-top:5px; padding:15px; background:#000; border-radius:8px; border:1px solid #222;'>Awaiting Input...</div>
+                </div>
+            </div>
+
+            <div id='p3' class='pane'><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #1 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>c5c5••••e127</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>0</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #2 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>4130••••e50b</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>85</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #3 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>dd73••••db34</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>283</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #06b6d4; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #4 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#06b6d4; border:1px solid #06b6d4;'>ACTIVE</span></div><div style='font-family:monospace; color:#fff;'>5df6••••6bdf</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>372</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #5 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>0c68••••e8a2</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #6 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>2c49••••f3b0</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #7 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>0a51••••fc96</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #8 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>087f••••f22e</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #9 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>1727••••81db</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #10 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>baa5••••474c</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #11 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>a58d••••75ce</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #12 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>7513••••a79e</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #13 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>b148••••95d4</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #14 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>f633••••fc2c</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #15 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>4ed1••••93cf</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #16 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>d29c••••ac67</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #17 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>97f5••••0b1d</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #18 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>26f8••••9f6e</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #19 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>2596••••e1c4</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div></div>
+        </div>
+
+        <script>
+            const EXPECTED_HASH = '2986aa2732ab10167c3c738108433d437ccfa4d8f7fc99f24aad4d0214ef5bf7';
+            const rawArbs = [{"match": "Philadelphia 76ers vs Brooklyn Nets", "sport": "BASKETBALL NBA", "raw_time": "2026-03-14T17:10:00Z", "time": "14 Mar | 10:40 PM", "pct": 1.0025062656641603, "line": "H2H", "ways": 2, "margin": 0.9899749373433584, "sides": [{"sel": "Brooklyn Nets", "pr": 4.2, "bk": "unibet"}, {"sel": "Philadelphia 76ers", "pr": 1.33, "bk": "onexbet"}]}];
+            const rawEvs = [{"match": "Vegas Golden Knights vs Chicago Blackhawks", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-15T02:00:00Z", "time": "15 Mar | 07:30 AM", "pct": 48.972602739726014, "line": "H2H", "ways": 2, "sel": "Chicago Blackhawks", "odds": 4.5, "trueO": 3.020689655172414, "bk": "unibet"}, {"match": "Buffalo Sabres vs Toronto Maple Leafs", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T23:00:00Z", "time": "15 Mar | 04:30 AM", "pct": 47.67898383371825, "line": "H2H", "ways": 2, "sel": "Toronto Maple Leafs", "odds": 4.35, "trueO": 2.9455782312925165, "bk": "unibet"}, {"match": "Minnesota Wild vs New York Rangers", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T22:00:00Z", "time": "15 Mar | 03:30 AM", "pct": 38.24480369515011, "line": "H2H", "ways": 2, "sel": "New York Rangers", "odds": 4.1, "trueO": 2.965753424657534, "bk": "unibet"}, {"match": "Utah Mammoth vs Pittsburgh Penguins", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-15T01:00:00Z", "time": "15 Mar | 06:30 AM", "pct": 32.96482412060304, "line": "H2H", "ways": 2, "sel": "Pittsburgh Penguins", "odds": 3.15, "trueO": 2.3690476190476186, "bk": "unibet"}, {"match": "New York Islanders vs Calgary Flames", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T23:00:00Z", "time": "15 Mar | 04:30 AM", "pct": 31.695331695331696, "line": "H2H", "ways": 2, "sel": "Calgary Flames", "odds": 3.35, "trueO": 2.54375, "bk": "unibet"}, {"match": "Dallas Stars vs Detroit Red Wings", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-15T00:00:00Z", "time": "15 Mar | 05:30 AM", "pct": 30.722891566265066, "line": "H2H", "ways": 2, "sel": "Detroit Red Wings", "odds": 3.5, "trueO": 2.6774193548387095, "bk": "unibet"}, {"match": "Montr\u00e9al Canadiens vs San Jose Sharks", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T23:00:00Z", "time": "15 Mar | 04:30 AM", "pct": 30.551470588235286, "line": "H2H", "ways": 2, "sel": "San Jose Sharks", "odds": 3.35, "trueO": 2.566037735849057, "bk": "unibet"}, {"match": "New Jersey Devils vs Los Angeles Kings", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T23:00:00Z", "time": "15 Mar | 04:30 AM", "pct": 29.934673366834176, "line": "H2H", "ways": 2, "sel": "Los Angeles Kings", "odds": 3.06, "trueO": 2.3550295857988166, "bk": "onexbet"}, {"match": "New Jersey Devils vs Los Angeles Kings", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T23:00:00Z", "time": "15 Mar | 04:30 AM", "pct": 29.45979899497486, "line": "H2H", "ways": 2, "sel": "New Jersey Devils", "odds": 2.25, "trueO": 1.737991266375546, "bk": "unibet"}, {"match": "Winnipeg Jets vs Colorado Avalanche", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T20:00:00Z", "time": "15 Mar | 01:30 AM", "pct": 29.19999999999998, "line": "H2H", "ways": 2, "sel": "Winnipeg Jets", "odds": 3.57, "trueO": 2.7631578947368425, "bk": "onexbet"}, {"match": "Tampa Bay Lightning vs Carolina Hurricanes", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T23:00:00Z", "time": "15 Mar | 04:30 AM", "pct": 28.178117048346053, "line": "H2H", "ways": 2, "sel": "Carolina Hurricanes", "odds": 2.83, "trueO": 2.207865168539326, "bk": "onexbet"}, {"match": "Vancouver Canucks vs Seattle Kraken", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-15T02:00:00Z", "time": "15 Mar | 07:30 AM", "pct": 27.46803069053705, "line": "H2H", "ways": 2, "sel": "Vancouver Canucks", "odds": 2.8, "trueO": 2.1966292134831464, "bk": "unibet"}, {"match": "Philadelphia Flyers vs Columbus Blue Jackets", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T23:30:00Z", "time": "15 Mar | 05:00 AM", "pct": 27.40051020408163, "line": "H2H", "ways": 2, "sel": "Philadelphia Flyers", "odds": 2.79, "trueO": 2.189944134078212, "bk": "onexbet"}, {"match": "Como vs Pisa", "sport": "SOCCER ITALY SERIE A", "raw_time": "2026-03-22T11:30:00Z", "time": "22 Mar | 05:00 PM", "pct": 27.36066291533559, "line": "H2H", "ways": 3, "sel": "Pisa", "odds": 13.0, "trueO": 10.20723330298767, "bk": "onexbet"}, {"match": "Washington Capitals vs Boston Bruins", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T19:00:00Z", "time": "15 Mar | 12:30 AM", "pct": 27.06122448979591, "line": "H2H", "ways": 2, "sel": "Boston Bruins", "odds": 2.83, "trueO": 2.2272727272727275, "bk": "onexbet"}, {"match": "Ottawa Senators vs Anaheim Ducks", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T17:00:00Z", "time": "14 Mar | 10:30 PM", "pct": 25.10891089108911, "line": "H2H", "ways": 2, "sel": "Anaheim Ducks", "odds": 3.12, "trueO": 2.493827160493827, "bk": "onexbet"}, {"match": "Philadelphia Flyers vs Columbus Blue Jackets", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T23:30:00Z", "time": "15 Mar | 05:00 AM", "pct": 24.974489795918366, "line": "H2H", "ways": 2, "sel": "Columbus Blue Jackets", "odds": 2.3, "trueO": 1.84037558685446, "bk": "unibet"}, {"match": "Ottawa Senators vs Anaheim Ducks", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T17:00:00Z", "time": "14 Mar | 10:30 PM", "pct": 24.594059405940595, "line": "H2H", "ways": 2, "sel": "Ottawa Senators", "odds": 2.08, "trueO": 1.6694214876033058, "bk": "unibet"}, {"match": "Bayern Munich vs Atalanta BC", "sport": "SOCCER UEFA CHAMPS LEAGUE", "raw_time": "2026-03-18T20:00:00Z", "time": "19 Mar | 01:30 AM", "pct": 24.021483261086995, "line": "H2H", "ways": 3, "sel": "Atalanta BC", "odds": 9.75, "trueO": 7.861541197241238, "bk": "onexbet"}, {"match": "Washington Capitals vs Boston Bruins", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T19:00:00Z", "time": "15 Mar | 12:30 AM", "pct": 23.979591836734706, "line": "H2H", "ways": 2, "sel": "Washington Capitals", "odds": 2.25, "trueO": 1.8148148148148147, "bk": "unibet"}, {"match": "Vancouver Canucks vs Seattle Kraken", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-15T02:00:00Z", "time": "15 Mar | 07:30 AM", "pct": 23.659846547314565, "line": "H2H", "ways": 2, "sel": "Seattle Kraken", "odds": 2.27, "trueO": 1.8356807511737092, "bk": "onexbet"}, {"match": "Tampa Bay Lightning vs Carolina Hurricanes", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T23:00:00Z", "time": "15 Mar | 04:30 AM", "pct": 23.09160305343514, "line": "H2H", "ways": 2, "sel": "Tampa Bay Lightning", "odds": 2.25, "trueO": 1.8279069767441858, "bk": "unibet"}, {"match": "New York Islanders vs Calgary Flames", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T23:00:00Z", "time": "15 Mar | 04:30 AM", "pct": 22.589680589680583, "line": "H2H", "ways": 2, "sel": "New York Islanders", "odds": 2.02, "trueO": 1.6477732793522268, "bk": "onexbet"}, {"match": "Dallas Stars vs Detroit Red Wings", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-15T00:00:00Z", "time": "15 Mar | 05:30 AM", "pct": 22.1686746987952, "line": "H2H", "ways": 2, "sel": "Dallas Stars", "odds": 1.95, "trueO": 1.5961538461538458, "bk": "onexbet"}, {"match": "Utah Mammoth vs Pittsburgh Penguins", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-15T01:00:00Z", "time": "15 Mar | 06:30 AM", "pct": 21.356783919597987, "line": "H2H", "ways": 2, "sel": "Utah Mammoth", "odds": 2.1, "trueO": 1.7304347826086959, "bk": "onexbet"}, {"match": "Winnipeg Jets vs Colorado Avalanche", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T20:00:00Z", "time": "15 Mar | 01:30 AM", "pct": 21.238095238095234, "line": "H2H", "ways": 2, "sel": "Colorado Avalanche", "odds": 1.9, "trueO": 1.5671641791044775, "bk": "unibet"}, {"match": "Montr\u00e9al Canadiens vs San Jose Sharks", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T23:00:00Z", "time": "15 Mar | 04:30 AM", "pct": 20.838235294117634, "line": "H2H", "ways": 2, "sel": "Montr\u00e9al Canadiens", "odds": 1.98, "trueO": 1.63855421686747, "bk": "onexbet"}, {"match": "Minnesota Wild vs New York Rangers", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T22:00:00Z", "time": "15 Mar | 03:30 AM", "pct": 19.307159353348744, "line": "H2H", "ways": 2, "sel": "Minnesota Wild", "odds": 1.8, "trueO": 1.508710801393728, "bk": "onexbet"}, {"match": "Vegas Golden Knights vs Chicago Blackhawks", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-15T02:00:00Z", "time": "15 Mar | 07:30 AM", "pct": 19.073059360730603, "line": "H2H", "ways": 2, "sel": "Vegas Golden Knights", "odds": 1.78, "trueO": 1.4948805460750851, "bk": "onexbet"}, {"match": "Buffalo Sabres vs Toronto Maple Leafs", "sport": "ICEHOCKEY NHL", "raw_time": "2026-03-14T23:00:00Z", "time": "15 Mar | 04:30 AM", "pct": 18.89145496535798, "line": "H2H", "ways": 2, "sel": "Buffalo Sabres", "odds": 1.8, "trueO": 1.513986013986014, "bk": "onexbet"}, {"match": "Juventus vs Sassuolo", "sport": "SOCCER ITALY SERIE A", "raw_time": "2026-03-21T19:45:00Z", "time": "22 Mar | 01:15 AM", "pct": 15.73275341696192, "line": "H2H", "ways": 3, "sel": "Sassuolo", "odds": 10.5, "trueO": 9.072626106259309, "bk": "unibet"}, {"match": "Liverpool vs Tottenham Hotspur", "sport": "SOCCER EPL", "raw_time": "2026-03-15T16:30:00Z", "time": "15 Mar | 10:00 PM", "pct": 15.48692938628653, "line": "H2H", "ways": 3, "sel": "Tottenham Hotspur", "odds": 10.5, "trueO": 9.091937984496123, "bk": "unibet"}, {"match": "Atalanta BC vs Hellas Verona", "sport": "SOCCER ITALY SERIE A", "raw_time": "2026-03-22T14:00:00Z", "time": "22 Mar | 07:30 PM", "pct": 13.506493506493511, "line": "H2H", "ways": 3, "sel": "Hellas Verona", "odds": 9.5, "trueO": 8.369565217391305, "bk": "unibet"}, {"match": "Liverpool vs Galatasaray", "sport": "SOCCER UEFA CHAMPS LEAGUE", "raw_time": "2026-03-18T20:00:00Z", "time": "19 Mar | 01:30 AM", "pct": 11.784645595661125, "line": "H2H", "ways": 3, "sel": "Galatasaray", "odds": 11.0, "trueO": 9.840349666436623, "bk": "unibet"}, {"match": "Real Madrid vs Atl\u00e9tico Madrid", "sport": "SOCCER SPAIN LA LIGA", "raw_time": "2026-03-22T20:00:00Z", "time": "23 Mar | 01:30 AM", "pct": 10.755029286231599, "line": "H2H", "ways": 3, "sel": "Atl\u00e9tico Madrid", "odds": 3.98, "trueO": 3.593516272488377, "bk": "onexbet"}, {"match": "Barcelona vs Rayo Vallecano", "sport": "SOCCER SPAIN LA LIGA", "raw_time": "2026-03-22T13:00:00Z", "time": "22 Mar | 06:30 PM", "pct": 9.961456493148546, "line": "H2H", "ways": 3, "sel": "Rayo Vallecano", "odds": 11.9, "trueO": 10.821973789280849, "bk": "onexbet"}, {"match": "AS Roma vs Lecce", "sport": "SOCCER ITALY SERIE A", "raw_time": "2026-03-22T17:00:00Z", "time": "22 Mar | 10:30 PM", "pct": 9.533855683201864, "line": "H2H", "ways": 3, "sel": "Lecce", "odds": 10.1, "trueO": 9.220893336587746, "bk": "onexbet"}, {"match": "Fiorentina vs Inter Milan", "sport": "SOCCER ITALY SERIE A", "raw_time": "2026-03-22T19:45:00Z", "time": "23 Mar | 01:15 AM", "pct": 8.696376090460966, "line": "H2H", "ways": 3, "sel": "Fiorentina", "odds": 5.27, "trueO": 4.848367709714737, "bk": "onexbet"}, {"match": "Manchester City vs Real Madrid", "sport": "SOCCER UEFA CHAMPS LEAGUE", "raw_time": "2026-03-17T20:00:00Z", "time": "18 Mar | 01:30 AM", "pct": 7.982658880485771, "line": "H2H", "ways": 3, "sel": "Real Madrid", "odds": 5.5, "trueO": 5.093410420730009, "bk": "unibet"}, {"match": "Parma vs Cremonese", "sport": "SOCCER ITALY SERIE A", "raw_time": "2026-03-21T14:00:00Z", "time": "21 Mar | 07:30 PM", "pct": 5.957445650003823, "line": "H2H", "ways": 3, "sel": "Draw", "odds": 3.15, "trueO": 2.972891598769762, "bk": "unibet"}, {"match": "Fulham vs Burnley", "sport": "SOCCER EPL", "raw_time": "2026-03-21T15:00:00Z", "time": "21 Mar | 08:30 PM", "pct": 5.771953794559681, "line": "H2H", "ways": 3, "sel": "Burnley", "odds": 6.7, "trueO": 6.334382376081825, "bk": "onexbet"}, {"match": "Philadelphia 76ers vs Brooklyn Nets", "sport": "BASKETBALL NBA", "raw_time": "2026-03-14T17:10:00Z", "time": "14 Mar | 10:40 PM", "pct": 5.614035087719316, "line": "H2H", "ways": 2, "sel": "Brooklyn Nets", "odds": 4.2, "trueO": 3.976744186046511, "bk": "unibet"}, {"match": "Sporting Lisbon vs Bod\u00f8/Glimt", "sport": "SOCCER UEFA CHAMPS LEAGUE", "raw_time": "2026-03-17T17:45:00Z", "time": "17 Mar | 11:15 PM", "pct": 5.473191964942203, "line": "H2H", "ways": 3, "sel": "Bod\u00f8/Glimt", "odds": 5.17, "trueO": 4.901719483106603, "bk": "onexbet"}, {"match": "Barcelona vs Newcastle United", "sport": "SOCCER UEFA CHAMPS LEAGUE", "raw_time": "2026-03-18T17:45:00Z", "time": "18 Mar | 11:15 PM", "pct": 5.023340637206197, "line": "H2H", "ways": 3, "sel": "Newcastle United", "odds": 5.3, "trueO": 5.046497252747253, "bk": "unibet"}, {"match": "Aston Villa vs West Ham United", "sport": "SOCCER EPL", "raw_time": "2026-03-22T14:15:00Z", "time": "22 Mar | 07:45 PM", "pct": 4.418926537460455, "line": "H2H", "ways": 3, "sel": "Draw", "odds": 3.95, "trueO": 3.7828391183306516, "bk": "unibet"}, {"match": "CA Osasuna vs Girona", "sport": "SOCCER SPAIN LA LIGA", "raw_time": "2026-03-21T17:30:00Z", "time": "21 Mar | 11:00 PM", "pct": 4.010905762527028, "line": "H2H", "ways": 3, "sel": "Girona", "odds": 3.4, "trueO": 3.268887983499274, "bk": "unibet"}, {"match": "AC Milan vs Torino", "sport": "SOCCER ITALY SERIE A", "raw_time": "2026-03-21T17:00:00Z", "time": "21 Mar | 10:30 PM", "pct": 3.850303744673167, "line": "H2H", "ways": 3, "sel": "Torino", "odds": 9.1, "trueO": 8.762612791555528, "bk": "onexbet"}, {"match": "Arsenal vs Everton", "sport": "SOCCER EPL", "raw_time": "2026-03-14T17:30:00Z", "time": "14 Mar | 11:00 PM", "pct": 2.3498694516971286, "line": "H2H", "ways": 3, "sel": "Draw", "odds": 4.8, "trueO": 4.689795918367347, "bk": "unibet"}, {"match": "Elche CF vs Mallorca", "sport": "SOCCER SPAIN LA LIGA", "raw_time": "2026-03-21T13:00:00Z", "time": "21 Mar | 06:30 PM", "pct": 2.261482776303403, "line": "H2H", "ways": 3, "sel": "Mallorca", "odds": 3.9, "trueO": 3.8137526408953355, "bk": "unibet"}, {"match": "Bournemouth vs Manchester United", "sport": "SOCCER EPL", "raw_time": "2026-03-20T20:00:00Z", "time": "21 Mar | 01:30 AM", "pct": 2.0541586073500984, "line": "H2H", "ways": 3, "sel": "Bournemouth", "odds": 3.1, "trueO": 3.037602820211516, "bk": "unibet"}, {"match": "Athletic Bilbao vs Real Betis", "sport": "SOCCER SPAIN LA LIGA", "raw_time": "2026-03-22T17:30:00Z", "time": "22 Mar | 11:00 PM", "pct": 1.815259819232673, "line": "H2H", "ways": 3, "sel": "Real Betis", "odds": 3.35, "trueO": 3.290272996354121, "bk": "unibet"}, {"match": "San Antonio Spurs vs Charlotte Hornets", "sport": "BASKETBALL NBA", "raw_time": "2026-03-14T19:40:00Z", "time": "15 Mar | 01:10 AM", "pct": 1.6891891891891886, "line": "H2H", "ways": 2, "sel": "San Antonio Spurs", "odds": 1.5, "trueO": 1.4750830564784052, "bk": "onexbet"}, {"match": "Atl\u00e9tico Madrid vs Getafe", "sport": "SOCCER SPAIN LA LIGA", "raw_time": "2026-03-14T15:15:00Z", "time": "14 Mar | 08:45 PM", "pct": 1.315905511811044, "line": "H2H", "ways": 3, "sel": "Draw", "odds": 3.7, "trueO": 3.651943869335173, "bk": "unibet"}, {"match": "Bournemouth vs Manchester United", "sport": "SOCCER EPL", "raw_time": "2026-03-20T20:00:00Z", "time": "21 Mar | 01:30 AM", "pct": 1.3121083172146664, "line": "H2H", "ways": 3, "sel": "Draw", "odds": 3.94, "trueO": 3.8889724687829106, "bk": "onexbet"}, {"match": "Real Madrid vs Elche CF", "sport": "SOCCER SPAIN LA LIGA", "raw_time": "2026-03-14T20:00:00Z", "time": "15 Mar | 01:30 AM", "pct": 1.2844846612227068, "line": "H2H", "ways": 3, "sel": "Elche CF", "odds": 8.8, "trueO": 8.688398849472675, "bk": "onexbet"}, {"match": "Arsenal vs Bayer Leverkusen", "sport": "SOCCER UEFA CHAMPS LEAGUE", "raw_time": "2026-03-17T20:00:00Z", "time": "18 Mar | 01:30 AM", "pct": 1.088074824629759, "line": "H2H", "ways": 3, "sel": "Bayer Leverkusen", "odds": 10.5, "trueO": 10.386981865284975, "bk": "unibet"}];
+            
+            document.getElementById('aiText').innerHTML = "Act fast! A 1.0% arbitrage opportunity is live for the Philadelphia 76ers vs Brooklyn Nets game. Odds will move quickly; place your bets now to secure this guaranteed profit before it vanishes.";
+
+            if(localStorage.getItem('savedBankroll')) {
+                document.getElementById('userBankroll').value = localStorage.getItem('savedBankroll');
+                document.getElementById('calcBank').value = localStorage.getItem('savedBankroll');
+            }
+
+            function saveBankroll() {
+                const val = document.getElementById('userBankroll').value;
+                localStorage.setItem('savedBankroll', val);
+                document.getElementById('calcBank').value = val;
+                renderAll(); runCalc();
+            }
+
+            function ck() { 
+                if(CryptoJS.SHA256(document.getElementById('ps').value).toString() === EXPECTED_HASH) { 
+                    document.getElementById('lock-screen').style.display='none'; 
+                    document.getElementById('content').style.display='block'; 
+                    localStorage.setItem('auth_hash', EXPECTED_HASH); 
+                    renderAll();
+                } else { document.getElementById('err').innerText = 'Access Denied: Invalid Code'; }
+            }
+            
+            if(localStorage.getItem('auth_hash') === EXPECTED_HASH) { 
+                document.getElementById('lock-screen').style.display='none'; 
+                document.getElementById('content').style.display='block'; 
+                renderAll();
+            }
+
+            function sw(i) { document.querySelectorAll('.tab').forEach((t,j)=>j==i?t.classList.add('active'):t.classList.remove('active')); document.querySelectorAll('.pane').forEach((p,j)=>j==i?p.classList.add('active-pane') : p.classList.remove('active-pane')); window.scrollTo(0,0); }
+
+            function formatTimeDiff(iso) {
+                let d = new Date(iso) - new Date();
+                if(d < 0) return "LIVE NOW";
+                return `${Math.floor(d/3600000)}h ${Math.floor((d%3600000)/60000)}m`;
+            }
+
+            setInterval(() => {
+                document.querySelectorAll('.live-clock').forEach(el => el.innerText = '⏳ ' + formatTimeDiff(el.dataset.iso));
+            }, 1000);
+
+            function copyText(txt) { navigator.clipboard.writeText(txt); alert("Copied: " + txt); }
+
+            function renderAll() {
+                const bank = parseFloat(document.getElementById('userBankroll').value) || 0;
+                
+                let arbHTML = "";
+                rawArbs.forEach((a, i) => {
+                    let profit = (bank / a.margin) - bank;
+                    let pColor = profit > 0 ? '#10b981' : '#ef4444';
+                    let legs = "";
+                    
+                    a.sides.forEach(s => {
+                        let rawStk = (bank / a.margin) / s.pr;
+                        let roundedStk = Math.round(rawStk / 10) * 10; 
+                        legs += `<div style='display:flex; justify-content:space-between; align-items:center; background:#000; padding:10px; border-radius:6px; margin-top:6px; border:1px solid #222;'>
+                            <span>${s.sel} @ <b style='color:#f59e0b'>${s.pr}</b> <small style='color:#aaa'>(${s.bk.toUpperCase()})</small></span>
+                            <div style='text-align:right;'><div style='color:#fff; font-weight:bold;'>₹${roundedStk}</div><div style='color:#666; font-size:9px;'>Ex: ₹${rawStk.toFixed(1)}</div></div>
+                        </div>`;
+                    });
+
+                    arbHTML += `<div class='card' style='border-left: 4px solid #f59e0b;'>
+                        <div style='display:flex; justify-content:space-between; align-items:center;'>
+                            <span class='badge' style='background:#f59e0b;'>${a.pct.toFixed(2)}% ARB</span>
+                            <div style='display:flex; gap:5px;'>
+                                <button class='btn btn-calc' onclick='sendToCalc(${a.sides[0]?.pr || 0}, ${a.sides[1]?.pr || 0}, ${a.sides[2]?.pr || 0})'>🧮 CALC</button>
+                                <button class='btn' style='background:#3f3f46;' onclick='copyText("${a.match}")'>📋 COPY</button>
+                            </div>
+                        </div>
+                        <div style='font-size:16px; font-weight:bold; margin: 10px 0;'>${a.match}</div>
+                        <div style='display:flex; gap:10px; font-size:11px; margin-bottom:10px;'>
+                            <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 ${a.time}</span>
+                            <span class='live-clock clock' data-iso='${a.raw_time}'></span>
+                        </div>
+                        ${legs}
+                        <div style='text-align:right; font-weight:bold; color:${pColor}; margin-top:12px; font-size:18px;'>Est. Profit: ₹${profit.toFixed(0)}</div>
+                    </div>`;
+                });
+                document.getElementById('p0').innerHTML = arbHTML || "<div style='padding:20px; color:#aaa;'>No Matches.</div>";
+
+                let evHTML = "";
+                rawEvs.slice(0,100).forEach((e, i) => {
+                    let b = e.odds - 1; let p = 1 / e.trueO;
+                    let kelly = ((b * p - (1-p)) / b) * 0.30;
+                    let rawStk = Math.min(Math.max(20, bank * Math.min(kelly, 0.05)), 1000);
+                    let roundedStk = Math.round(rawStk / 10) * 10;
+                    
+                    evHTML += `<div class='card' style='border-left: 4px solid #06b6d4;'>
+                        <div style='display:flex; justify-content:space-between; align-items:center;'><span class='badge' style='background:#06b6d4;'>${e.pct.toFixed(2)}% EV</span><div style='display:flex; gap:5px;'><span class='live-clock clock' data-iso='${e.raw_time}'></span><button class='btn' style='background:#3f3f46;' onclick='copyText("${e.match}")'>📋</button></div></div>
+                        <div style='font-size:16px; font-weight:bold; margin: 10px 0;'>${e.match}</div>
+                        <div style='background:#000; padding:12px; border-radius:6px; border:1px solid #222;'>Bet <b>${e.sel.toUpperCase()}</b> @ <b style='color:#06b6d4;'>${e.odds}</b> <span style='float:right; color:#888;'>${e.bk.toUpperCase()}</span></div>
+                        <div style='display:flex; justify-content:space-between; align-items:center; margin-top:10px;'>
+                            <div><div style='color:#fff; font-weight:bold;'>Stake: ₹${roundedStk}</div><div style='color:#666; font-size:9px;'>Exact: ₹${rawStk.toFixed(2)}</div></div>
+                            <span style='color:#444; font-size:11px;'>True: ${e.trueO.toFixed(3)}</span>
+                        </div>
+                    </div>`;
+                });
+                document.getElementById('p1').innerHTML = evHTML || "<div style='padding:20px; color:#aaa;'>No Matches.</div>";
+            }
+
+            function sendToCalc(o1, o2, o3) { sw(2); document.getElementById('odd1').value = o1; document.getElementById('odd2').value = o2; document.getElementById('odd3').value = o3 > 0 ? o3 : ""; runCalc(); }
+
+            function runCalc() {
+                const b = parseFloat(document.getElementById('calcBank').value) || 0;
+                const o1 = parseFloat(document.getElementById('odd1').value) || 0;
+                const o2 = parseFloat(document.getElementById('odd2').value) || 0;
+                const o3 = parseFloat(document.getElementById('odd3').value) || 0;
+                
+                if(o1 > 0 && o2 > 0) {
+                    let invSum = (1/o1) + (1/o2) + (o3 > 0 ? (1/o3) : 0);
+                    let pct = (1 - invSum) * 100;
+                    let stk1 = (b/invSum) / o1;
+                    let stk2 = (b/invSum) / o2;
+                    let stk3 = o3 > 0 ? ((b/invSum) / o3) : 0;
+                    let prof = (b/invSum) - b;
+                    let color = prof > 0 ? '#10b981' : '#ef4444';
+                    
+                    let resultHTML = `<div style='display:flex; justify-content:space-between; margin-bottom:8px; color:#ccc;'><span>Leg 1 Exact:</span><b style='color:#fff;'>₹${stk1.toFixed(2)}</b></div><div style='display:flex; justify-content:space-between; margin-bottom:10px; color:#ccc;'><span>Leg 2 Exact:</span><b style='color:#fff;'>₹${stk2.toFixed(2)}</b></div>`;
+                    if(o3 > 0) resultHTML += `<div style='display:flex; justify-content:space-between; margin-bottom:10px; color:#ccc;'><span>Leg 3 Exact:</span><b style='color:#fff;'>₹${stk3.toFixed(2)}</b></div>`;
+                    resultHTML += `<hr style='border:none; border-top:1px solid #333; margin:15px 0;'><div style='display:flex; justify-content:space-between; margin-bottom:8px; color:${color};'><span>Arbitrage %:</span><b style='font-size:16px;'>${pct.toFixed(2)}%</b></div><div style='display:flex; justify-content:space-between; color:${color}; align-items:center;'><span>Profit:</span><b style='font-size:24px;'>₹${prof.toFixed(0)}</b></div>`;
+                    document.getElementById('calcResult').innerHTML = resultHTML;
+                } else { document.getElementById('calcResult').innerHTML = "Awaiting valid odds input..."; }
+            }
+        </script>
+    </body></html>
