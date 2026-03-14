@@ -1,38 +1,36 @@
-import os, json, requests, time, threading
+import os, json, requests, time, threading, hashlib, sys
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ==========================================
-#  CONFIGURATION
+#  1. CONFIGURATION & BANK-GRADE SECURITY
 # ==========================================
-_raw_keys = os.getenv('ODDS_API_KEYS', '')
+_raw_keys = os.getenv('ODDS_API_KEYS')
+if not _raw_keys:
+    print("🚨 SEC-FAULT: ODDS_API_KEYS missing. Halting.")
+    sys.exit(1)
 API_KEYS = [k.strip() for k in _raw_keys.split(',') if k.strip()]
 
-NTFY_CHANNEL = 'nikunj_arb_alerts_2026'
+_raw_pass = os.getenv('DASHBOARD_PASS')
+if not _raw_pass:
+    print("🚨 SEC-FAULT: DASHBOARD_PASS missing. Halting.")
+    sys.exit(1)
+SECRET_HASH = hashlib.sha256(_raw_pass.encode()).hexdigest()
 
-# --- LIVE FIRE TEST THRESHOLDS ---
-TOTAL_BANKROLL = 1500
-MIN_EV_THRESHOLD = 0.0   # Set to 0.0 for testing
-MIN_ARB_THRESHOLD = 0.0  # Set to 0.0 for testing
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY') # 🤖 AI KEY
 
-MY_BOOKIES = 'pinnacle,onexbet,marathonbet,dafabet,stake,betfair_ex_eu,betway,bet365,unibet,williamhill,888sport,betclic'
+NTFY_CHANNEL = 'nikunj_arb_alerts_2026' 
 
-TARGET_SPORTS = [
-    'soccer_epl', 'soccer_uefa_champs_league', 'soccer_spain_la_liga', 'soccer_italy_serie_a', 'soccer_germany_bundesliga',
-    'basketball_nba', 'basketball_euroleague', 'basketball_ncaab',
-    'icehockey_nhl',
-    'tennis_atp', 'tennis_wta',
-    'americanfootball_nfl',
-    'mma_mixed_martial_arts'
-]
+# 🛠️ PRODUCTION THRESHOLDS
+MIN_EV_THRESHOLD = 1.0                  
+MIN_ARB_THRESHOLD = 0.3                 
 
-BOOK_CAPS = {
-    'betway': 300, 'stake': 500, 'onexbet': 400, 'marathonbet': 400, 'dafabet': 350,
-    'betfair_ex_eu': 600, 'pinnacle': 1000, 'bet365': 400, 'unibet': 350,
-    'williamhill': 350, '888sport': 350, 'betclic': 300
-}
+MY_BOOKIES = 'pinnacle,onexbet,bet365,unibet,betway,stake,marathonbet'
+TARGET_SPORTS = ['soccer_epl', 'soccer_spain_la_liga', 'soccer_uefa_champs_league', 
+                 'basketball_nba', 'icehockey_nhl', 'soccer_italy_serie_a', 'upcoming']
+
 # ==========================================
-#  STATE & CACHE MANAGERS (BULLETPROOFED)
+#  2. KEY ROTATION & TELEMETRY
 # ==========================================
 api_lock = threading.Lock()
 
@@ -48,21 +46,7 @@ def save_json(filepath, data):
         with open(filepath, 'w', encoding='utf-8') as f: json.dump(data, f, indent=2)
     except: pass
 
-# Load and strictly enforce the structure to prevent KeyErrors
-api_state = load_json('api_state.json', {})
-if 'active_index' not in api_state: api_state['active_index'] = 0
-if 'stats' not in api_state: api_state['stats'] = {}
-
-alert_cache = load_json('alert_cache.json', {})
-
-# Clean old cache (6 hours)
-now_ts = time.time()
-alert_cache = {k: v for k, v in alert_cache.items() if isinstance(v, (int, float)) and (now_ts - v < 6*3600)}
-
-def is_duplicate_alert(alert_key):
-    if alert_key in alert_cache: return True
-    alert_cache[alert_key] = time.time()
-    return False
+api_state = load_json('api_state.json', {'active_index': 0, 'stats': {}})
 
 def get_active_api_key():
     with api_lock:
@@ -75,296 +59,443 @@ def rotate_api_key(failed_idx):
         if api_state['active_index'] == failed_idx:
             api_state['active_index'] += 1
             save_json('api_state.json', api_state)
-            print(f"🔄 Key #{failed_idx + 1} Exhausted! Switching to Key #{api_state['active_index'] + 1}")
+            print(f"🔄 Rotated to Key #{api_state['active_index'] + 1}")
         return api_state['active_index'] < len(API_KEYS)
 
-def update_key_telemetry(idx, rem):
+def update_key_stats(idx, rem):
     with api_lock:
         if str(idx) not in api_state['stats']: api_state['stats'][str(idx)] = {}
-        api_state['stats'][str(idx)]['remaining'] = int(rem)
+        if rem is not None: api_state['stats'][str(idx)]['remaining'] = int(rem)
 
 # ==========================================
-#  MATH ENGINE
+#  3. DATA FETCHERS
 # ==========================================
-def remove_vig(*odds):
-    margin = sum(1/o for o in odds)
-    return tuple(1 / ((1/o) / margin) for o in odds)
+def fetch_bcgame_custom():
+    headers = {'accept': '*/*', 'origin': 'https://bc.game', 'user-agent': 'Mozilla/5.0'}
+    try:
+        map_url = 'https://api-k-c7818b61-623.sptpub.com/api/v4/prematch/brand/2103509236163162112/en/0'
+        v_res = requests.get(map_url, headers=headers, timeout=10).json()
+        version = v_res['top_events_versions'][0]
+        data_url = f"https://api-k-c7818b61-623.sptpub.com/api/v4/prematch/brand/2103509236163162112/en/{version}"
+        events = requests.get(data_url, headers=headers, timeout=10).json().get('events', {})
 
-def calculate_kelly(soft_odds, true_odds, bankroll, bookie=None):
-    b, p = soft_odds - 1.0, 1.0 / true_odds
-    safe_kelly = ((b * p - (1-p)) / b) * 0.30
-    if safe_kelly <= 0: return 0
-    stake = max(20, bankroll * min(safe_kelly, 0.05))
-    return min(stake, BOOK_CAPS.get(bookie, 1000))
+        std = []
+        for m in events.values():
+            d, mk = m.get('desc', {}), m.get('markets', {})
+            c = d.get('competitors', [])
+            if len(c) < 2: continue
 
-# ==========================================
-#  CLOUD FETCHING
-# ==========================================
-def fetch_odds_with_retry(url, params):
+            h2h, tots = [], []
+            m1 = mk.get("1", {}).get("", {})
+            for k, n in [("1", c[0]['name']), ("2", c[1]['name']), ("3", "Draw")]:
+                if k in m1: h2h.append({'name': n, 'price': float(m1[k]["k"])})
+
+            std.append({
+                'home_team': c[0]['name'], 'away_team': c[1]['name'],
+                'commence_time': datetime.fromtimestamp(d.get('scheduled', 0), tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                'bookmakers': [{'key': 'bcgame', 'title': 'BC.Game', 'markets': [{'key': 'h2h', 'outcomes': h2h}]}]
+            })
+        return std
+    except: return []
+
+def fetch_odds_api(url, params):
     while True:
         key, idx = get_active_api_key()
         if not key: return None
         params['apiKey'] = key
         try:
             res = requests.get(url, params=params, timeout=15)
-        except: return None
-           
-        rem = res.headers.get('x-requests-remaining')
-        if rem: update_key_telemetry(idx, rem)
-
-        if res.status_code in [401, 429]:
-            if rotate_api_key(idx): continue
-            else: return None
-        elif res.status_code == 200:
-            return res.json()
-        return None
+            if res.status_code == 200:
+                update_key_stats(idx, res.headers.get('x-requests-remaining'))
+                return res.json()
+            if res.status_code in [401, 429]:
+                print(f"⚠️ API Limit hit on Key #{idx+1}. Rotating...")
+                if rotate_api_key(idx): continue
+            else:
+                print(f"⚠️ API Error {res.status_code}: {res.text}")
+            return None
+        except Exception as e: 
+            print(f"⚠️ Fetch Exception: {e}")
+            return None
 
 def fetch_all_sports():
     results = {}
+    print("📡 Fetching Unrestricted Global Data...")
     with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = {executor.submit(fetch_odds_with_retry, f'https://api.the-odds-api.com/v4/sports/{sp}/odds', {'regions': 'eu', 'bookmakers': MY_BOOKIES, 'markets': 'totals,spreads', 'oddsFormat': 'decimal'}): sp for sp in TARGET_SPORTS}
+        # 🛠️ THE FIX: Removed 'bookmakers' parameter. The API sends us EVERYTHING.
+        futures = {executor.submit(fetch_odds_api, f'https://api.the-odds-api.com/v4/sports/{sp}/odds', {'regions': 'eu,uk,us,au', 'markets': 'h2h'}): sp for sp in TARGET_SPORTS}
         for future in as_completed(futures):
             results[futures[future]] = future.result()
     return results
 
-def format_ist_time(iso_str):
+# ==========================================
+#  4. MATH ENGINE & GHOST ARB KILLER
+# ==========================================
+def remove_vig(*odds):
+    margin = sum(1/o for o in odds)
+    return tuple(1 / ((1/o) / margin) for o in odds)
+
+def format_ist(iso_str):
     try:
         dt = datetime.strptime(iso_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-        ist = dt.astimezone(timezone(timedelta(hours=5, minutes=30)))
-        return ist.strftime("%d %b, %I:%M %p")
-    except: return "Unknown Time"
+        return dt.astimezone(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b | %I:%M %p")
+    except: return "TBD"
 
-# ==========================================
-#  PROCESS MARKETS
-# ==========================================
 def process_markets(results):
     all_evs, all_arbs = [], []
+    now_utc = datetime.now(timezone.utc)
+    total_processed = 0
+    valid_bookies = [b.strip() for b in MY_BOOKIES.split(',')]
+    
     for sport, events in results.items():
         if not events: continue
+        total_processed += len(events)
+        
         for event in events:
-            home = event.get('home_team', 'Team A')
-            away = event.get('away_team', 'Team B')
-            match_name = f"{home} vs {away}"
-            match_time = format_ist_time(event['commence_time'])
-           
+            commence = event.get('commence_time', '')
+            
+            # 🛡️ GHOST ARB KILLER IS ACTIVE
+            if commence:
+                try:
+                    match_time = datetime.strptime(commence, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                    if (match_time - now_utc).total_seconds() < 900: continue 
+                except: pass
+
+            home, away = event.get('home_team', 'A'), event.get('away_team', 'B')
+            meta = {'match': f"{home} vs {away}", 'sport': sport.replace('_', ' ').upper(), 'raw_time': commence, 'time': format_ist(commence)}
+
             ev_lines, arb_lines = {}, {}
             for bookie in event.get('bookmakers', []):
                 b_name = bookie['key']
+                
+                # 🛠️ THE FIX: We filter the bookies locally instead of trusting the API
+                if b_name not in valid_bookies and b_name != 'bcgame':
+                    continue 
+                
                 for market in bookie.get('markets', []):
                     m_type = market['key'].upper()
-                    for outcome in market['outcomes']:
-                        point = str(outcome.get('point', '0'))
-                        name, price = outcome['name'], outcome['price']
-                        if b_name == 'betfair_ex_eu': price = 1 + (price - 1) * 0.97
-                        line_key = f"{m_type} {point}" if point != "0" else f"{m_type}"
-
-                        if line_key not in ev_lines: ev_lines[line_key] = {'pin': {}, 'softs': {}}
-                        if line_key not in arb_lines: arb_lines[line_key] = {}
-                       
-                        if b_name == 'pinnacle': ev_lines[line_key]['pin'][name] = price
+                    for out in market['outcomes']:
+                        lk = f"{m_type} {out.get('point', '')}".strip()
+                        name, price = out['name'], out['price']
+                        if lk not in ev_lines: ev_lines[lk] = {'pin': {}, 'softs': {}}
+                        if lk not in arb_lines: arb_lines[lk] = {}
+                        if b_name == 'pinnacle': ev_lines[lk]['pin'][name] = price
                         else:
-                            if name not in ev_lines[line_key]['softs']: ev_lines[line_key]['softs'][name] = {}
-                            ev_lines[line_key]['softs'][name][b_name] = price
-                               
-                        if name not in arb_lines[line_key] or price > arb_lines[line_key][name]['price']:
-                            arb_lines[line_key][name] = {'price': price, 'bookie': b_name}
+                            if name not in ev_lines[lk]['softs']: ev_lines[lk]['softs'][name] = {}
+                            ev_lines[lk]['softs'][name][b_name] = price
+                        if name not in arb_lines[lk] or price > arb_lines[lk][name]['price']:
+                            arb_lines[lk][name] = {'price': price, 'bookie': b_name}
 
-            # Evaluate EV
             for lk, d in ev_lines.items():
-                pinny, softs = d['pin'], d['softs']
-                if len(pinny) == 2:
-                    s1, s2 = list(pinny.keys())
-                    t1, t2 = remove_vig(pinny[s1], pinny[s2])
-                    for side, true_odds in [(s1, t1), (s2, t2)]:
-                        if side in softs:
-                            best_bk = max(softs[side], key=softs[side].get)
-                            best_p = softs[side][best_bk]
-                            if best_p > true_odds:
-                                ev_pct = ((best_p / true_odds) - 1) * 100
+                if len(d['pin']) in [2, 3]:
+                    keys = list(d['pin'].keys())
+                    true_os = remove_vig(*[d['pin'][k] for k in keys])
+                    for idx, side in enumerate(keys):
+                        if side in d['softs']:
+                            best_bk = max(d['softs'][side], key=d['softs'][side].get)
+                            best_p = d['softs'][side][best_bk]
+                            if best_p > true_os[idx]:
+                                ev_pct = ((best_p / true_os[idx]) - 1) * 100
                                 if ev_pct >= MIN_EV_THRESHOLD:
-                                    all_evs.append({
-                                        'pct': ev_pct, 'match': match_name, 'home': home, 'away': away, 'time': match_time, 'sport': sport.replace('_', ' ').upper(),
-                                        'line': lk, 'sel': side, 'odds': best_p, 'trueO': true_odds, 'bk': best_bk,
-                                        'stk': calculate_kelly(best_p, true_odds, TOTAL_BANKROLL, best_bk),
-                                        'conf': max(0, min(100, int((abs((1/best_p) - (1/true_odds)) / (1/true_odds)) * 500)))
-                                    })
+                                    all_evs.append({**meta, 'pct': ev_pct, 'line': lk, 'ways': len(keys), 'sel': side, 'odds': best_p, 'trueO': true_os[idx], 'bk': best_bk})
 
-            # Evaluate ARB
             for lk, outs in arb_lines.items():
                 keys = list(outs.keys())
-                for ways in [2, 3]:
-                    if len(keys) < ways: continue
-                    k_slice = keys[:ways]
-                    margin = sum(1/outs[k]['price'] for k in k_slice)
+                if len(keys) in [2, 3]:
+                    margin = sum(1/outs[k]['price'] for k in keys)
                     if margin < 1.0 and (1-margin)*100 >= MIN_ARB_THRESHOLD:
-                        arb = {'pct': (1-margin)*100, 'match': match_name, 'home': home, 'away': away, 'time': match_time, 'sport': sport.replace('_', ' ').upper(), 'line': lk, 'ways': ways, 'profit': (TOTAL_BANKROLL/margin)-TOTAL_BANKROLL, 'sides': []}
-                        for k in k_slice:
-                            arb['sides'].append({'sel': k, 'pr': outs[k]['price'], 'bk': outs[k]['bookie'], 'stk': (TOTAL_BANKROLL/margin)/outs[k]['price']})
+                        arb = {**meta, 'pct': (1-margin)*100, 'line': lk, 'ways': len(keys), 'margin': margin, 'sides': []}
+                        for k in keys: arb['sides'].append({'sel': k, 'pr': outs[k]['price'], 'bk': outs[k]['bookie']})
                         all_arbs.append(arb)
-
-    all_evs.sort(key=lambda x: x['pct'], reverse=True)
-    all_arbs.sort(key=lambda x: x['pct'], reverse=True)
+                        
+    print(f"🔍 DIAGNOSTIC: Total Raw Matches Scraped: {total_processed}")
     return all_evs, all_arbs
 
 # ==========================================
-#  WEBSITE GENERATOR
+#  5. GEMINI AI MARKET REPORTER
 # ==========================================
-def generate_web(evs, arbs):
-    ist_now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
-    build_time = ist_now.strftime('%d %b %Y, %I:%M %p IST')
-   
-    # Generate API Cards
-    net_html = ""
+def generate_ai_report(arbs):
+    if not GEMINI_API_KEY:
+        return "AI Module Offline: API Key Missing."
+    if not arbs:
+        return "Market is currently stable. No Arbitrage locks found right now."
+    
+    top_arbs = ", ".join([f"{a['match']} ({a['pct']:.1f}% Arb)" for a in arbs[:3]])
+    prompt = f"Act as a professional sports betting quant. I just found these arbitrage opportunities: {top_arbs}. Write a punchy, 2-sentence market update for my dashboard users advising them to act fast. Do not use hashtags or asterisks."
+    
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        res = requests.post(url, json=payload, headers={'Content-Type': 'application/json'}, timeout=15)
+        if res.status_code == 200:
+            return res.json()['candidates'][0]['content']['parts'][0]['text']
+        else:
+            print(f"🤖 Gemini API Error {res.status_code}: {res.text}")
+            return f"AI System Error (Code {res.status_code})."
+    except Exception as e:
+        print(f"🤖 Gemini Connection Exception: {e}")
+        return "AI Module Offline: Connection timed out."
+
+# ==========================================
+#  6. DYNAMIC UI GENERATOR (LIVE JS ENGINE)
+# ==========================================
+def generate_web(evs, arbs, ai_report):
+    ist_now = (datetime.now(timezone.utc) + timedelta(hours=5.5)).strftime('%d %b, %I:%M %p IST')
+    
+    keys_html = ""
     for idx, key in enumerate(API_KEYS):
-        masked = f"{key[:4]}••••{key[-4:]}" if len(key) > 8 else "Invalid"
-        rem = api_state.get('stats', {}).get(str(idx), {}).get('remaining', 500)
-        status = "ACTIVE" if idx == api_state.get('active_index', 0) else ("EXHAUSTED" if rem == 0 else "STANDBY")
-        color = "#06b6d4" if status == "ACTIVE" else ("#ef4444" if status == "EXHAUSTED" else "#10b981")
-        net_html += f"""
-        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid {color}; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <strong style="font-family:monospace; font-size:14px;">{masked}</strong>
-                <span style="font-size:10px; font-weight:bold; color:{color};">{status}</span>
-            </div>
-            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">{rem}/500</strong></div>
-        </div>"""
+        stats = api_state.get('stats', {})
+        rem = stats.get(str(idx), {}).get('remaining', '??')
+        is_active = (idx == api_state.get('active_index', 0))
+        color = "#06b6d4" if is_active else "#3f3f46"
+        status = "ACTIVE" if is_active else "IDLE"
+        masked = f"{key[:4]}••••{key[-4:]}" if len(key) > 8 else "ERR"
+        keys_html += f"<div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid {color}; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #{idx+1} <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:{color}; border:1px solid {color};'>{status}</span></div><div style='font-family:monospace; color:#fff;'>{masked}</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:{color};'>{rem}</div></div></div>"
 
-    # Generate EV Cards
-    ev_html = ""
-    for e in evs[:50]: # Show top 50 to prevent massive files during test
-        ev_html += f"""
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 {e['sport']} &nbsp;|&nbsp; 📅 {e['time']}</span>
-                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">{e['pct']:.2f}% EV</span>
+    js_arbs_data = json.dumps(arbs[:100])
+    js_evs_data = json.dumps(evs[:100])
+    
+    safe_ai_report = ai_report.replace('"', '&quot;').replace("'", "\\'").replace('\n', ' ')
+
+    HTML = f"""<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body {{ background:#09090b; color:#fff; font-family:-apple-system, sans-serif; padding:15px; max-width:600px; margin:auto; }}
+        .card {{ background:#18181b; border:1px solid #27272a; padding:15px; border-radius:12px; margin-bottom:12px; }}
+        .tab {{ flex:1; text-align:center; padding:12px; background:#18181b; border-radius:8px; cursor:pointer; font-size:12px; color:#666; font-weight:bold; border:1px solid transparent; }}
+        .tab.active {{ background:#3f3f46; color:#fff; border-color:#06b6d4; }}
+        .pane {{ display:none; }} .active-pane {{ display:block; }}
+        .btn {{ background:#27272a; color:#fff; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:11px; }}
+        .btn-calc {{ background: rgba(6,182,212,0.2); color:#06b6d4; border:1px solid #06b6d4; }}
+        .badge {{ font-size:10px; padding:3px 7px; border-radius:5px; font-weight:bold; color:#000; }}
+        .input-box {{ background:#000; border:1px solid #27272a; color:#10b981; padding:12px; border-radius:8px; width:100%; font-size:16px; font-weight:bold; margin-bottom:15px; box-sizing:border-box; outline:none; }}
+        .input-box:focus {{ border-color: #06b6d4; }}
+        .clock {{ background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px; font-family:monospace; }}
+    </style></head><body>
+        <div id='lock-screen' style='position:fixed; top:0; left:0; width:100%; height:100%; background:#09090b; z-index:999; display:flex; flex-direction:column; align-items:center; justify-content:center;'>
+            <h2 style='color:#06b6d4; letter-spacing: 2px;'>⚡ SNIPER TERMINAL</h2>
+            <input type='password' id='ps' style='background:#18181b; border:1px solid #27272a; color:#fff; padding:12px; border-radius:8px; text-align:center; margin-bottom:10px; width:200px;' placeholder='Authorization Code'>
+            <button onclick='ck()' style='background:#06b6d4; color:#000; border:none; padding:10px 20px; border-radius:8px; font-weight:bold; cursor:pointer; width:225px;'>ENTER SYSTEM</button>
+            <p id='err' style='color:#ef4444; font-size:12px; margin-top:10px;'></p>
+        </div>
+
+        <div id='content' style='display:none;'>
+            <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;'>
+                <div><h2 style='color:#06b6d4; margin:0;'>⚡ SNIPER PRO</h2><small style='color:#444;'>Synced: {ist_now}</small></div>
+                <button onclick='localStorage.clear(); location.reload();' class='btn' style='background:#ef4444;'>LOGOUT</button>
             </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">{e['home']} <span style="font-size:12px; color:#a1a1aa;">vs</span> {e['away']}</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">{e['line']}</strong></div>
-               
-                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
-                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">{e['sel'].upper()} @ {e['odds']:.2f}</strong></div>
-                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">{e['bk'].title().replace('_',' ')}</div>
+            
+            <div style='background:rgba(245, 158, 11, 0.1); padding:15px; border-radius:12px; border:1px solid rgba(245, 158, 11, 0.3); margin-bottom:15px;'>
+                <h4 style='margin:0 0 5px 0; color:#f59e0b; font-size:12px;'>🤖 GEMINI AI MARKET REPORT</h4>
+                <p id='aiText' style='margin:0; font-size:13px; color:#ddd; line-height:1.4;'></p>
+            </div>
+
+            <div style='background:#18181b; padding:15px; border-radius:12px; border:1px solid #27272a; margin-bottom:15px;'>
+                <label style='font-size:11px; color:#a1a1aa; font-weight:bold; display:block; margin-bottom:8px;'>MASTER BANKROLL (₹)</label>
+                <input type='number' id='userBankroll' class='input-box' value='5000' style='margin-bottom:0;' oninput='saveBankroll()'>
+            </div>
+
+            <div style='display:flex; gap:5px; margin-bottom:20px; position:sticky; top:0; z-index:10; background:#09090b; padding-bottom:10px;'>
+                <div class='tab active' onclick='sw(0)'>ARBS ({len(arbs)})</div>
+                <div class='tab' onclick='sw(1)'>EV ({len(evs)})</div>
+                <div class='tab' onclick='sw(2)'>CALC</div>
+                <div class='tab' onclick='sw(3)'>KEYS</div>
+            </div>
+
+            <div id='p0' class='pane active-pane'></div>
+            <div id='p1' class='pane'></div>
+            
+            <div id='p2' class='pane'>
+                <div class='card'>
+                    <h3 style='margin-top:0; color:#06b6d4;'>Advanced 2-Way/3-Way Calculator</h3>
+                    <label style='font-size:10px; color:#aaa;'>Investment Amount</label>
+                    <input type='number' id='calcBank' class='input-box' placeholder='Investment Amount' oninput='runCalc()'>
+                    <label style='font-size:10px; color:#aaa;'>Odd 1</label>
+                    <input type='number' id='odd1' class='input-box' placeholder='Odd 1' oninput='runCalc()'>
+                    <label style='font-size:10px; color:#aaa;'>Odd 2</label>
+                    <input type='number' id='odd2' class='input-box' placeholder='Odd 2' oninput='runCalc()'>
+                    <label style='font-size:10px; color:#aaa;'>Odd 3 (Optional for 3-Way)</label>
+                    <input type='number' id='odd3' class='input-box' placeholder='Odd 3 (Optional)' oninput='runCalc()'>
+                    <div id='calcResult' style='margin-top:5px; padding:15px; background:#000; border-radius:8px; border:1px solid #222;'>Awaiting Input...</div>
                 </div>
-               
-                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
-                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹{e['stk']:.0f}</strong></div>
-                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">{e['trueO']:.3f} | {e['conf']}/100</strong></div>
-                </div>
             </div>
-        </div>"""
 
-    # Generate ARB Cards
-    arb_html = ""
-    for a in arbs[:50]: # Show top 50
-        legs_html = ""
-        for s in a['sides']:
-            legs_html += f"""
-            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
-                <span>{s['sel'].upper()} @ <strong style="color:#f59e0b;">{s['pr']:.2f}</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">{s['bk'].title().replace('_',' ')}</span></span>
-                <strong style="color:#06b6d4;">₹{s['stk']:.0f}</strong>
-            </div>"""
-           
-        arb_html += f"""
-        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
-            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 {a['sport']} &nbsp;|&nbsp; 📅 {a['time']}</span>
-                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">{a['pct']:.2f}% ARB</span>
-            </div>
-            <div style="padding:15px;">
-                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">{a['home']} <span style="font-size:12px; color:#a1a1aa;">vs</span> {a['away']}</div>
-                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">{a['line']}</strong> ({a['ways']}-Way)</div>
-                {legs_html}
-                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹{a['profit']:.0f}</strong></div>
-            </div>
-        </div>"""
+            <div id='p3' class='pane'>{keys_html}</div>
+        </div>
 
-    if not ev_html: ev_html = "<div style='text-align:center; padding:40px; color:#a1a1aa;'>No EV edges detected right now.</div>"
-    if not arb_html: arb_html = "<div style='text-align:center; padding:40px; color:#a1a1aa;'>No Arbitrage locks detected right now.</div>"
+        <script>
+            const EXPECTED_HASH = '{SECRET_HASH}';
+            const rawArbs = {js_arbs_data};
+            const rawEvs = {js_evs_data};
+            
+            document.getElementById('aiText').innerHTML = "{safe_ai_report}";
 
-    HTML = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ARB SNIPER | Auto-Terminal</title>
-<style>
-    body {{ background: #09090b; color: #f4f4f5; font-family: system-ui, -apple-system, sans-serif; padding: 15px; max-width: 800px; margin: auto; }}
-    .hdr {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; padding-bottom: 15px; margin-bottom: 20px; }}
-    .title {{ font-size: 24px; font-weight: 800; color: #06b6d4; margin:0; }}
-    .subtitle {{ font-size: 11px; color: #a1a1aa; font-family: monospace; }}
-    .time-badge {{ background: rgba(16,185,129,0.1); border: 1px solid #10b981; color: #10b981; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: bold; font-family: monospace; }}
-   
-    .tabs {{ display: flex; gap: 5px; background: #18181b; padding: 5px; border-radius: 10px; border: 1px solid #27272a; margin-bottom: 20px; }}
-    .tab {{ flex: 1; text-align: center; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; color: #a1a1aa; font-size: 13px; transition: 0.2s; }}
-    .tab.active {{ background: #3f3f46; color: #fff; }}
-    .pane {{ display: none; }} .pane.active {{ display: block; }}
-</style>
-</head>
-<body>
+            if(localStorage.getItem('savedBankroll')) {{
+                document.getElementById('userBankroll').value = localStorage.getItem('savedBankroll');
+                document.getElementById('calcBank').value = localStorage.getItem('savedBankroll');
+            }}
 
-<div class="hdr">
-    <div>
-        <h1 class="title">⚡ ARB SNIPER</h1>
-        <div class="subtitle">Cloud Scanning Active · Updates Every Hour</div>
-    </div>
-    <div class="time-badge">SYNCED: {build_time}</div>
-</div>
+            function saveBankroll() {{
+                const val = document.getElementById('userBankroll').value;
+                localStorage.setItem('savedBankroll', val);
+                document.getElementById('calcBank').value = val;
+                renderAll(); runCalc();
+            }}
 
-<div class="tabs">
-    <div class="tab active" onclick="showPane('ev')">💎 EV Edges ({len(evs)})</div>
-    <div class="tab" onclick="showPane('arb')">🔒 Arbitrage ({len(arbs)})</div>
-    <div class="tab" onclick="showPane('net')">📡 API Network</div>
-</div>
+            function ck() {{ 
+                if(CryptoJS.SHA256(document.getElementById('ps').value).toString() === EXPECTED_HASH) {{ 
+                    document.getElementById('lock-screen').style.display='none'; 
+                    document.getElementById('content').style.display='block'; 
+                    localStorage.setItem('auth_hash', EXPECTED_HASH); 
+                    renderAll();
+                }} else {{ document.getElementById('err').innerText = 'Access Denied: Invalid Code'; }}
+            }}
+            
+            if(localStorage.getItem('auth_hash') === EXPECTED_HASH) {{ 
+                document.getElementById('lock-screen').style.display='none'; 
+                document.getElementById('content').style.display='block'; 
+                renderAll();
+            }}
 
-<div id="pane-ev" class="pane active">{ev_html}</div>
-<div id="pane-arb" class="pane">{arb_html}</div>
-<div id="pane-net" class="pane">{net_html}</div>
+            function sw(i) {{ document.querySelectorAll('.tab').forEach((t,j)=>j==i?t.classList.add('active'):t.classList.remove('active')); document.querySelectorAll('.pane').forEach((p,j)=>j==i?p.classList.add('active-pane') : p.classList.remove('active-pane')); window.scrollTo(0,0); }}
 
-<script>
-    function showPane(p) {{
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.pane').forEach(t => t.classList.remove('active'));
-        event.target.classList.add('active');
-        document.getElementById('pane-'+p).classList.add('active');
-    }}
-    // Auto-refresh the page every 5 minutes to fetch the latest GitHub build
-    setInterval(() => window.location.reload(true), 300000);
-</script>
-</body>
-</html>"""
+            function formatTimeDiff(iso) {{
+                let d = new Date(iso) - new Date();
+                if(d < 0) return "LIVE NOW";
+                return `${{Math.floor(d/3600000)}}h ${{Math.floor((d%3600000)/60000)}}m`;
+            }}
 
-    with open("index.html", "w", encoding="utf-8") as f:
-        f.write(HTML)
+            setInterval(() => {{
+                document.querySelectorAll('.live-clock').forEach(el => el.innerText = '⏳ ' + formatTimeDiff(el.dataset.iso));
+            }}, 1000);
+
+            function copyText(txt) {{ navigator.clipboard.writeText(txt); alert("Copied: " + txt); }}
+
+            function renderAll() {{
+                const bank = parseFloat(document.getElementById('userBankroll').value) || 0;
+                
+                let arbHTML = "";
+                rawArbs.forEach((a, i) => {{
+                    let profit = (bank / a.margin) - bank;
+                    let pColor = profit > 0 ? '#10b981' : '#ef4444';
+                    let legs = "";
+                    
+                    a.sides.forEach(s => {{
+                        let rawStk = (bank / a.margin) / s.pr;
+                        let roundedStk = Math.round(rawStk / 10) * 10; 
+                        legs += `<div style='display:flex; justify-content:space-between; align-items:center; background:#000; padding:10px; border-radius:6px; margin-top:6px; border:1px solid #222;'>
+                            <span>${{s.sel}} @ <b style='color:#f59e0b'>${{s.pr}}</b> <small style='color:#aaa'>(${{s.bk.toUpperCase()}})</small></span>
+                            <div style='text-align:right;'><div style='color:#fff; font-weight:bold;'>₹${{roundedStk}}</div><div style='color:#666; font-size:9px;'>Ex: ₹${{rawStk.toFixed(1)}}</div></div>
+                        </div>`;
+                    }});
+
+                    arbHTML += `<div class='card' style='border-left: 4px solid #f59e0b;'>
+                        <div style='display:flex; justify-content:space-between; align-items:center;'>
+                            <span class='badge' style='background:#f59e0b;'>${{a.pct.toFixed(2)}}% ARB</span>
+                            <div style='display:flex; gap:5px;'>
+                                <button class='btn btn-calc' onclick='sendToCalc(${{a.sides[0]?.pr || 0}}, ${{a.sides[1]?.pr || 0}}, ${{a.sides[2]?.pr || 0}})'>🧮 CALC</button>
+                                <button class='btn' style='background:#3f3f46;' onclick='copyText("${{a.match}}")'>📋 COPY</button>
+                            </div>
+                        </div>
+                        <div style='font-size:16px; font-weight:bold; margin: 10px 0;'>${{a.match}}</div>
+                        <div style='display:flex; gap:10px; font-size:11px; margin-bottom:10px;'>
+                            <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 ${{a.time}}</span>
+                            <span class='live-clock clock' data-iso='${{a.raw_time}}'></span>
+                        </div>
+                        ${{legs}}
+                        <div style='text-align:right; font-weight:bold; color:${{pColor}}; margin-top:12px; font-size:18px;'>Est. Profit: ₹${{profit.toFixed(0)}}</div>
+                    </div>`;
+                }});
+                document.getElementById('p0').innerHTML = arbHTML || "<div style='padding:20px; color:#aaa;'>No Matches.</div>";
+
+                let evHTML = "";
+                rawEvs.slice(0,100).forEach((e, i) => {{
+                    let b = e.odds - 1; let p = 1 / e.trueO;
+                    let kelly = ((b * p - (1-p)) / b) * 0.30;
+                    let rawStk = Math.min(Math.max(20, bank * Math.min(kelly, 0.05)), 1000);
+                    let roundedStk = Math.round(rawStk / 10) * 10;
+                    
+                    evHTML += `<div class='card' style='border-left: 4px solid #06b6d4;'>
+                        <div style='display:flex; justify-content:space-between; align-items:center;'><span class='badge' style='background:#06b6d4;'>${{e.pct.toFixed(2)}}% EV</span><div style='display:flex; gap:5px;'><span class='live-clock clock' data-iso='${{e.raw_time}}'></span><button class='btn' style='background:#3f3f46;' onclick='copyText("${{e.match}}")'>📋</button></div></div>
+                        <div style='font-size:16px; font-weight:bold; margin: 10px 0;'>${{e.match}}</div>
+                        <div style='background:#000; padding:12px; border-radius:6px; border:1px solid #222;'>Bet <b>${{e.sel.toUpperCase()}}</b> @ <b style='color:#06b6d4;'>${{e.odds}}</b> <span style='float:right; color:#888;'>${{e.bk.toUpperCase()}}</span></div>
+                        <div style='display:flex; justify-content:space-between; align-items:center; margin-top:10px;'>
+                            <div><div style='color:#fff; font-weight:bold;'>Stake: ₹${{roundedStk}}</div><div style='color:#666; font-size:9px;'>Exact: ₹${{rawStk.toFixed(2)}}</div></div>
+                            <span style='color:#444; font-size:11px;'>True: ${{e.trueO.toFixed(3)}}</span>
+                        </div>
+                    </div>`;
+                }});
+                document.getElementById('p1').innerHTML = evHTML || "<div style='padding:20px; color:#aaa;'>No Matches.</div>";
+            }}
+
+            function sendToCalc(o1, o2, o3) {{ sw(2); document.getElementById('odd1').value = o1; document.getElementById('odd2').value = o2; document.getElementById('odd3').value = o3 > 0 ? o3 : ""; runCalc(); }}
+
+            function runCalc() {{
+                const b = parseFloat(document.getElementById('calcBank').value) || 0;
+                const o1 = parseFloat(document.getElementById('odd1').value) || 0;
+                const o2 = parseFloat(document.getElementById('odd2').value) || 0;
+                const o3 = parseFloat(document.getElementById('odd3').value) || 0;
+                
+                if(o1 > 0 && o2 > 0) {{
+                    let invSum = (1/o1) + (1/o2) + (o3 > 0 ? (1/o3) : 0);
+                    let pct = (1 - invSum) * 100;
+                    let stk1 = (b/invSum) / o1;
+                    let stk2 = (b/invSum) / o2;
+                    let stk3 = o3 > 0 ? ((b/invSum) / o3) : 0;
+                    let prof = (b/invSum) - b;
+                    let color = prof > 0 ? '#10b981' : '#ef4444';
+                    
+                    let resultHTML = `<div style='display:flex; justify-content:space-between; margin-bottom:8px; color:#ccc;'><span>Leg 1 Exact:</span><b style='color:#fff;'>₹${{stk1.toFixed(2)}}</b></div><div style='display:flex; justify-content:space-between; margin-bottom:10px; color:#ccc;'><span>Leg 2 Exact:</span><b style='color:#fff;'>₹${{stk2.toFixed(2)}}</b></div>`;
+                    if(o3 > 0) resultHTML += `<div style='display:flex; justify-content:space-between; margin-bottom:10px; color:#ccc;'><span>Leg 3 Exact:</span><b style='color:#fff;'>₹${{stk3.toFixed(2)}}</b></div>`;
+                    resultHTML += `<hr style='border:none; border-top:1px solid #333; margin:15px 0;'><div style='display:flex; justify-content:space-between; margin-bottom:8px; color:${{color}};'><span>Arbitrage %:</span><b style='font-size:16px;'>${{pct.toFixed(2)}}%</b></div><div style='display:flex; justify-content:space-between; color:${{color}}; align-items:center;'><span>Profit:</span><b style='font-size:24px;'>₹${{prof.toFixed(0)}}</b></div>`;
+                    document.getElementById('calcResult').innerHTML = resultHTML;
+                }} else {{ document.getElementById('calcResult').innerHTML = "Awaiting valid odds input..."; }}
+            }}
+        </script>
+    </body></html>"""
+    with open("index.html", "w", encoding="utf-8") as f: f.write(HTML)
 
 # ==========================================
-#  MAIN EXECUTION
+#  7. MAIN TRIGGER & NTFY ALERTS
 # ==========================================
 if __name__ == "__main__":
-    print("🚀 Cloud Engine Booting...")
+    print(f"🚀 Sniper Booting... {len(API_KEYS)} Keys Loaded.")
     results = fetch_all_sports()
+    bc_data = fetch_bcgame_custom()
+
+    if bc_data:
+        for bc in bc_data:
+            def clean(n): return n.lower().replace('(holis)', '').replace('(e)', '').replace('fc ', '').replace(' fc', '').replace('real ', '').replace('as ', '').strip()
+            bc_h, bc_a = clean(bc['home_team']), clean(bc['away_team'])
+            linked = False
+            for events in results.values():
+                if not events: continue
+                for ev in events:
+                    api_h, api_a = clean(ev.get('home_team', '')), clean(ev.get('away_team', ''))
+                    h_match = (bc_h == api_h) or any(w in api_h for w in bc_h.split() if len(w) > 4)
+                    a_match = (bc_a == api_a) or any(w in api_a for w in bc_a.split() if len(w) > 4)
+                    if h_match and a_match:
+                        if 'bookmakers' not in ev: ev['bookmakers'] = []
+                        ev['bookmakers'].append(bc['bookmakers'][0])
+                        linked = True; break
+                if linked: break
+
     evs, arbs = process_markets(results)
-   
-    # High-Detail NTFY Alerts
-    for a in arbs:
-        alert_key = f"ARB|{a['match']}|{a['line']}|{a['pct']:.2f}"
-        if not is_duplicate_alert(alert_key):
-            msg = f"🏆 {a['sport']}\n📅 {a['time']}\n📈 {a['line']}\n\n"
-            for s in a['sides']:
-                msg += f"🔵 ₹{s['stk']:.0f} on {s['sel'].upper()} @ {s['pr']:.2f} [{s['bk'].title().replace('_',' ')}]\n"
-            msg += f"\n✨ Guaranteed Profit: ₹{a['profit']:.0f}"
-            requests.post("https://ntfy.sh/", json={"topic": NTFY_CHANNEL, "message": msg, "title": f"🚨 {a['pct']:.2f}% ARB | {a['match']}", "tags": ["gem", "moneybag"], "priority": 5}, timeout=5)
+    evs.sort(key=lambda x: x['pct'], reverse=True)
+    arbs.sort(key=lambda x: x['pct'], reverse=True)
+    
+    # 🤖 AI Analyst 
+    positive_arbs = [a for a in arbs if a['pct'] > 0]
+    ai_report = generate_ai_report(positive_arbs)
+    
+    generate_web(evs, arbs, ai_report)
+    
+    # 🔔 NTFY ALERTS
+    if positive_arbs:
+        top_arb = positive_arbs[0]
+        alert_msg = f"Sniper found {len(positive_arbs)} Locks. Top Match: {top_arb['match']} ({top_arb['pct']:.2f}%)"
+        try:
+            r = requests.post(f"https://ntfy.sh/{NTFY_CHANNEL}", data=alert_msg.encode('utf-8'), headers={"Title": "ARB SNIPER SYNCED", "Tags": "moneybag,zap"}, timeout=10)
+        except Exception as e: pass
 
-    for e in evs:
-        alert_key = f"EV|{e['match']}|{e['line']}|{e['sel']}|{e['odds']:.2f}"
-        if not is_duplicate_alert(alert_key):
-            msg = f"🏆 {e['sport']}\n📅 {e['time']}\n📈 {e['line']}\n\n"
-            msg += f"💰 BET EXACTLY: ₹{e['stk']:.0f}\n"
-            msg += f"👉 {e['sel'].upper()} @ {e['odds']:.2f} on {e['bk'].title().replace('_',' ')}\n\n"
-            msg += f"🧠 True Odds: {e['trueO']:.3f} | Confidence: {e['conf']}/100"
-            requests.post("https://ntfy.sh/", json={"topic": NTFY_CHANNEL, "message": msg, "title": f"📈 {e['pct']:.2f}% EV | {e['match']}", "tags": ["gem", "moneybag"], "priority": 5}, timeout=5)
-
-    save_json('api_state.json', api_state)
-    save_json('alert_cache.json', alert_cache)
-    generate_web(evs, arbs)
-    print(f"✅ Global Terminal Synced. Found {len(evs)} EV and {len(arbs)} ARBs.")
+    print(f"✅ Sync Complete. EV: {len(evs)} | ARB: {len(arbs)}")
