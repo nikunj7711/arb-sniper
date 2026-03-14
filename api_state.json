@@ -1,5 +1,5 @@
 {
-  "active_index": 6,
+  "active_index": 8,
   "stats": {
     "0": {
       "remaining": 0
@@ -12,6 +12,12 @@
     },
     "3": {
       "remaining": 290
+    },
+    "6": {
+      "remaining": 230
+    },
+    "7": {
+      "remaining": 415
     }
   }
 }
