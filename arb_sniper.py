@@ -20,9 +20,8 @@ SECRET_HASH = hashlib.sha256(_raw_pass.encode()).hexdigest()
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY') # 🤖 AI KEY
 
 NTFY_CHANNEL = 'nikunj_arb_alerts_2026' 
-MIN_EV_THRESHOLD = 0.1                  
-MIN_ARB_THRESHOLD = 0.3                 
-
+MIN_EV_THRESHOLD = -5.0  # ⚠️ Show bets even if you lose 5% value!                
+MIN_ARB_THRESHOLD = -2.0 # ⚠️ Show negative arbs!
 MY_BOOKIES = 'pinnacle,onexbet,bet365,unibet,betway,stake,marathonbet'
 TARGET_SPORTS = ['soccer_epl', 'soccer_spain_la_liga', 'soccer_uefa_champs_league', 
                  'basketball_nba', 'icehockey_nhl', 'soccer_italy_serie_a', 'upcoming']
