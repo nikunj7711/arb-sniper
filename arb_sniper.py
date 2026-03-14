@@ -17,13 +17,11 @@ if not _raw_pass:
     sys.exit(1)
 SECRET_HASH = hashlib.sha256(_raw_pass.encode()).hexdigest()
 
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY') # 🤖 AI KEY
-
 NTFY_CHANNEL = 'nikunj_arb_alerts_2026' 
 
-# 🛠️ PRODUCTION THRESHOLDS
-MIN_EV_THRESHOLD = 1.0                  
-MIN_ARB_THRESHOLD = 0.3                 
+# 🚀 AGGRESSIVE PROFIT THRESHOLDS (High Volume)
+MIN_EV_THRESHOLD = 0.5                  
+MIN_ARB_THRESHOLD = 0.1                 
 
 MY_BOOKIES = 'pinnacle,onexbet,bet365,unibet,betway,stake,marathonbet'
 TARGET_SPORTS = ['soccer_epl', 'soccer_spain_la_liga', 'soccer_uefa_champs_league', 
@@ -68,7 +66,7 @@ def update_key_stats(idx, rem):
         if rem is not None: api_state['stats'][str(idx)]['remaining'] = int(rem)
 
 # ==========================================
-#  3. DATA FETCHERS
+#  3. DATA FETCHERS (UNRESTRICTED)
 # ==========================================
 def fetch_bcgame_custom():
     headers = {'accept': '*/*', 'origin': 'https://bc.game', 'user-agent': 'Mozilla/5.0'}
@@ -111,25 +109,21 @@ def fetch_odds_api(url, params):
             if res.status_code in [401, 429]:
                 print(f"⚠️ API Limit hit on Key #{idx+1}. Rotating...")
                 if rotate_api_key(idx): continue
-            else:
-                print(f"⚠️ API Error {res.status_code}: {res.text}")
             return None
-        except Exception as e: 
-            print(f"⚠️ Fetch Exception: {e}")
-            return None
+        except Exception as e: return None
 
 def fetch_all_sports():
     results = {}
     print("📡 Fetching Unrestricted Global Data...")
     with ThreadPoolExecutor(max_workers=4) as executor:
-        # 🛠️ THE FIX: Removed 'bookmakers' parameter. The API sends us EVERYTHING.
+        # Pulling US, UK, EU, AU to ensure NO matches are left behind
         futures = {executor.submit(fetch_odds_api, f'https://api.the-odds-api.com/v4/sports/{sp}/odds', {'regions': 'eu,uk,us,au', 'markets': 'h2h'}): sp for sp in TARGET_SPORTS}
         for future in as_completed(futures):
             results[futures[future]] = future.result()
     return results
 
 # ==========================================
-#  4. MATH ENGINE & GHOST ARB KILLER
+#  4. AGGRESSIVE MATH ENGINE
 # ==========================================
 def remove_vig(*odds):
     margin = sum(1/o for o in odds)
@@ -143,23 +137,14 @@ def format_ist(iso_str):
 
 def process_markets(results):
     all_evs, all_arbs = [], []
-    now_utc = datetime.now(timezone.utc)
-    total_processed = 0
     valid_bookies = [b.strip() for b in MY_BOOKIES.split(',')]
     
     for sport, events in results.items():
         if not events: continue
-        total_processed += len(events)
         
         for event in events:
             commence = event.get('commence_time', '')
-            
-            # 🛡️ GHOST ARB KILLER IS ACTIVE
-            if commence:
-                try:
-                    match_time = datetime.strptime(commence, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-                    if (match_time - now_utc).total_seconds() < 900: continue 
-                except: pass
+            # 🚀 GHOST ARB KILLER IS GONE. YOU SEE EVERYTHING NOW.
 
             home, away = event.get('home_team', 'A'), event.get('away_team', 'B')
             meta = {'match': f"{home} vs {away}", 'sport': sport.replace('_', ' ').upper(), 'raw_time': commence, 'time': format_ist(commence)}
@@ -168,7 +153,6 @@ def process_markets(results):
             for bookie in event.get('bookmakers', []):
                 b_name = bookie['key']
                 
-                # 🛠️ THE FIX: We filter the bookies locally instead of trusting the API
                 if b_name not in valid_bookies and b_name != 'bcgame':
                     continue 
                 
@@ -208,38 +192,12 @@ def process_markets(results):
                         for k in keys: arb['sides'].append({'sel': k, 'pr': outs[k]['price'], 'bk': outs[k]['bookie']})
                         all_arbs.append(arb)
                         
-    print(f"🔍 DIAGNOSTIC: Total Raw Matches Scraped: {total_processed}")
     return all_evs, all_arbs
 
 # ==========================================
-#  5. GEMINI AI MARKET REPORTER
+#  5. DYNAMIC UI GENERATOR (NO AI)
 # ==========================================
-def generate_ai_report(arbs):
-    if not GEMINI_API_KEY:
-        return "AI Module Offline: API Key Missing."
-    if not arbs:
-        return "Market is currently stable. No Arbitrage locks found right now."
-    
-    top_arbs = ", ".join([f"{a['match']} ({a['pct']:.1f}% Arb)" for a in arbs[:3]])
-    prompt = f"Act as a professional sports betting quant. I just found these arbitrage opportunities: {top_arbs}. Write a punchy, 2-sentence market update for my dashboard users advising them to act fast. Do not use hashtags or asterisks."
-    
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        res = requests.post(url, json=payload, headers={'Content-Type': 'application/json'}, timeout=15)
-        if res.status_code == 200:
-            return res.json()['candidates'][0]['content']['parts'][0]['text']
-        else:
-            print(f"🤖 Gemini API Error {res.status_code}: {res.text}")
-            return f"AI System Error (Code {res.status_code})."
-    except Exception as e:
-        print(f"🤖 Gemini Connection Exception: {e}")
-        return "AI Module Offline: Connection timed out."
-
-# ==========================================
-#  6. DYNAMIC UI GENERATOR (LIVE JS ENGINE)
-# ==========================================
-def generate_web(evs, arbs, ai_report):
+def generate_web(evs, arbs):
     ist_now = (datetime.now(timezone.utc) + timedelta(hours=5.5)).strftime('%d %b, %I:%M %p IST')
     
     keys_html = ""
@@ -252,11 +210,9 @@ def generate_web(evs, arbs, ai_report):
         masked = f"{key[:4]}••••{key[-4:]}" if len(key) > 8 else "ERR"
         keys_html += f"<div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid {color}; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #{idx+1} <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:{color}; border:1px solid {color};'>{status}</span></div><div style='font-family:monospace; color:#fff;'>{masked}</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:{color};'>{rem}</div></div></div>"
 
-    js_arbs_data = json.dumps(arbs[:100])
-    js_evs_data = json.dumps(evs[:100])
+    js_arbs_data = json.dumps(arbs[:150]) # Increased capacity
+    js_evs_data = json.dumps(evs[:150])
     
-    safe_ai_report = ai_report.replace('"', '&quot;').replace("'", "\\'").replace('\n', ' ')
-
     HTML = f"""<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
@@ -283,11 +239,6 @@ def generate_web(evs, arbs, ai_report):
             <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;'>
                 <div><h2 style='color:#06b6d4; margin:0;'>⚡ SNIPER PRO</h2><small style='color:#444;'>Synced: {ist_now}</small></div>
                 <button onclick='localStorage.clear(); location.reload();' class='btn' style='background:#ef4444;'>LOGOUT</button>
-            </div>
-            
-            <div style='background:rgba(245, 158, 11, 0.1); padding:15px; border-radius:12px; border:1px solid rgba(245, 158, 11, 0.3); margin-bottom:15px;'>
-                <h4 style='margin:0 0 5px 0; color:#f59e0b; font-size:12px;'>🤖 GEMINI AI MARKET REPORT</h4>
-                <p id='aiText' style='margin:0; font-size:13px; color:#ddd; line-height:1.4;'></p>
             </div>
 
             <div style='background:#18181b; padding:15px; border-radius:12px; border:1px solid #27272a; margin-bottom:15px;'>
@@ -327,8 +278,6 @@ def generate_web(evs, arbs, ai_report):
             const EXPECTED_HASH = '{SECRET_HASH}';
             const rawArbs = {js_arbs_data};
             const rawEvs = {js_evs_data};
-            
-            document.getElementById('aiText').innerHTML = "{safe_ai_report}";
 
             if(localStorage.getItem('savedBankroll')) {{
                 document.getElementById('userBankroll').value = localStorage.getItem('savedBankroll');
@@ -409,7 +358,7 @@ def generate_web(evs, arbs, ai_report):
                 document.getElementById('p0').innerHTML = arbHTML || "<div style='padding:20px; color:#aaa;'>No Matches.</div>";
 
                 let evHTML = "";
-                rawEvs.slice(0,100).forEach((e, i) => {{
+                rawEvs.slice(0,150).forEach((e, i) => {{
                     let b = e.odds - 1; let p = 1 / e.trueO;
                     let kelly = ((b * p - (1-p)) / b) * 0.30;
                     let rawStk = Math.min(Math.max(20, bank * Math.min(kelly, 0.05)), 1000);
@@ -456,7 +405,7 @@ def generate_web(evs, arbs, ai_report):
     with open("index.html", "w", encoding="utf-8") as f: f.write(HTML)
 
 # ==========================================
-#  7. MAIN TRIGGER & NTFY ALERTS
+#  6. MAIN TRIGGER & NTFY ALERTS
 # ==========================================
 if __name__ == "__main__":
     print(f"🚀 Sniper Booting... {len(API_KEYS)} Keys Loaded.")
@@ -484,18 +433,14 @@ if __name__ == "__main__":
     evs.sort(key=lambda x: x['pct'], reverse=True)
     arbs.sort(key=lambda x: x['pct'], reverse=True)
     
-    # 🤖 AI Analyst 
-    positive_arbs = [a for a in arbs if a['pct'] > 0]
-    ai_report = generate_ai_report(positive_arbs)
-    
-    generate_web(evs, arbs, ai_report)
+    generate_web(evs, arbs)
     
     # 🔔 NTFY ALERTS
-    if positive_arbs:
-        top_arb = positive_arbs[0]
-        alert_msg = f"Sniper found {len(positive_arbs)} Locks. Top Match: {top_arb['match']} ({top_arb['pct']:.2f}%)"
+    if arbs:
+        top_arb = arbs[0]
+        alert_msg = f"Sniper found {len(arbs)} Locks & {len(evs)} EVs. Top Match: {top_arb['match']} ({top_arb['pct']:.2f}%)"
         try:
-            r = requests.post(f"https://ntfy.sh/{NTFY_CHANNEL}", data=alert_msg.encode('utf-8'), headers={"Title": "ARB SNIPER SYNCED", "Tags": "moneybag,zap"}, timeout=10)
+            requests.post(f"https://ntfy.sh/{NTFY_CHANNEL}", data=alert_msg.encode('utf-8'), headers={"Title": "ARB SNIPER SYNCED", "Tags": "moneybag,zap"}, timeout=10)
         except Exception as e: pass
 
     print(f"✅ Sync Complete. EV: {len(evs)} | ARB: {len(arbs)}")
