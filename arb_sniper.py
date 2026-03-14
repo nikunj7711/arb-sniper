@@ -37,23 +37,24 @@ TARGET_SPORTS = [
 ]
 
 # ==========================================
-#  2. KEY ROTATION & TELEMETRY
+#  2. KEY ROTATION & TELEMETRY (BULLETPROOF)
 # ==========================================
 api_lock = threading.Lock()
 
 def load_json(filepath, default):
     if os.path.exists(filepath):
         try:
-            with open(filepath, 'r', encoding='utf-8') as f: return json.load(f)
-        except: return default
+            with open(filepath, 'r', encoding='utf-8') as f: 
+                data = json.load(f)
+                if isinstance(data, dict): return data
+        except: pass
     return default
 
-def save_json(filepath, data):
-    try:
-        with open(filepath, 'w', encoding='utf-8') as f: json.dump(data, f, indent=2)
-    except: pass
-
 api_state = load_json('api_state.json', {'active_index': 0, 'stats': {}})
+
+# 🛠️ THE FIX: Force missing keys to exist. If the JSON file is blank or corrupted, the bot auto-repairs it!
+if 'active_index' not in api_state: api_state['active_index'] = 0
+if 'stats' not in api_state: api_state['stats'] = {}
 
 def get_active_api_key():
     with api_lock:
@@ -73,6 +74,7 @@ def update_key_stats(idx, rem):
     with api_lock:
         if str(idx) not in api_state['stats']: api_state['stats'][str(idx)] = {}
         if rem is not None: api_state['stats'][str(idx)]['remaining'] = int(rem)
+
 
 # ==========================================
 #  3. DATA FETCHERS
