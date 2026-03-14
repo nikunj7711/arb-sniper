@@ -19,13 +19,22 @@ SECRET_HASH = hashlib.sha256(_raw_pass.encode()).hexdigest()
 
 NTFY_CHANNEL = 'nikunj_arb_alerts_2026' 
 
-# 🚀 AGGRESSIVE PROFIT THRESHOLDS (High Volume)
+# 🚀 AGGRESSIVE PROFIT THRESHOLDS 
 MIN_EV_THRESHOLD = 0.5                  
 MIN_ARB_THRESHOLD = 0.1                 
 
-MY_BOOKIES = 'pinnacle,onexbet,bet365,unibet,betway,stake,marathonbet'
-TARGET_SPORTS = ['soccer_epl', 'soccer_spain_la_liga', 'soccer_uefa_champs_league', 
-                 'basketball_nba', 'icehockey_nhl', 'soccer_italy_serie_a', 'upcoming']
+# 🌐 GOD-MODE BOOKIE LIST
+MY_BOOKIES = 'pinnacle,onexbet,bet365,unibet,betway,stake,marathonbet,parimatch,betfair,dafabet,bovada,draftkings,fanduel,betmgm'
+
+# 🏆 UNRESTRICTED SPORTS ARRAY (22 LEAGUES)
+TARGET_SPORTS = [
+    'soccer_epl', 'soccer_spain_la_liga', 'soccer_uefa_champs_league', 'soccer_italy_serie_a', 
+    'soccer_germany_bundesliga', 'soccer_france_ligue_one', 'soccer_fifa_world_cup',
+    'basketball_nba', 'basketball_euroleague', 'basketball_ncaab',
+    'icehockey_nhl', 'americanfootball_nfl', 'americanfootball_ncaaf', 'baseball_mlb', 
+    'tennis_atp', 'tennis_wta', 'cricket_test', 'cricket_odi', 'cricket_t20', 
+    'mma_mixed_martial_arts', 'boxing_boxing', 'upcoming'
+]
 
 # ==========================================
 #  2. KEY ROTATION & TELEMETRY
@@ -66,7 +75,7 @@ def update_key_stats(idx, rem):
         if rem is not None: api_state['stats'][str(idx)]['remaining'] = int(rem)
 
 # ==========================================
-#  3. DATA FETCHERS (RESTORED TOTALS)
+#  3. DATA FETCHERS (MAX MARKETS)
 # ==========================================
 def fetch_bcgame_custom():
     headers = {'accept': '*/*', 'origin': 'https://bc.game', 'user-agent': 'Mozilla/5.0'}
@@ -88,7 +97,6 @@ def fetch_bcgame_custom():
             for k, n in [("1", c[0]['name']), ("2", c[1]['name']), ("3", "Draw")]:
                 if k in m1: h2h.append({'name': n, 'price': float(m1[k]["k"])})
 
-            # 🛠️ RESTORED OVER/UNDER MARKETS FOR BC GAME
             m18 = mk.get("18", {})
             for pk, pd in m18.items():
                 val = float(pk.replace("total=", ""))
@@ -121,16 +129,16 @@ def fetch_odds_api(url, params):
 
 def fetch_all_sports():
     results = {}
-    print("📡 Fetching Data...")
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        # 🛠️ RESTORED BOOKMAKERS FILTER AND TOTALS (h2h,totals)
-        futures = {executor.submit(fetch_odds_api, f'https://api.the-odds-api.com/v4/sports/{sp}/odds', {'regions': 'eu,uk,us,au', 'bookmakers': MY_BOOKIES, 'markets': 'h2h,totals'}): sp for sp in TARGET_SPORTS}
+    print("📡 Fetching Massive Global Data Matrix...")
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        # 🛠️ NOW PULLING H2H, TOTALS, AND SPREADS ACROSS ALL REGIONS
+        futures = {executor.submit(fetch_odds_api, f'https://api.the-odds-api.com/v4/sports/{sp}/odds', {'regions': 'eu,uk,us,au', 'markets': 'h2h,totals,spreads'}): sp for sp in TARGET_SPORTS}
         for future in as_completed(futures):
             results[futures[future]] = future.result()
     return results
 
 # ==========================================
-#  4. MATH ENGINE (AGGRESSIVE)
+#  4. ADVANCED MATH ENGINE (2-WAY & 3-WAY)
 # ==========================================
 def remove_vig(*odds):
     margin = sum(1/o for o in odds)
@@ -144,6 +152,7 @@ def format_ist(iso_str):
 
 def process_markets(results):
     all_evs, all_arbs = [], []
+    valid_bookies = [b.strip() for b in MY_BOOKIES.split(',')]
     
     for sport, events in results.items():
         if not events: continue
@@ -157,13 +166,24 @@ def process_markets(results):
             for bookie in event.get('bookmakers', []):
                 b_name = bookie['key']
                 
+                if b_name not in valid_bookies and b_name != 'bcgame':
+                    continue 
+                
                 for market in bookie.get('markets', []):
                     m_type = market['key'].upper()
                     for out in market['outcomes']:
-                        lk = f"{m_type} {out.get('point', '')}".strip()
+                        # 🛠️ SPREADS PARSER: Absolute value matching combines positive/negative handicaps into perfectly paired 2-way locks.
+                        pt = out.get('point', '')
+                        if pt != '':
+                            try: pt = abs(float(pt))
+                            except: pass
+                        
+                        lk = f"{m_type} {pt}".strip()
                         name, price = out['name'], out['price']
+                        
                         if lk not in ev_lines: ev_lines[lk] = {'pin': {}, 'softs': {}}
                         if lk not in arb_lines: arb_lines[lk] = {}
+                        
                         if b_name == 'pinnacle': ev_lines[lk]['pin'][name] = price
                         else:
                             if name not in ev_lines[lk]['softs']: ev_lines[lk]['softs'][name] = {}
@@ -171,6 +191,7 @@ def process_markets(results):
                         if name not in arb_lines[lk] or price > arb_lines[lk][name]['price']:
                             arb_lines[lk][name] = {'price': price, 'bookie': b_name}
 
+            # EV Math
             for lk, d in ev_lines.items():
                 if len(d['pin']) in [2, 3]:
                     keys = list(d['pin'].keys())
@@ -184,6 +205,7 @@ def process_markets(results):
                                 if ev_pct >= MIN_EV_THRESHOLD:
                                     all_evs.append({**meta, 'pct': ev_pct, 'line': lk, 'ways': len(keys), 'sel': side, 'odds': best_p, 'trueO': true_os[idx], 'bk': best_bk})
 
+            # Arbitrage Math (Supports 2-Way and 3-Way dynamically)
             for lk, outs in arb_lines.items():
                 keys = list(outs.keys())
                 if len(keys) in [2, 3]:
@@ -211,8 +233,8 @@ def generate_web(evs, arbs):
         masked = f"{key[:4]}••••{key[-4:]}" if len(key) > 8 else "ERR"
         keys_html += f"<div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid {color}; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #{idx+1} <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:{color}; border:1px solid {color};'>{status}</span></div><div style='font-family:monospace; color:#fff;'>{masked}</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:{color};'>{rem}</div></div></div>"
 
-    js_arbs_data = json.dumps(arbs[:150]) 
-    js_evs_data = json.dumps(evs[:150])
+    js_arbs_data = json.dumps(arbs[:250]) # Increased capacity to 250 cards!
+    js_evs_data = json.dumps(evs[:250])
     
     HTML = f"""<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
@@ -360,7 +382,7 @@ def generate_web(evs, arbs):
                 document.getElementById('p0').innerHTML = arbHTML || "<div style='padding:20px; color:#aaa;'>No Matches.</div>";
 
                 let evHTML = "";
-                rawEvs.slice(0,150).forEach((e, i) => {{
+                rawEvs.slice(0,250).forEach((e, i) => {{
                     let b = e.odds - 1; let p = 1 / e.trueO;
                     let kelly = ((b * p - (1-p)) / b) * 0.30;
                     let rawStk = Math.min(Math.max(20, bank * Math.min(kelly, 0.05)), 1000);
