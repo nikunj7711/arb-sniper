@@ -22,7 +22,7 @@
 
         <div id='content' style='display:none;'>
             <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;'>
-                <div><h2 style='color:#06b6d4; margin:0;'>⚡ SNIPER PRO</h2><small style='color:#444;'>Synced: 14 Mar, 09:45 AM IST</small></div>
+                <div><h2 style='color:#06b6d4; margin:0;'>⚡ SNIPER PRO</h2><small style='color:#444;'>Synced: 14 Mar, 09:51 AM IST</small></div>
                 <button onclick='localStorage.clear(); location.reload();' class='btn' style='background:#ef4444;'>LOGOUT</button>
             </div>
             
@@ -48,14 +48,10 @@
             
             <div id='p2' class='pane'>
                 <div class='card'>
-                    <h3 style='margin-top:0; color:#06b6d4;'>Advanced 2-Way/3-Way Calculator</h3>
-                    <label style='font-size:10px; color:#aaa;'>Investment Amount</label>
+                    <h3 style='margin-top:0; color:#06b6d4;'>Advanced Calculator</h3>
                     <input type='number' id='calcBank' class='input-box' placeholder='Investment Amount' oninput='runCalc()'>
-                    <label style='font-size:10px; color:#aaa;'>Odd 1</label>
                     <input type='number' id='odd1' class='input-box' placeholder='Odd 1' oninput='runCalc()'>
-                    <label style='font-size:10px; color:#aaa;'>Odd 2</label>
                     <input type='number' id='odd2' class='input-box' placeholder='Odd 2' oninput='runCalc()'>
-                    <label style='font-size:10px; color:#aaa;'>Odd 3 (Optional for 3-Way)</label>
                     <input type='number' id='odd3' class='input-box' placeholder='Odd 3 (Optional)' oninput='runCalc()'>
                     <div id='calcResult' style='margin-top:5px; padding:15px; background:#000; border-radius:8px; border:1px solid #222;'>Awaiting Input...</div>
                 </div>
@@ -69,7 +65,7 @@
             const rawArbs = [];
             const rawEvs = [];
             
-            document.getElementById('aiText').innerHTML = "Market is currently stable. No Arbitrage locks found right now. Keep your bankroll ready for the next wave.";
+            document.getElementById('aiText').innerHTML = "Market is currently stable. No Arbitrage locks found right now.";
 
             if(localStorage.getItem('savedBankroll')) {
                 document.getElementById('userBankroll').value = localStorage.getItem('savedBankroll');
@@ -89,7 +85,7 @@
                     document.getElementById('content').style.display='block'; 
                     localStorage.setItem('auth_hash', EXPECTED_HASH); 
                     renderAll();
-                } else { document.getElementById('err').innerText = 'Access Denied: Invalid Code'; }
+                } else { document.getElementById('err').innerText = 'Access Denied'; }
             }
             
             if(localStorage.getItem('auth_hash') === EXPECTED_HASH) { 
@@ -110,10 +106,7 @@
                 document.querySelectorAll('.live-clock').forEach(el => el.innerText = '⏳ ' + formatTimeDiff(el.dataset.iso));
             }, 1000);
 
-            function copyText(txt) {
-                navigator.clipboard.writeText(txt);
-                alert("Copied to clipboard: " + txt);
-            }
+            function copyText(txt) { navigator.clipboard.writeText(txt); alert("Copied: " + txt); }
 
             function renderAll() {
                 const bank = parseFloat(document.getElementById('userBankroll').value) || 0;
@@ -121,28 +114,24 @@
                 let arbHTML = "";
                 rawArbs.forEach((a, i) => {
                     let profit = (bank / a.margin) - bank;
-                    let stability = a.pct < 8 ? "<span style='color:#10b981'>● STABLE</span>" : "<span style='color:#ef4444'>● VOLATILE</span>";
+                    let pColor = profit > 0 ? '#10b981' : '#ef4444';
                     let legs = "";
                     
                     a.sides.forEach(s => {
                         let rawStk = (bank / a.margin) / s.pr;
                         let roundedStk = Math.round(rawStk / 10) * 10; 
-                        
                         legs += `<div style='display:flex; justify-content:space-between; align-items:center; background:#000; padding:10px; border-radius:6px; margin-top:6px; border:1px solid #222;'>
                             <span>${s.sel} @ <b style='color:#f59e0b'>${s.pr}</b> <small style='color:#aaa'>(${s.bk.toUpperCase()})</small></span>
-                            <div style='text-align:right;'>
-                                <div style='color:#fff; font-weight:bold; font-size:16px;'>₹${roundedStk}</div>
-                                <div style='color:#666; font-size:9px;'>Exact: ₹${rawStk.toFixed(2)}</div>
-                            </div>
+                            <div style='text-align:right;'><div style='color:#fff; font-weight:bold;'>₹${roundedStk}</div><div style='color:#666; font-size:9px;'>Ex: ₹${rawStk.toFixed(1)}</div></div>
                         </div>`;
                     });
 
                     arbHTML += `<div class='card' style='border-left: 4px solid #f59e0b;'>
                         <div style='display:flex; justify-content:space-between; align-items:center;'>
-                            <div><span class='badge' style='background:#f59e0b;'>${a.pct.toFixed(2)}% ARB</span> <span style='font-size:9px; margin-left:5px;'>${stability}</span></div>
+                            <span class='badge' style='background:#f59e0b;'>${a.pct.toFixed(2)}% ARB</span>
                             <div style='display:flex; gap:5px;'>
-                                <button class='btn btn-calc' onclick='sendToCalc(${a.sides[0]?.pr || 0}, ${a.sides[1]?.pr || 0}, ${a.sides[2]?.pr || 0})'>🧮 CALC</button>
-                                <button class='btn' style='background:#3f3f46;' onclick='copyText("${a.match}")'>📋 COPY</button>
+                                <button class='btn btn-calc' onclick='sendToCalc(${a.sides[0]?.pr || 0}, ${a.sides[1]?.pr || 0}, ${a.sides[2]?.pr || 0})'>🧮</button>
+                                <button class='btn' style='background:#3f3f46;' onclick='copyText("${a.match}")'>📋</button>
                             </div>
                         </div>
                         <div style='font-size:16px; font-weight:bold; margin: 10px 0;'>${a.match}</div>
@@ -150,46 +139,29 @@
                             <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 ${a.time}</span>
                             <span class='live-clock clock' data-iso='${a.raw_time}'></span>
                         </div>
-                        <div style='font-size:12px; color:#aaa;'>${a.line} (${a.ways}-Way)</div>
                         ${legs}
-                        <div style='text-align:right; font-weight:bold; color:#10b981; margin-top:12px; font-size:18px;'>Est. Profit: ₹${profit.toFixed(0)}</div>
+                        <div style='text-align:right; font-weight:bold; color:${pColor}; margin-top:12px; font-size:18px;'>Est. Profit: ₹${profit.toFixed(0)}</div>
                     </div>`;
                 });
-                document.getElementById('p0').innerHTML = arbHTML || "<div style='padding:20px; color:#aaa;'>No Locks Found.</div>";
+                document.getElementById('p0').innerHTML = arbHTML || "<div style='padding:20px; color:#aaa;'>No Matches.</div>";
 
                 let evHTML = "";
-                rawEvs.slice(0,50).forEach((e, i) => {
+                rawEvs.slice(0,100).forEach((e, i) => {
                     let b = e.odds - 1; let p = 1 / e.trueO;
                     let kelly = ((b * p - (1-p)) / b) * 0.30;
                     let rawStk = Math.min(Math.max(20, bank * Math.min(kelly, 0.05)), 1000);
                     let roundedStk = Math.round(rawStk / 10) * 10;
                     
                     evHTML += `<div class='card' style='border-left: 4px solid #06b6d4;'>
-                        <div style='display:flex; justify-content:space-between; align-items:center;'>
-                            <span class='badge' style='background:#06b6d4;'>${e.pct.toFixed(2)}% EV</span>
-                            <div style='display:flex; gap:5px; align-items:center;'>
-                                <span class='live-clock clock' data-iso='${e.raw_time}'></span>
-                                <button class='btn' style='background:#3f3f46;' onclick='copyText("${e.match}")'>📋 COPY</button>
-                            </div>
-                        </div>
+                        <div style='display:flex; justify-content:space-between; align-items:center;'><span class='badge' style='background:#06b6d4;'>${e.pct.toFixed(2)}% EV</span><div style='display:flex; gap:5px;'><span class='live-clock clock' data-iso='${e.raw_time}'></span><button class='btn' style='background:#3f3f46;' onclick='copyText("${e.match}")'>📋</button></div></div>
                         <div style='font-size:16px; font-weight:bold; margin: 10px 0;'>${e.match}</div>
                         <div style='background:#000; padding:12px; border-radius:6px; border:1px solid #222;'>Bet <b>${e.sel.toUpperCase()}</b> @ <b style='color:#06b6d4;'>${e.odds}</b> <span style='float:right; color:#888;'>${e.bk.toUpperCase()}</span></div>
-                        <div style='display:flex; justify-content:space-between; align-items:center; margin-top:10px;'>
-                            <div><div style='color:#fff; font-weight:bold;'>Stake: ₹${roundedStk}</div><div style='color:#666; font-size:9px;'>Exact: ₹${rawStk.toFixed(2)}</div></div>
-                            <span style='color:#444; font-size:11px;'>True: ${e.trueO.toFixed(3)}</span>
-                        </div>
                     </div>`;
                 });
-                document.getElementById('p1').innerHTML = evHTML || "<div style='padding:20px; color:#aaa;'>No Value Bets.</div>";
+                document.getElementById('p1').innerHTML = evHTML || "<div style='padding:20px; color:#aaa;'>No Matches.</div>";
             }
 
-            function sendToCalc(o1, o2, o3) { 
-                sw(2); 
-                document.getElementById('odd1').value = o1; 
-                document.getElementById('odd2').value = o2; 
-                document.getElementById('odd3').value = o3 > 0 ? o3 : ""; 
-                runCalc(); 
-            }
+            function sendToCalc(o1, o2, o3) { sw(2); document.getElementById('odd1').value = o1; document.getElementById('odd2').value = o2; document.getElementById('odd3').value = o3 > 0 ? o3 : ""; runCalc(); }
 
             function runCalc() {
                 const b = parseFloat(document.getElementById('calcBank').value) || 0;
@@ -206,25 +178,11 @@
                     let prof = (b/invSum) - b;
                     let color = prof > 0 ? '#10b981' : '#ef4444';
                     
-                    let resultHTML = `
-                        <div style='display:flex; justify-content:space-between; margin-bottom:8px; color:#ccc;'><span>Leg 1 Exact:</span><b style='color:#fff;'>₹${stk1.toFixed(2)}</b></div>
-                        <div style='display:flex; justify-content:space-between; margin-bottom:10px; color:#ccc;'><span>Leg 2 Exact:</span><b style='color:#fff;'>₹${stk2.toFixed(2)}</b></div>
-                    `;
-                    
-                    if(o3 > 0) {
-                        resultHTML += `<div style='display:flex; justify-content:space-between; margin-bottom:10px; color:#ccc;'><span>Leg 3 Exact:</span><b style='color:#fff;'>₹${stk3.toFixed(2)}</b></div>`;
-                    }
-                    
-                    resultHTML += `
-                        <hr style='border:none; border-top:1px solid #333; margin:15px 0;'>
-                        <div style='display:flex; justify-content:space-between; margin-bottom:8px; color:${color};'><span>Arbitrage %:</span><b style='font-size:16px;'>${pct.toFixed(2)}%</b></div>
-                        <div style='display:flex; justify-content:space-between; color:${color}; align-items:center;'><span>Profit:</span><b style='font-size:24px;'>₹${prof.toFixed(0)}</b></div>
-                    `;
-                    
+                    let resultHTML = `<div style='display:flex; justify-content:space-between; margin-bottom:8px; color:#ccc;'><span>Leg 1 Exact:</span><b style='color:#fff;'>₹${stk1.toFixed(2)}</b></div><div style='display:flex; justify-content:space-between; margin-bottom:10px; color:#ccc;'><span>Leg 2 Exact:</span><b style='color:#fff;'>₹${stk2.toFixed(2)}</b></div>`;
+                    if(o3 > 0) resultHTML += `<div style='display:flex; justify-content:space-between; margin-bottom:10px; color:#ccc;'><span>Leg 3 Exact:</span><b style='color:#fff;'>₹${stk3.toFixed(2)}</b></div>`;
+                    resultHTML += `<hr style='border:none; border-top:1px solid #333; margin:15px 0;'><div style='display:flex; justify-content:space-between; margin-bottom:8px; color:${color};'><span>Arbitrage %:</span><b style='font-size:16px;'>${pct.toFixed(2)}%</b></div><div style='display:flex; justify-content:space-between; color:${color}; align-items:center;'><span>Profit:</span><b style='font-size:24px;'>₹${prof.toFixed(0)}</b></div>`;
                     document.getElementById('calcResult').innerHTML = resultHTML;
-                } else {
-                    document.getElementById('calcResult').innerHTML = "Awaiting valid odds input...";
-                }
+                } else { document.getElementById('calcResult').innerHTML = "Awaiting valid odds input..."; }
             }
         </script>
     </body></html>
