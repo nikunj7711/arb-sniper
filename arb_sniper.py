@@ -20,7 +20,7 @@ SECRET_HASH = hashlib.sha256(_raw_pass.encode()).hexdigest()
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY') # 🤖 AI KEY
 
 NTFY_CHANNEL = 'nikunj_arb_alerts_2026' 
-MIN_EV_THRESHOLD = 1.0                  
+MIN_EV_THRESHOLD = 0.1                  
 MIN_ARB_THRESHOLD = 0.3                 
 
 MY_BOOKIES = 'pinnacle,onexbet,bet365,unibet,betway,stake,marathonbet'
