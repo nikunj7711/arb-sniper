@@ -1,1 +1,20 @@
-{}
+{
+  "ARB|Montr\u00e9al Canadiens vs San Jose Sharks|TOTALS 6.5|2.91": 1773463936.9363763,
+  "ARB|Buffalo Sabres vs Toronto Maple Leafs|TOTALS 6.5|2.90": 1773463937.0830052,
+  "ARB|Ottawa Senators vs Anaheim Ducks|TOTALS 6.5|2.67": 1773463937.19632,
+  "ARB|Tampa Bay Lightning vs Carolina Hurricanes|TOTALS 6.5|2.57": 1773463937.3051813,
+  "ARB|Tottenham Hotspur vs Atl\u00e9tico Madrid|TOTALS 2.5|1.27": 1773463937.4151855,
+  "ARB|Barcelona vs Newcastle United|TOTALS 3.5|0.23": 1773463937.5265036,
+  "ARB|Vegas Golden Knights vs Chicago Blackhawks|TOTALS 6.0|0.22": 1773463937.6365824,
+  "ARB|Josh Emmett vs Kevin Vallejos|TOTALS 3.5|0.20": 1773463937.7381768,
+  "EV|Tampa Bay Lightning vs Carolina Hurricanes|TOTALS 6.5|Over|2.29": 1773463937.8465734,
+  "EV|Ottawa Senators vs Anaheim Ducks|TOTALS 6.5|Over|2.21": 1773463937.9572778,
+  "EV|Montr\u00e9al Canadiens vs San Jose Sharks|TOTALS 6.5|Over|2.06": 1773463938.0595508,
+  "EV|Buffalo Sabres vs Toronto Maple Leafs|TOTALS 6.5|Over|2.08": 1773463938.1651773,
+  "EV|Josh Emmett vs Kevin Vallejos|TOTALS 3.5|Over|2.12": 1773463938.263792,
+  "EV|Vegas Golden Knights vs Chicago Blackhawks|TOTALS 6.0|Over|2.04": 1773463938.3932517,
+  "EV|Utah Mammoth vs Pittsburgh Penguins|TOTALS 6.0|Over|2.04": 1773463938.5134032,
+  "EV|Minnesota Wild vs New York Rangers|TOTALS 6.0|Over|1.97": 1773463938.6215022,
+  "EV|Vancouver Canucks vs Seattle Kraken|TOTALS 6.0|Over|2.04": 1773463938.732003,
+  "EV|Washington Capitals vs Boston Bruins|TOTALS 6.0|Over|1.96": 1773463938.8343616
+}

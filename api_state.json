@@ -1,1 +1,14 @@
-{}
+{
+  "active_index": 2,
+  "stats": {
+    "0": {
+      "remaining": 0
+    },
+    "1": {
+      "remaining": 85
+    },
+    "2": {
+      "remaining": 303
+    }
+  }
+}

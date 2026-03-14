@@ -1,1 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARB SNIPER | Auto-Terminal</title>
+<style>
+    body { background: #09090b; color: #f4f4f5; font-family: system-ui, -apple-system, sans-serif; padding: 15px; max-width: 800px; margin: auto; }
+    .hdr { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; padding-bottom: 15px; margin-bottom: 20px; }
+    .title { font-size: 24px; font-weight: 800; color: #06b6d4; margin:0; }
+    .subtitle { font-size: 11px; color: #a1a1aa; font-family: monospace; }
+    .time-badge { background: rgba(16,185,129,0.1); border: 1px solid #10b981; color: #10b981; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: bold; font-family: monospace; }
+   
+    .tabs { display: flex; gap: 5px; background: #18181b; padding: 5px; border-radius: 10px; border: 1px solid #27272a; margin-bottom: 20px; }
+    .tab { flex: 1; text-align: center; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; color: #a1a1aa; font-size: 13px; transition: 0.2s; }
+    .tab.active { background: #3f3f46; color: #fff; }
+    .pane { display: none; } .pane.active { display: block; }
+</style>
+</head>
+<body>
 
+<div class="hdr">
+    <div>
+        <h1 class="title">⚡ ARB SNIPER</h1>
+        <div class="subtitle">Cloud Scanning Active · Updates Every Hour</div>
+    </div>
+    <div class="time-badge">SYNCED: 14 Mar 2026, 10:22 AM IST</div>
+</div>
+
+<div class="tabs">
+    <div class="tab active" onclick="showPane('ev')">💎 EV Edges (10)</div>
+    <div class="tab" onclick="showPane('arb')">🔒 Arbitrage (8)</div>
+    <div class="tab" onclick="showPane('net')">📡 API Network</div>
+</div>
+
+<div id="pane-ev" class="pane active">
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 04:30 AM</span>
+                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">10.06% EV</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Tampa Bay Lightning <span style="font-size:12px; color:#a1a1aa;">vs</span> Carolina Hurricanes</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.5</strong></div>
+               
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
+                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 2.29</strong></div>
+                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Onexbet</div>
+                </div>
+               
+                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
+                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹35</strong></div>
+                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">2.081 | 45/100</strong></div>
+                </div>
+            </div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 14 Mar, 10:30 PM</span>
+                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">9.64% EV</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Ottawa Senators <span style="font-size:12px; color:#a1a1aa;">vs</span> Anaheim Ducks</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.5</strong></div>
+               
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
+                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 2.21</strong></div>
+                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Onexbet</div>
+                </div>
+               
+                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
+                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹36</strong></div>
+                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">2.016 | 43/100</strong></div>
+                </div>
+            </div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 04:30 AM</span>
+                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">9.37% EV</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Montréal Canadiens <span style="font-size:12px; color:#a1a1aa;">vs</span> San Jose Sharks</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.5</strong></div>
+               
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
+                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 2.06</strong></div>
+                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Onexbet</div>
+                </div>
+               
+                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
+                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹40</strong></div>
+                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">1.883 | 42/100</strong></div>
+                </div>
+            </div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 04:30 AM</span>
+                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">9.36% EV</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Buffalo Sabres <span style="font-size:12px; color:#a1a1aa;">vs</span> Toronto Maple Leafs</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.5</strong></div>
+               
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
+                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 2.08</strong></div>
+                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Onexbet</div>
+                </div>
+               
+                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
+                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹39</strong></div>
+                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">1.902 | 42/100</strong></div>
+                </div>
+            </div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 MMA MIXED MARTIAL ARTS &nbsp;|&nbsp; 📅 15 Mar, 04:30 AM</span>
+                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">5.17% EV</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Josh Emmett <span style="font-size:12px; color:#a1a1aa;">vs</span> Kevin Vallejos</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 3.5</strong></div>
+               
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
+                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 2.12</strong></div>
+                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Onexbet</div>
+                </div>
+               
+                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
+                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹21</strong></div>
+                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">2.016 | 24/100</strong></div>
+                </div>
+            </div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 07:30 AM</span>
+                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">3.84% EV</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Vegas Golden Knights <span style="font-size:12px; color:#a1a1aa;">vs</span> Chicago Blackhawks</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.0</strong></div>
+               
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
+                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 2.04</strong></div>
+                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Unibet</div>
+                </div>
+               
+                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
+                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹20</strong></div>
+                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">1.964 | 18/100</strong></div>
+                </div>
+            </div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 06:30 AM</span>
+                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">3.32% EV</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Utah Mammoth <span style="font-size:12px; color:#a1a1aa;">vs</span> Pittsburgh Penguins</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.0</strong></div>
+               
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
+                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 2.04</strong></div>
+                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Unibet</div>
+                </div>
+               
+                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
+                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹20</strong></div>
+                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">1.974 | 16/100</strong></div>
+                </div>
+            </div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 03:30 AM</span>
+                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">2.32% EV</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Minnesota Wild <span style="font-size:12px; color:#a1a1aa;">vs</span> New York Rangers</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.0</strong></div>
+               
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
+                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 1.97</strong></div>
+                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Unibet</div>
+                </div>
+               
+                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
+                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹20</strong></div>
+                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">1.925 | 11/100</strong></div>
+                </div>
+            </div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 07:30 AM</span>
+                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">2.26% EV</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Vancouver Canucks <span style="font-size:12px; color:#a1a1aa;">vs</span> Seattle Kraken</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.0</strong></div>
+               
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
+                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 2.04</strong></div>
+                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Unibet</div>
+                </div>
+               
+                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
+                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹20</strong></div>
+                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">1.995 | 11/100</strong></div>
+                </div>
+            </div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(6,182,212,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 12:30 AM</span>
+                <span style="color:#06b6d4; font-weight:800; font-family:monospace;">0.79% EV</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Washington Capitals <span style="font-size:12px; color:#a1a1aa;">vs</span> Boston Bruins</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.0</strong></div>
+               
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a;">
+                    <div style="font-size:16px;">👉 Bet <strong style="color:#06b6d4;">OVER @ 1.96</strong></div>
+                    <div style="font-size:11px; background:#27272a; padding:4px 8px; border-radius:4px; color:#fff;">Unibet</div>
+                </div>
+               
+                <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed #27272a;">
+                    <div><span style="font-size:10px; color:#a1a1aa;">KELLY STAKE</span><br><strong style="color:#06b6d4; font-size:18px;">₹20</strong></div>
+                    <div style="text-align:right;"><span style="font-size:10px; color:#a1a1aa;">TRUE ODDS | CONF</span><br><strong style="font-family:monospace;">1.945 | 3/100</strong></div>
+                </div>
+            </div>
+        </div></div>
+<div id="pane-arb" class="pane">
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 04:30 AM</span>
+                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">2.91% ARB</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Montréal Canadiens <span style="font-size:12px; color:#a1a1aa;">vs</span> San Jose Sharks</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.5</strong> (2-Way)</div>
+                
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>OVER @ <strong style="color:#f59e0b;">2.06</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Onexbet</span></span>
+                <strong style="color:#06b6d4;">₹750</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>UNDER @ <strong style="color:#f59e0b;">2.06</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Pinnacle</span></span>
+                <strong style="color:#06b6d4;">₹750</strong>
+            </div>
+                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹45</strong></div>
+            </div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 04:30 AM</span>
+                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">2.90% ARB</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Buffalo Sabres <span style="font-size:12px; color:#a1a1aa;">vs</span> Toronto Maple Leafs</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.5</strong> (2-Way)</div>
+                
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>OVER @ <strong style="color:#f59e0b;">2.08</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Onexbet</span></span>
+                <strong style="color:#06b6d4;">₹743</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>UNDER @ <strong style="color:#f59e0b;">2.04</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Pinnacle</span></span>
+                <strong style="color:#06b6d4;">₹757</strong>
+            </div>
+                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹45</strong></div>
+            </div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 14 Mar, 10:30 PM</span>
+                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">2.67% ARB</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Ottawa Senators <span style="font-size:12px; color:#a1a1aa;">vs</span> Anaheim Ducks</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.5</strong> (2-Way)</div>
+                
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>OVER @ <strong style="color:#f59e0b;">2.21</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Onexbet</span></span>
+                <strong style="color:#06b6d4;">₹697</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>UNDER @ <strong style="color:#f59e0b;">1.92</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Pinnacle</span></span>
+                <strong style="color:#06b6d4;">₹803</strong>
+            </div>
+                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹41</strong></div>
+            </div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 04:30 AM</span>
+                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">2.57% ARB</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Tampa Bay Lightning <span style="font-size:12px; color:#a1a1aa;">vs</span> Carolina Hurricanes</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.5</strong> (2-Way)</div>
+                
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>OVER @ <strong style="color:#f59e0b;">2.29</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Onexbet</span></span>
+                <strong style="color:#06b6d4;">₹672</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>UNDER @ <strong style="color:#f59e0b;">1.86</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Pinnacle</span></span>
+                <strong style="color:#06b6d4;">₹828</strong>
+            </div>
+                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹40</strong></div>
+            </div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 SOCCER UEFA CHAMPS LEAGUE &nbsp;|&nbsp; 📅 19 Mar, 01:30 AM</span>
+                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">1.27% ARB</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Tottenham Hotspur <span style="font-size:12px; color:#a1a1aa;">vs</span> Atlético Madrid</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 2.5</strong> (2-Way)</div>
+                
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>OVER @ <strong style="color:#f59e0b;">1.81</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Onexbet</span></span>
+                <strong style="color:#06b6d4;">₹839</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>UNDER @ <strong style="color:#f59e0b;">2.30</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Unibet</span></span>
+                <strong style="color:#06b6d4;">₹661</strong>
+            </div>
+                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹19</strong></div>
+            </div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 SOCCER UEFA CHAMPS LEAGUE &nbsp;|&nbsp; 📅 18 Mar, 11:15 PM</span>
+                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">0.23% ARB</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Barcelona <span style="font-size:12px; color:#a1a1aa;">vs</span> Newcastle United</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 3.5</strong> (2-Way)</div>
+                
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>OVER @ <strong style="color:#f59e0b;">2.16</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Unibet</span></span>
+                <strong style="color:#06b6d4;">₹696</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>UNDER @ <strong style="color:#f59e0b;">1.87</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Onexbet</span></span>
+                <strong style="color:#06b6d4;">₹804</strong>
+            </div>
+                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹3</strong></div>
+            </div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 ICEHOCKEY NHL &nbsp;|&nbsp; 📅 15 Mar, 07:30 AM</span>
+                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">0.22% ARB</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Vegas Golden Knights <span style="font-size:12px; color:#a1a1aa;">vs</span> Chicago Blackhawks</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 6.0</strong> (2-Way)</div>
+                
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>OVER @ <strong style="color:#f59e0b;">2.04</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Unibet</span></span>
+                <strong style="color:#06b6d4;">₹737</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>UNDER @ <strong style="color:#f59e0b;">1.97</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Pinnacle</span></span>
+                <strong style="color:#06b6d4;">₹763</strong>
+            </div>
+                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹3</strong></div>
+            </div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; margin-bottom:15px; overflow:hidden;">
+            <div style="padding:12px 15px; border-bottom:1px solid #27272a; background:rgba(245,158,11,0.05); display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#a1a1aa; font-weight:bold;">🏆 MMA MIXED MARTIAL ARTS &nbsp;|&nbsp; 📅 15 Mar, 04:30 AM</span>
+                <span style="color:#f59e0b; font-weight:800; font-family:monospace;">0.20% ARB</span>
+            </div>
+            <div style="padding:15px;">
+                <div style="font-size:16px; font-weight:800; margin-bottom:10px;">Josh Emmett <span style="font-size:12px; color:#a1a1aa;">vs</span> Kevin Vallejos</div>
+                <div style="font-size:12px; color:#a1a1aa; margin-bottom:10px;">LINE: <strong style="color:#fff">TOTALS 3.5</strong> (2-Way)</div>
+                
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>OVER @ <strong style="color:#f59e0b;">2.12</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Onexbet</span></span>
+                <strong style="color:#06b6d4;">₹709</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; background:#09090b; padding:10px; border-radius:8px; border:1px solid #27272a; margin-bottom:5px;">
+                <span>UNDER @ <strong style="color:#f59e0b;">1.90</strong> <span style="font-size:10px; background:#27272a; padding:2px 6px; border-radius:4px;">Pinnacle</span></span>
+                <strong style="color:#06b6d4;">₹791</strong>
+            </div>
+                <div style="text-align:right; margin-top:10px;"><span style="font-size:12px; color:#a1a1aa;">GUARANTEED PROFIT:</span> <strong style="color:#10b981; font-size:20px;">₹3</strong></div>
+            </div>
+        </div></div>
+<div id="pane-net" class="pane">
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #ef4444; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">c5c5••••e127</strong>
+                <span style="font-size:10px; font-weight:bold; color:#ef4444;">EXHAUSTED</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">0/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">4130••••e50b</strong>
+                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">85/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #06b6d4; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">dd73••••db34</strong>
+                <span style="font-size:10px; font-weight:bold; color:#06b6d4;">ACTIVE</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">303/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">5df6••••6bdf</strong>
+                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">0c68••••e8a2</strong>
+                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">2c49••••f3b0</strong>
+                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">0a51••••fc96</strong>
+                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">087f••••f22e</strong>
+                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">1727••••81db</strong>
+                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">baa5••••474c</strong>
+                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">a58d••••75ce</strong>
+                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">7513••••a79e</strong>
+                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">b148••••95d4</strong>
+                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">f633••••fc2c</strong>
+                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">4ed1••••93cf</strong>
+                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">d29c••••ac67</strong>
+                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">97f5••••0b1d</strong>
+                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">26f8••••9f6e</strong>
+                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
+        </div>
+        <div style="background:#18181b; border:1px solid #27272a; padding:15px; border-radius:10px; border-left:4px solid #10b981; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <strong style="font-family:monospace; font-size:14px;">2596••••e1c4</strong>
+                <span style="font-size:10px; font-weight:bold; color:#10b981;">STANDBY</span>
+            </div>
+            <div style="font-size:12px; color:#a1a1aa;">Remaining Quota: <strong style="color:#fff">500/500</strong></div>
+        </div></div>
+
+<script>
+    function showPane(p) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.pane').forEach(t => t.classList.remove('active'));
+        event.target.classList.add('active');
+        document.getElementById('pane-'+p).classList.add('active');
+    }
+    // Auto-refresh the page every 5 minutes to fetch the latest GitHub build
+    setInterval(() => window.location.reload(true), 300000);
+</script>
+</body>
+</html>
