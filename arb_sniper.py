@@ -24,16 +24,12 @@ MIN_EV_THRESHOLD = 0.5
 MIN_ARB_THRESHOLD = 0.1                 
 
 # 🌐 GOD-MODE BOOKIE LIST
-MY_BOOKIES = 'pinnacle,onexbet,bet365,unibet,betway,stake,marathonbet,parimatch,betfair,dafabet,bovada,draftkings,fanduel,betmgm'
+MY_BOOKIES = 'pinnacle,onexbet,bet365,unibet,betway,stake,marathonbet,parimatch,betfair,dafabet'
 
-# 🏆 UNRESTRICTED SPORTS ARRAY (22 LEAGUES)
+# 🏆 UNRESTRICTED SPORTS ARRAY
 TARGET_SPORTS = [
     'soccer_epl', 'soccer_spain_la_liga', 'soccer_uefa_champs_league', 'soccer_italy_serie_a', 
-    'soccer_germany_bundesliga', 'soccer_france_ligue_one', 'soccer_fifa_world_cup',
-    'basketball_nba', 'basketball_euroleague', 'basketball_ncaab',
-    'icehockey_nhl', 'americanfootball_nfl', 'americanfootball_ncaaf', 'baseball_mlb', 
-    'tennis_atp', 'tennis_wta', 'cricket_test', 'cricket_odi', 'cricket_t20', 
-    'mma_mixed_martial_arts', 'boxing_boxing', 'upcoming'
+    'basketball_nba', 'icehockey_nhl', 'tennis_atp', 'tennis_wta', 'mma_mixed_martial_arts', 'upcoming'
 ]
 
 # ==========================================
@@ -75,7 +71,7 @@ def update_key_stats(idx, rem):
         if rem is not None: api_state['stats'][str(idx)]['remaining'] = int(rem)
 
 # ==========================================
-#  3. DATA FETCHERS (MAX MARKETS)
+#  3. DATA FETCHERS
 # ==========================================
 def fetch_bcgame_custom():
     headers = {'accept': '*/*', 'origin': 'https://bc.game', 'user-agent': 'Mozilla/5.0'}
@@ -122,7 +118,6 @@ def fetch_odds_api(url, params):
                 update_key_stats(idx, res.headers.get('x-requests-remaining'))
                 return res.json()
             if res.status_code in [401, 429]:
-                print(f"⚠️ API Limit hit on Key #{idx+1}. Rotating...")
                 if rotate_api_key(idx): continue
             return None
         except Exception as e: return None
@@ -131,14 +126,13 @@ def fetch_all_sports():
     results = {}
     print("📡 Fetching Massive Global Data Matrix...")
     with ThreadPoolExecutor(max_workers=5) as executor:
-        # 🛠️ NOW PULLING H2H, TOTALS, AND SPREADS ACROSS ALL REGIONS
         futures = {executor.submit(fetch_odds_api, f'https://api.the-odds-api.com/v4/sports/{sp}/odds', {'regions': 'eu,uk,us,au', 'markets': 'h2h,totals,spreads'}): sp for sp in TARGET_SPORTS}
         for future in as_completed(futures):
             results[futures[future]] = future.result()
     return results
 
 # ==========================================
-#  4. ADVANCED MATH ENGINE (2-WAY & 3-WAY)
+#  4. ADVANCED MATH ENGINE 
 # ==========================================
 def remove_vig(*odds):
     margin = sum(1/o for o in odds)
@@ -150,6 +144,15 @@ def format_ist(iso_str):
         return dt.astimezone(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b | %I:%M %p")
     except: return "TBD"
 
+def extract_base_sport(sport_key):
+    if 'soccer' in sport_key.lower(): return 'Football'
+    if 'basketball' in sport_key.lower(): return 'Basketball'
+    if 'icehockey' in sport_key.lower(): return 'Ice Hockey'
+    if 'tennis' in sport_key.lower(): return 'Tennis'
+    if 'mma' in sport_key.lower(): return 'MMA'
+    if 'cricket' in sport_key.lower(): return 'Cricket'
+    return 'Other'
+
 def process_markets(results):
     all_evs, all_arbs = [], []
     valid_bookies = [b.strip() for b in MY_BOOKIES.split(',')]
@@ -160,19 +163,17 @@ def process_markets(results):
         for event in events:
             commence = event.get('commence_time', '')
             home, away = event.get('home_team', 'A'), event.get('away_team', 'B')
-            meta = {'match': f"{home} vs {away}", 'sport': sport.replace('_', ' ').upper(), 'raw_time': commence, 'time': format_ist(commence)}
+            clean_sport = extract_base_sport(sport)
+            meta = {'match': f"{home} vs {away}", 'sport': clean_sport, 'raw_time': commence, 'time': format_ist(commence)}
 
             ev_lines, arb_lines = {}, {}
             for bookie in event.get('bookmakers', []):
                 b_name = bookie['key']
-                
-                if b_name not in valid_bookies and b_name != 'bcgame':
-                    continue 
+                if b_name not in valid_bookies and b_name != 'bcgame': continue 
                 
                 for market in bookie.get('markets', []):
                     m_type = market['key'].upper()
                     for out in market['outcomes']:
-                        # 🛠️ SPREADS PARSER: Absolute value matching combines positive/negative handicaps into perfectly paired 2-way locks.
                         pt = out.get('point', '')
                         if pt != '':
                             try: pt = abs(float(pt))
@@ -191,7 +192,6 @@ def process_markets(results):
                         if name not in arb_lines[lk] or price > arb_lines[lk][name]['price']:
                             arb_lines[lk][name] = {'price': price, 'bookie': b_name}
 
-            # EV Math
             for lk, d in ev_lines.items():
                 if len(d['pin']) in [2, 3]:
                     keys = list(d['pin'].keys())
@@ -205,7 +205,6 @@ def process_markets(results):
                                 if ev_pct >= MIN_EV_THRESHOLD:
                                     all_evs.append({**meta, 'pct': ev_pct, 'line': lk, 'ways': len(keys), 'sel': side, 'odds': best_p, 'trueO': true_os[idx], 'bk': best_bk})
 
-            # Arbitrage Math (Supports 2-Way and 3-Way dynamically)
             for lk, outs in arb_lines.items():
                 keys = list(outs.keys())
                 if len(keys) in [2, 3]:
@@ -218,10 +217,12 @@ def process_markets(results):
     return all_evs, all_arbs
 
 # ==========================================
-#  5. DYNAMIC UI GENERATOR
+#  5. UI GENERATOR (FILTERS & LOGOS)
 # ==========================================
 def generate_web(evs, arbs):
     ist_now = (datetime.now(timezone.utc) + timedelta(hours=5.5)).strftime('%d %b, %I:%M %p IST')
+    js_arbs_data = json.dumps(arbs[:300]) 
+    js_evs_data = json.dumps(evs[:300])
     
     keys_html = ""
     for idx, key in enumerate(API_KEYS):
@@ -233,26 +234,26 @@ def generate_web(evs, arbs):
         masked = f"{key[:4]}••••{key[-4:]}" if len(key) > 8 else "ERR"
         keys_html += f"<div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid {color}; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'>KEY #{idx+1} <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:{color}; border:1px solid {color};'>{status}</span></div><div style='font-family:monospace; color:#fff;'>{masked}</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:{color};'>{rem}</div></div></div>"
 
-    js_arbs_data = json.dumps(arbs[:250]) # Increased capacity to 250 cards!
-    js_evs_data = json.dumps(evs[:250])
-    
     HTML = f"""<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body {{ background:#09090b; color:#fff; font-family:-apple-system, sans-serif; padding:15px; max-width:600px; margin:auto; }}
-        .card {{ background:#18181b; border:1px solid #27272a; padding:15px; border-radius:12px; margin-bottom:12px; }}
-        .tab {{ flex:1; text-align:center; padding:12px; background:#18181b; border-radius:8px; cursor:pointer; font-size:12px; color:#666; font-weight:bold; border:1px solid transparent; }}
+        .card {{ background:#18181b; border:1px solid #27272a; padding:15px; border-radius:12px; margin-bottom:12px; transition: 0.2s; }}
+        .tab {{ flex:1; text-align:center; padding:12px 5px; background:#18181b; border-radius:8px; cursor:pointer; font-size:11px; color:#666; font-weight:bold; border:1px solid transparent; }}
         .tab.active {{ background:#3f3f46; color:#fff; border-color:#06b6d4; }}
         .pane {{ display:none; }} .active-pane {{ display:block; }}
         .btn {{ background:#27272a; color:#fff; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:11px; }}
         .btn-calc {{ background: rgba(6,182,212,0.2); color:#06b6d4; border:1px solid #06b6d4; }}
-        .badge {{ font-size:10px; padding:3px 7px; border-radius:5px; font-weight:bold; color:#000; }}
+        .badge {{ font-size:10px; padding:3px 7px; border-radius:5px; font-weight:bold; color:#000; display:inline-flex; align-items:center; gap:4px; }}
         .input-box {{ background:#000; border:1px solid #27272a; color:#10b981; padding:12px; border-radius:8px; width:100%; font-size:16px; font-weight:bold; margin-bottom:15px; box-sizing:border-box; outline:none; }}
-        .input-box:focus {{ border-color: #06b6d4; }}
-        .clock {{ background:rgba(16,185,129,0.1); color:#10b981; padding:3px 7px; border-radius:4px; font-family:monospace; }}
+        .filter-section {{ background:#000; padding:15px; border-radius:8px; border:1px solid #222; margin-bottom:15px; }}
+        .checkbox-label {{ display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:8px; color:#ccc; cursor:pointer; }}
+        .bookie-logo {{ width:16px; height:16px; border-radius:50%; background:#fff; }}
+        .range-slider {{ width:100%; accent-color:#06b6d4; }}
     </style></head><body>
         <div id='lock-screen' style='position:fixed; top:0; left:0; width:100%; height:100%; background:#09090b; z-index:999; display:flex; flex-direction:column; align-items:center; justify-content:center;'>
-            <h2 style='color:#06b6d4; letter-spacing: 2px;'>⚡ SNIPER TERMINAL</h2>
+            <h2 style='color:#06b6d4; letter-spacing: 2px;'><i class="fa-solid fa-bolt"></i> SNIPER TERMINAL</h2>
             <input type='password' id='ps' style='background:#18181b; border:1px solid #27272a; color:#fff; padding:12px; border-radius:8px; text-align:center; margin-bottom:10px; width:200px;' placeholder='Authorization Code'>
             <button onclick='ck()' style='background:#06b6d4; color:#000; border:none; padding:10px 20px; border-radius:8px; font-weight:bold; cursor:pointer; width:225px;'>ENTER SYSTEM</button>
             <p id='err' style='color:#ef4444; font-size:12px; margin-top:10px;'></p>
@@ -260,8 +261,8 @@ def generate_web(evs, arbs):
 
         <div id='content' style='display:none;'>
             <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;'>
-                <div><h2 style='color:#06b6d4; margin:0;'>⚡ SNIPER PRO</h2><small style='color:#444;'>Synced: {ist_now}</small></div>
-                <button onclick='localStorage.clear(); location.reload();' class='btn' style='background:#ef4444;'>LOGOUT</button>
+                <div><h2 style='color:#06b6d4; margin:0;'><i class="fa-solid fa-crosshairs"></i> SNIPER PRO</h2><small style='color:#444;'>Synced: {ist_now}</small></div>
+                <button onclick='localStorage.clear(); location.reload();' class='btn' style='background:#ef4444;'><i class="fa-solid fa-power-off"></i> EXIT</button>
             </div>
 
             <div style='background:#18181b; padding:15px; border-radius:12px; border:1px solid #27272a; margin-bottom:15px;'>
@@ -270,10 +271,11 @@ def generate_web(evs, arbs):
             </div>
 
             <div style='display:flex; gap:5px; margin-bottom:20px; position:sticky; top:0; z-index:10; background:#09090b; padding-bottom:10px;'>
-                <div class='tab active' onclick='sw(0)'>ARBS ({len(arbs)})</div>
-                <div class='tab' onclick='sw(1)'>EV ({len(evs)})</div>
-                <div class='tab' onclick='sw(2)'>CALC</div>
-                <div class='tab' onclick='sw(3)'>KEYS</div>
+                <div class='tab active' onclick='sw(0)' id='tab0'>ARBS (0)</div>
+                <div class='tab' onclick='sw(1)' id='tab1'>EV (0)</div>
+                <div class='tab' onclick='sw(2)'><i class="fa-solid fa-filter"></i> FILTERS</div>
+                <div class='tab' onclick='sw(3)'><i class="fa-solid fa-calculator"></i> CALC</div>
+                <div class='tab' onclick='sw(4)'><i class="fa-solid fa-key"></i> KEYS</div>
             </div>
 
             <div id='p0' class='pane active-pane'></div>
@@ -281,26 +283,68 @@ def generate_web(evs, arbs):
             
             <div id='p2' class='pane'>
                 <div class='card'>
-                    <h3 style='margin-top:0; color:#06b6d4;'>Advanced 2-Way/3-Way Calculator</h3>
-                    <label style='font-size:10px; color:#aaa;'>Investment Amount</label>
+                    <h3 style='margin-top:0; color:#06b6d4;'><i class="fa-solid fa-sliders"></i> Master Filters</h3>
+                    
+                    <div class='filter-section'>
+                        <label style='font-size:12px; color:#fff; font-weight:bold;'>Minimum Profit: <span id='profLabel' style='color:#06b6d4;'>1.0%</span></label>
+                        <input type="range" id="minProfit" min="0" max="20" step="0.5" value="1.0" class="range-slider" style='margin-top:10px;' oninput="updateFilters()">
+                    </div>
+
+                    <div class='filter-section'>
+                        <label style='font-size:12px; color:#fff; font-weight:bold; margin-bottom:10px; display:block;'>Sports</label>
+                        <div id='sportFilters'></div>
+                    </div>
+
+                    <div class='filter-section'>
+                        <label style='font-size:12px; color:#fff; font-weight:bold; margin-bottom:10px; display:block;'>Bookmakers</label>
+                        <div id='bookieFilters'></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id='p3' class='pane'>
+                <div class='card'>
+                    <h3 style='margin-top:0; color:#06b6d4;'><i class="fa-solid fa-calculator"></i> Calculator</h3>
                     <input type='number' id='calcBank' class='input-box' placeholder='Investment Amount' oninput='runCalc()'>
-                    <label style='font-size:10px; color:#aaa;'>Odd 1</label>
                     <input type='number' id='odd1' class='input-box' placeholder='Odd 1' oninput='runCalc()'>
-                    <label style='font-size:10px; color:#aaa;'>Odd 2</label>
                     <input type='number' id='odd2' class='input-box' placeholder='Odd 2' oninput='runCalc()'>
-                    <label style='font-size:10px; color:#aaa;'>Odd 3 (Optional for 3-Way)</label>
                     <input type='number' id='odd3' class='input-box' placeholder='Odd 3 (Optional)' oninput='runCalc()'>
                     <div id='calcResult' style='margin-top:5px; padding:15px; background:#000; border-radius:8px; border:1px solid #222;'>Awaiting Input...</div>
                 </div>
             </div>
 
-            <div id='p3' class='pane'>{keys_html}</div>
+            <div id='p4' class='pane'>{keys_html}</div>
+            
+            <div style='text-align:center; margin-top:30px; margin-bottom:10px;'>
+                <p style='font-size:10px; color:#666; margin-bottom:5px;'>LIVE VISITOR TRACKING</p>
+                <img src="https://api.visitorbadge.io/api/visitors?path=nikunjarbsniper2026&countColor=%2306b6d4&style=flat-square" alt="Visitor Badge">
+            </div>
         </div>
 
         <script>
             const EXPECTED_HASH = '{SECRET_HASH}';
             const rawArbs = {js_arbs_data};
             const rawEvs = {js_evs_data};
+            
+            let activeSports = new Set();
+            let activeBookies = new Set();
+            let currentMinProfit = 1.0;
+
+            const iconMap = {{
+                'Football': 'fa-futbol', 'Basketball': 'fa-basketball', 'Ice Hockey': 'fa-hockey-puck',
+                'Tennis': 'fa-table-tennis-paddle-ball', 'MMA': 'fa-hand-fist', 'Cricket': 'fa-baseball-bat-ball', 'Other': 'fa-trophy'
+            }};
+
+            const domainMap = {{
+                'pinnacle': 'pinnacle.com', 'onexbet': '1xbet.com', 'bet365': 'bet365.com', 
+                'unibet': 'unibet.com', 'betway': 'betway.com', 'stake': 'stake.com',
+                'marathonbet': 'marathonbet.com', 'parimatch': 'parimatch.com', 'dafabet': 'dafabet.com', 'bcgame': 'bc.game'
+            }};
+
+            function getLogo(bk) {{
+                let domain = domainMap[bk] || (bk + ".com");
+                return `<img src="https://logo.clearbit.com/${{domain}}" onerror="this.src='https://ui-avatars.com/api/?name=${{bk}}&background=random&color=fff'" class="bookie-logo">`;
+            }}
 
             if(localStorage.getItem('savedBankroll')) {{
                 document.getElementById('userBankroll').value = localStorage.getItem('savedBankroll');
@@ -311,7 +355,7 @@ def generate_web(evs, arbs):
                 const val = document.getElementById('userBankroll').value;
                 localStorage.setItem('savedBankroll', val);
                 document.getElementById('calcBank').value = val;
-                renderAll(); runCalc();
+                applyFilters(); runCalc();
             }}
 
             function ck() {{ 
@@ -319,89 +363,122 @@ def generate_web(evs, arbs):
                     document.getElementById('lock-screen').style.display='none'; 
                     document.getElementById('content').style.display='block'; 
                     localStorage.setItem('auth_hash', EXPECTED_HASH); 
-                    renderAll();
-                }} else {{ document.getElementById('err').innerText = 'Access Denied: Invalid Code'; }}
+                    initFilters();
+                }} else {{ document.getElementById('err').innerText = 'Access Denied'; }}
             }}
             
             if(localStorage.getItem('auth_hash') === EXPECTED_HASH) {{ 
                 document.getElementById('lock-screen').style.display='none'; 
                 document.getElementById('content').style.display='block'; 
-                renderAll();
+                initFilters();
             }}
 
             function sw(i) {{ document.querySelectorAll('.tab').forEach((t,j)=>j==i?t.classList.add('active'):t.classList.remove('active')); document.querySelectorAll('.pane').forEach((p,j)=>j==i?p.classList.add('active-pane') : p.classList.remove('active-pane')); window.scrollTo(0,0); }}
 
-            function formatTimeDiff(iso) {{
-                let d = new Date(iso) - new Date();
-                if(d < 0) return "LIVE NOW";
-                return `${{Math.floor(d/3600000)}}h ${{Math.floor((d%3600000)/60000)}}m`;
+            function initFilters() {{
+                let sportsCount = {{}}; let bookiesCount = {{}};
+                
+                [...rawArbs, ...rawEvs].forEach(item => {{
+                    sportsCount[item.sport] = (sportsCount[item.sport] || 0) + 1;
+                    if(item.bk) bookiesCount[item.bk] = (bookiesCount[item.bk] || 0) + 1;
+                    if(item.sides) item.sides.forEach(s => bookiesCount[s.bk] = (bookiesCount[s.bk] || 0) + 1);
+                }});
+
+                let sHtml = "";
+                Object.keys(sportsCount).sort().forEach(s => {{
+                    activeSports.add(s);
+                    let icon = iconMap[s] || 'fa-trophy';
+                    sHtml += `<label class='checkbox-label'><input type='checkbox' checked value='${{s}}' onchange='toggleSport(this)'> <i class="fa-solid ${{icon}}"></i> ${{s}} (${{sportsCount[s]}})</label>`;
+                }});
+                document.getElementById('sportFilters').innerHTML = sHtml || "<span style='color:#666'>No data</span>";
+
+                let bHtml = "";
+                Object.keys(bookiesCount).sort().forEach(b => {{
+                    activeBookies.add(b);
+                    bHtml += `<label class='checkbox-label'><input type='checkbox' checked value='${{b}}' onchange='toggleBookie(this)'> ${{getLogo(b)}} <span style='text-transform:capitalize'>${{b}}</span></label>`;
+                }});
+                document.getElementById('bookieFilters').innerHTML = bHtml || "<span style='color:#666'>No data</span>";
+
+                applyFilters();
             }}
 
-            setInterval(() => {{
-                document.querySelectorAll('.live-clock').forEach(el => el.innerText = '⏳ ' + formatTimeDiff(el.dataset.iso));
-            }}, 1000);
+            function toggleSport(cb) {{ cb.checked ? activeSports.add(cb.value) : activeSports.delete(cb.value); applyFilters(); }}
+            function toggleBookie(cb) {{ cb.checked ? activeBookies.add(cb.value) : activeBookies.delete(cb.value); applyFilters(); }}
+            function updateFilters() {{ currentMinProfit = parseFloat(document.getElementById('minProfit').value); document.getElementById('profLabel').innerText = currentMinProfit.toFixed(1) + "%"; applyFilters(); }}
 
             function copyText(txt) {{ navigator.clipboard.writeText(txt); alert("Copied: " + txt); }}
 
-            function renderAll() {{
+            function applyFilters() {{
                 const bank = parseFloat(document.getElementById('userBankroll').value) || 0;
                 
+                let filteredArbs = rawArbs.filter(a => a.pct >= currentMinProfit && activeSports.has(a.sport) && a.sides.every(s => activeBookies.has(s.bk)));
+                let filteredEvs = rawEvs.filter(e => e.pct >= currentMinProfit && activeSports.has(e.sport) && activeBookies.has(e.bk));
+
+                document.getElementById('tab0').innerText = `ARBS (${{filteredArbs.length}})`;
+                document.getElementById('tab1').innerText = `EV (${{filteredEvs.length}})`;
+
                 let arbHTML = "";
-                rawArbs.forEach((a, i) => {{
+                filteredArbs.forEach(a => {{
                     let profit = (bank / a.margin) - bank;
                     let pColor = profit > 0 ? '#10b981' : '#ef4444';
                     let legs = "";
+                    let sIcon = iconMap[a.sport] || 'fa-trophy';
                     
                     a.sides.forEach(s => {{
                         let rawStk = (bank / a.margin) / s.pr;
                         let roundedStk = Math.round(rawStk / 10) * 10; 
                         legs += `<div style='display:flex; justify-content:space-between; align-items:center; background:#000; padding:10px; border-radius:6px; margin-top:6px; border:1px solid #222;'>
-                            <span>${{s.sel}} @ <b style='color:#f59e0b'>${{s.pr}}</b> <small style='color:#aaa'>(${{s.bk.toUpperCase()}})</small></span>
+                            <div style='display:flex; align-items:center; gap:8px;'>${{getLogo(s.bk)}} <span>${{s.sel}} @ <b style='color:#f59e0b'>${{s.pr}}</b></span></div>
                             <div style='text-align:right;'><div style='color:#fff; font-weight:bold;'>₹${{roundedStk}}</div><div style='color:#666; font-size:9px;'>Ex: ₹${{rawStk.toFixed(1)}}</div></div>
                         </div>`;
                     }});
 
                     arbHTML += `<div class='card' style='border-left: 4px solid #f59e0b;'>
                         <div style='display:flex; justify-content:space-between; align-items:center;'>
-                            <span class='badge' style='background:#f59e0b;'>${{a.pct.toFixed(2)}}% ARB</span>
+                            <span class='badge' style='background:#f59e0b;'><i class="fa-solid fa-lock"></i> ${{a.pct.toFixed(2)}}% ARB</span>
                             <div style='display:flex; gap:5px;'>
-                                <button class='btn btn-calc' onclick='sendToCalc(${{a.sides[0]?.pr || 0}}, ${{a.sides[1]?.pr || 0}}, ${{a.sides[2]?.pr || 0}})'>🧮 CALC</button>
-                                <button class='btn' style='background:#3f3f46;' onclick='copyText("${{a.match}}")'>📋 COPY</button>
+                                <button class='btn btn-calc' onclick='sendToCalc(${{a.sides[0]?.pr || 0}}, ${{a.sides[1]?.pr || 0}}, ${{a.sides[2]?.pr || 0}})'>🧮</button>
+                                <button class='btn' style='background:#3f3f46;' onclick='copyText("${{a.match}}")'>📋</button>
                             </div>
                         </div>
                         <div style='font-size:16px; font-weight:bold; margin: 10px 0;'>${{a.match}}</div>
-                        <div style='display:flex; gap:10px; font-size:11px; margin-bottom:10px;'>
-                            <span style='background:#222; padding:3px 7px; border-radius:4px;'>📅 ${{a.time}}</span>
-                            <span class='live-clock clock' data-iso='${{a.raw_time}}'></span>
+                        <div style='display:flex; gap:10px; font-size:11px; margin-bottom:10px; color:#aaa;'>
+                            <span><i class="fa-solid ${{sIcon}}"></i> ${{a.sport}}</span>
+                            <span>|</span>
+                            <span>${{a.line}}</span>
                         </div>
-                        <div style='font-size:12px; color:#aaa;'>${{a.line}} (${{a.ways}}-Way)</div>
                         ${{legs}}
                         <div style='text-align:right; font-weight:bold; color:${{pColor}}; margin-top:12px; font-size:18px;'>Est. Profit: ₹${{profit.toFixed(0)}}</div>
                     </div>`;
                 }});
-                document.getElementById('p0').innerHTML = arbHTML || "<div style='padding:20px; color:#aaa;'>No Matches.</div>";
+                document.getElementById('p0').innerHTML = arbHTML || "<div style='padding:20px; color:#aaa;'><i class='fa-solid fa-ghost'></i> No Matches match your filters.</div>";
 
                 let evHTML = "";
-                rawEvs.slice(0,250).forEach((e, i) => {{
+                filteredEvs.forEach(e => {{
                     let b = e.odds - 1; let p = 1 / e.trueO;
                     let kelly = ((b * p - (1-p)) / b) * 0.30;
                     let rawStk = Math.min(Math.max(20, bank * Math.min(kelly, 0.05)), 1000);
                     let roundedStk = Math.round(rawStk / 10) * 10;
+                    let sIcon = iconMap[e.sport] || 'fa-trophy';
                     
                     evHTML += `<div class='card' style='border-left: 4px solid #06b6d4;'>
-                        <div style='display:flex; justify-content:space-between; align-items:center;'><span class='badge' style='background:#06b6d4;'>${{e.pct.toFixed(2)}}% EV</span><div style='display:flex; gap:5px;'><span class='live-clock clock' data-iso='${{e.raw_time}}'></span><button class='btn' style='background:#3f3f46;' onclick='copyText("${{e.match}}")'>📋</button></div></div>
+                        <div style='display:flex; justify-content:space-between; align-items:center;'><span class='badge' style='background:#06b6d4;'><i class="fa-solid fa-chart-line"></i> ${{e.pct.toFixed(2)}}% EV</span><button class='btn' style='background:#3f3f46;' onclick='copyText("${{e.match}}")'>📋</button></div>
                         <div style='font-size:16px; font-weight:bold; margin: 10px 0;'>${{e.match}}</div>
-                        <div style='background:#000; padding:12px; border-radius:6px; border:1px solid #222;'>Bet <b>${{e.sel.toUpperCase()}}</b> @ <b style='color:#06b6d4;'>${{e.odds}}</b> <span style='float:right; color:#888;'>${{e.bk.toUpperCase()}}</span></div>
+                        <div style='font-size:11px; margin-bottom:10px; color:#aaa;'><i class="fa-solid ${{sIcon}}"></i> ${{e.sport}} | ${{e.line}}</div>
+                        <div style='background:#000; padding:12px; border-radius:6px; border:1px solid #222; display:flex; justify-content:space-between; align-items:center;'>
+                            <div>Bet <b>${{e.sel.toUpperCase()}}</b> @ <b style='color:#06b6d4;'>${{e.odds}}</b></div>
+                            ${{getLogo(e.bk)}}
+                        </div>
                         <div style='display:flex; justify-content:space-between; align-items:center; margin-top:10px;'>
                             <div><div style='color:#fff; font-weight:bold;'>Stake: ₹${{roundedStk}}</div><div style='color:#666; font-size:9px;'>Exact: ₹${{rawStk.toFixed(2)}}</div></div>
                             <span style='color:#444; font-size:11px;'>True: ${{e.trueO.toFixed(3)}}</span>
                         </div>
                     </div>`;
                 }});
-                document.getElementById('p1').innerHTML = evHTML || "<div style='padding:20px; color:#aaa;'>No Matches.</div>";
+                document.getElementById('p1').innerHTML = evHTML || "<div style='padding:20px; color:#aaa;'><i class='fa-solid fa-ghost'></i> No Matches match your filters.</div>";
             }}
 
-            function sendToCalc(o1, o2, o3) {{ sw(2); document.getElementById('odd1').value = o1; document.getElementById('odd2').value = o2; document.getElementById('odd3').value = o3 > 0 ? o3 : ""; runCalc(); }}
+            function sendToCalc(o1, o2, o3) {{ sw(3); document.getElementById('odd1').value = o1; document.getElementById('odd2').value = o2; document.getElementById('odd3').value = o3 > 0 ? o3 : ""; runCalc(); }}
 
             function runCalc() {{
                 const b = parseFloat(document.getElementById('calcBank').value) || 0;
@@ -459,7 +536,6 @@ if __name__ == "__main__":
     
     generate_web(evs, arbs)
     
-    # 🔔 NTFY ALERTS
     if arbs:
         top_arb = arbs[0]
         alert_msg = f"Sniper found {len(arbs)} Locks & {len(evs)} EVs. Top Match: {top_arb['match']} ({top_arb['pct']:.2f}%)"
