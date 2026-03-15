@@ -1,4 +1,4 @@
-name: ⚡ Arb Sniper — Auto Scan
+name: ⚡ Arb Sniper v5.0 Elite — Auto Scan
 
 on:
   schedule:
@@ -22,7 +22,7 @@ env:
 
 jobs:
   scan:
-    name: 🎯 Run Arbitrage Scanner
+    name: 🎯 Run Elite Arbitrage Scanner
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -56,17 +56,17 @@ jobs:
             api-state-${{ runner.os }}-
 
       # ── 5. Run the Scanner ───────────────────────────────────
-      - name: ⚡ Run Arb Sniper
+      - name: ⚡ Run Arb Sniper v5.0 Elite
         env:
-          DASHBOARD_PASS: ${{ secrets.DASHBOARD_PASS }}
+          # Note: DASHBOARD_PASS removed since v5.0 uses multi-theme UI without lock
           ODDS_API_KEYS: ${{ secrets.ODDS_API_KEYS }}
         run: |
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "  ARB SNIPER v3.0 — Scanning global sports markets..."
+          echo "  ARB SNIPER v5.0 ELITE — Firing up GSAP & Engines..."
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           python arb_sniper.py
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "  Scan complete. Preparing to commit dashboard..."
+          echo "  Scan complete. Preparing to commit elite dashboard..."
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       # ── 6. Verify Output ─────────────────────────────────────
@@ -81,7 +81,7 @@ jobs:
             cat api_state.json
           fi
 
-      # ── 7. Commit & Push (FIXED GIT ORDER) ───────────────────
+      # ── 7. Commit & Push ─────────────────────────────────────
       - name: 📤 Commit dashboard to main
         run: |
           git config --global user.name  "Arb Sniper Bot"
@@ -99,17 +99,17 @@ jobs:
           # Generate IST timestamp for commit message
           IST_TIME=$(TZ='Asia/Kolkata' date '+%d %b %Y %I:%M %p IST')
           
-          # Simplified commit message to avoid regex crashing
-          COMMIT_MSG="⚡ Arb Sniper | ${IST_TIME} | Dashboard Updated"
+          # Commit message
+          COMMIT_MSG="⚡ Elite Sniper | ${IST_TIME} | Dashboard Updated"
           echo "Commit message: ${COMMIT_MSG}"
 
-          # 🛠️ THE FIX: 1. Commit the files FIRST
+          # 1. Commit the files FIRST
           git commit -m "${COMMIT_MSG}"
 
-          # 🛠️ THE FIX: 2. Pull from the server SECOND
+          # 2. Pull from the server SECOND
           git pull --rebase origin main || true
 
-          # 🛠️ THE FIX: 3. Push to live site with a retry loop
+          # 3. Push to live site with a retry loop
           for i in {1..3}; do
             if git push origin main; then
               echo "✓ Push successful"
@@ -128,7 +128,7 @@ jobs:
       - name: 📊 Job Summary
         if: always()
         run: |
-          echo "## ⚡ Arb Sniper Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## ⚡ Arb Sniper v5.0 Run Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
@@ -141,7 +141,7 @@ jobs:
           if [ -f index.html ]; then
             SIZE=$(wc -c < index.html)
             echo "| **Dashboard Size** | ${SIZE} bytes |" >> $GITHUB_STEP_SUMMARY
-            echo "| **Status** | ✅ Dashboard generated successfully |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Status** | ✅ Elite Dashboard generated successfully |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| **Status** | ❌ Dashboard generation failed |" >> $GITHUB_STEP_SUMMARY
           fi
