@@ -66,12 +66,11 @@ ALLOWED_BOOKS = {
 }
 
 SPORTS_LIST = [
-    "upcoming", # <--- ADD THIS! It forces the API to find whatever is playing right now globally.
+    "upcoming", # Grabs literally everything playing right now globally
     "soccer_epl", "soccer_spain_la_liga", "soccer_germany_bundesliga",
     "soccer_italy_serie_a", "soccer_france_ligue_one",
     "soccer_uefa_champs_league", "soccer_uefa_europa_league",
     "basketball_nba", "basketball_euroleague", "icehockey_nhl", 
-    "tennis_atp", "tennis_wta", # <--- Use the general tennis tours, not just the French Open
     "mma_mixed_martial_arts", "cricket_test_match", "cricket_odi"
 ]
 
@@ -236,9 +235,14 @@ def fetch_all_odds(state: dict) -> list:
              f"across {len(ROTATOR.keys)} keys...")
 
     all_events = []
-    with ThreadPoolExecutor(max_workers=12) as ex:
-        futures = {ex.submit(fetch_sport_odds, s, m): (s, m)
-                   for s, m in tasks}
+    # LOWERED MAX_WORKERS TO 3 TO PREVENT RATE-LIMIT CRASHES
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        futures = {}
+        for s, m in tasks:
+            futures[ex.submit(fetch_sport_odds, s, m)] = (s, m)
+            # TINY STAGGER DELAY SO THREADS DON'T GRAB THE EXACT SAME KEY AT THE EXACT SAME MILLISECOND
+            time.sleep(0.3) 
+            
         for fut in as_completed(futures):
             try:
                 all_events.extend(fut.result())
