@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                    ARB SNIPER v4.0 — ELITE QUANT EDITION                    ║
-║  19-Key Rotation | BC.Game Deep Parser | Full Arb Engine | Pro Dashboard    ║
+║                    ARB SNIPER v5.0 — THE ELITE ENGINE                        ║
+║  19-Key Rotation | Deep Parser | GSAP Physics | Multi-Theme | Bet Tracker    ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
@@ -21,7 +21,6 @@ BCGAME_URL     = "https://api-k-c7818b61-623.sptpub.com/api/v4/prematch/brand/21
 NTFY_URL       = "https://ntfy.sh/nikunj_arb_alerts_2026"
 STATE_FILE     = "api_state.json"
 OUTPUT_HTML    = "index.html"
-DASHBOARD_PASS = os.environ.get("DASHBOARD_PASS", "arb2026")
 
 KELLY_FRACTION = 0.30
 MIN_ARB_PROFIT = 0.001   # 0.1%
@@ -37,1044 +36,558 @@ ALLOWED_BOOKS = {
 SPORTS_LIST = [
     "soccer_epl","soccer_spain_la_liga","soccer_germany_bundesliga","soccer_italy_serie_a",
     "soccer_france_ligue_one","soccer_uefa_champs_league","soccer_uefa_europa_league",
-    "soccer_brazil_campeonato","soccer_argentina_primera_division","soccer_turkey_super_league",
     "basketball_nba","basketball_euroleague","icehockey_nhl","tennis_atp_french_open",
-    "tennis_wta_french_open","mma_mixed_martial_arts","americanfootball_nfl",
-    "cricket_ipl","cricket_international_championship","boxing_boxing","baseball_mlb",
-    "aussierules_afl","rugby_union_world_cup","golf_masters_tournament_winner"
+    "mma_mixed_martial_arts","americanfootball_nfl","cricket_ipl","cricket_international_championship"
 ]
 
 MARKETS = ["h2h", "totals", "spreads"]
 REGIONS = "eu,uk,us,au"
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
-# KEY ROTATION MANAGER — Thread-safe, picks highest-quota key each call
+# KEY ROTATION MANAGER
 # ═══════════════════════════════════════════════════════════════════════════════
 class KeyRotator:
     def __init__(self):
         raw = os.environ.get("ODDS_API_KEYS", "")
         self.keys = [k.strip() for k in raw.split(",") if k.strip()]
-        if not self.keys:
-            log.warning("ODDS_API_KEYS env var not set or empty!")
         self._lock  = threading.Lock()
         self._quota = {k: 500 for k in self.keys}
-        log.info(f"KeyRotator: {len(self.keys)} keys loaded.")
 
     def get(self) -> str:
-        """Return the key with the highest remaining quota."""
         with self._lock:
-            if not self.keys:
-                return "MISSING_KEY"
+            if not self.keys: return "MISSING_KEY"
             return max(self.keys, key=lambda k: self._quota.get(k, 0))
 
     def update(self, key: str, remaining: int, used: int):
-        with self._lock:
-            self._quota[key] = remaining
+        with self._lock: self._quota[key] = remaining
 
     def mark_exhausted(self, key: str):
-        with self._lock:
-            self._quota[key] = 0
-            log.warning(f"Key ...{key[-6:]} exhausted/invalid.")
+        with self._lock: self._quota[key] = 0
 
     def total_remaining(self) -> int:
-        with self._lock:
-            return max(0, sum(self._quota.values()))
+        with self._lock: return max(0, sum(self._quota.values()))
 
     def status(self) -> list:
-        with self._lock:
-            return [
-                {"key": f"{k[:4]}...{k[-4:]}", "remaining": self._quota.get(k, 0)}
-                for k in self.keys
-            ]
-
+        with self._lock: return [{"key": f"{k[:4]}...{k[-4:]}", "remaining": self._quota.get(k, 0)} for k in self.keys]
 
 ROTATOR = KeyRotator()
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STATE
 # ═══════════════════════════════════════════════════════════════════════════════
 def load_state() -> dict:
-    defaults = {
-        "remaining_requests": 500, "used_today": 0,
-        "last_reset": str(datetime.now(timezone.utc).date()),
-        "total_events_scanned": 0, "last_arb_count": 0, "last_ev_count": 0
-    }
+    defaults = {"remaining_requests": 500, "total_events_scanned": 0}
     if os.path.exists(STATE_FILE):
         try:
-            with open(STATE_FILE) as f:
-                saved = json.load(f)
-            if isinstance(saved, dict):
-                defaults.update(saved)
-        except Exception:
-            pass
+            with open(STATE_FILE) as f: defaults.update(json.load(f))
+        except: pass
     return defaults
 
 def save_state(state: dict):
-    with open(STATE_FILE, "w") as f:
-        json.dump(state, f, indent=2)
-
+    with open(STATE_FILE, "w") as f: json.dump(state, f)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ODDS API — CONCURRENT FETCH WITH KEY ROTATION
+# ODDS API & BC.GAME FETCHERS (Backend Logic)
 # ═══════════════════════════════════════════════════════════════════════════════
 def fetch_sport_odds(sport: str, market: str) -> list:
     key = ROTATOR.get()
-    if key == "MISSING_KEY" or ROTATOR._quota.get(key, 0) <= 3:
-        return []
-
-    url = f"{ODDS_BASE}/sports/{sport}/odds"
-    params = {
-        "apiKey": key, "regions": REGIONS, "markets": market,
-        "oddsFormat": "decimal", "dateFormat": "iso"
-    }
+    if key == "MISSING_KEY" or ROTATOR._quota.get(key, 0) <= 3: return []
     try:
-        r = requests.get(url, params=params, timeout=15)
-        remaining = int(r.headers.get("X-Requests-Remaining", ROTATOR._quota.get(key, 0)))
-        used      = int(r.headers.get("X-Requests-Used", 0))
-        ROTATOR.update(key, remaining, used)
-
-        if r.status_code == 422:
-            return []   # sport not currently available
-        if r.status_code in (429, 401):
-            ROTATOR.mark_exhausted(key)
-            return []
-        if r.status_code != 200:
-            return []
-
+        r = requests.get(f"{ODDS_BASE}/sports/{sport}/odds", params={"apiKey": key, "regions": REGIONS, "markets": market, "oddsFormat": "decimal", "dateFormat": "iso"}, timeout=15)
+        ROTATOR.update(key, int(r.headers.get("X-Requests-Remaining", 0)), int(r.headers.get("X-Requests-Used", 0)))
+        if r.status_code != 200: return []
         data = r.json()
-        if not isinstance(data, list):
-            return []
-
-        filtered = []
-        for ev in data:
-            bms = [b for b in ev.get("bookmakers", []) if b.get("key") in ALLOWED_BOOKS]
-            if bms:
-                ev["bookmakers"] = bms
-                filtered.append(ev)
-
-        log.info(f"  {sport}/{market}: {len(filtered)} events | key ...{key[-6:]} -> {remaining} left")
-        return filtered
-
-    except requests.exceptions.Timeout:
-        log.warning(f"Timeout: {sport}/{market}")
-        return []
-    except Exception as e:
-        log.error(f"Error {sport}/{market}: {e}")
-        return []
+        return [ev for ev in data if [b for b in ev.get("bookmakers", []) if b.get("key") in ALLOWED_BOOKS]]
+    except: return []
 
 def fetch_all_odds(state: dict) -> list:
-    if not ROTATOR.keys:
-        log.error("No API keys. Set ODDS_API_KEYS secret.")
-        return []
-    if ROTATOR.total_remaining() <= 0:
-        log.error("All keys exhausted.")
-        return []
-
     tasks = [(s, m) for s in SPORTS_LIST for m in MARKETS]
-    log.info(f"Fetching {len(tasks)} combos across {len(ROTATOR.keys)} keys...")
     all_events = []
     with ThreadPoolExecutor(max_workers=12) as ex:
-        futures = {ex.submit(fetch_sport_odds, s, m): (s, m) for s, m in tasks}
-        for fut in as_completed(futures):
-            try:
-                all_events.extend(fut.result())
-            except Exception as e:
-                log.error(f"Future error: {e}")
-
-    state["remaining_requests"]    = ROTATOR.total_remaining()
-    state["total_events_scanned"]  = len(all_events)
-    log.info(f"Total events collected: {len(all_events)}")
+        for fut in as_completed({ex.submit(fetch_sport_odds, s, m): (s, m) for s, m in tasks}):
+            try: all_events.extend(fut.result())
+            except: pass
+    state["total_events_scanned"] = len(all_events)
     return all_events
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# BC.GAME SCRAPER — Deep recursive JSON parser
-# ═══════════════════════════════════════════════════════════════════════════════
-def _deep_find_list(obj, keys: list):
-    """Recursively hunt for any of `keys` whose value is a non-empty list."""
-    if isinstance(obj, dict):
-        for k in keys:
-            v = obj.get(k)
-            if isinstance(v, list) and v:
-                return v
-        for v in obj.values():
-            found = _deep_find_list(v, keys)
-            if found is not None:
-                return found
-    elif isinstance(obj, list):
-        for item in obj:
-            found = _deep_find_list(item, keys)
-            if found is not None:
-                return found
-    return None
-
-def _extract_bc_events(raw) -> list:
-    if isinstance(raw, list) and raw:
-        return raw
-    if isinstance(raw, dict):
-        # Try flat keys first
-        for k in ["data","events","list","items","result","content","rows","matches","games"]:
-            v = raw.get(k)
-            if isinstance(v, list) and v:
-                return v
-            if isinstance(v, dict):
-                # One level deeper
-                for k2 in ["events","list","items","matches","games","data"]:
-                    v2 = v.get(k2)
-                    if isinstance(v2, list) and v2:
-                        return v2
-        # Deep recursive fallback
-        found = _deep_find_list(raw, ["events","matches","games","list","items"])
-        if found:
-            return found
-    return []
-
-def _parse_bc_event(ev: dict):
-    home = (ev.get("homeTeam") or ev.get("home") or ev.get("team1") or
-            ev.get("homeName") or ev.get("home_team") or ev.get("teamHome") or "")
-    away = (ev.get("awayTeam") or ev.get("away") or ev.get("team2") or
-            ev.get("awayName") or ev.get("away_team") or ev.get("teamAway") or "")
-    sport  = ev.get("sportName") or ev.get("sport") or ev.get("sportTitle") or ev.get("category") or "Unknown"
-    start  = ev.get("startTime") or ev.get("startAt") or ev.get("time") or ev.get("kickOff") or ""
-
-    # Extract outcomes from every possible structure
-    outcomes = []
-    raw_mkts = ev.get("markets") or ev.get("odds") or ev.get("marketList") or ev.get("betTypes") or []
-    if isinstance(raw_mkts, list):
-        for mkt in raw_mkts:
-            if not isinstance(mkt, dict): continue
-            outs = mkt.get("outcomes") or mkt.get("selections") or mkt.get("runners") or mkt.get("bets") or []
-            for o in outs:
-                if not isinstance(o, dict): continue
-                name = o.get("name") or o.get("label") or o.get("selectionName") or ""
-                price = None
-                for pk in ["price","odds","odd","value","coefficient","rate","oddsValue"]:
-                    if pk in o:
-                        try: price = float(o[pk]); break
-                        except: pass
-                if name and price and price > 1.01:
-                    outcomes.append({"name": name, "price": price})
-    elif isinstance(raw_mkts, dict):
-        for k, v in raw_mkts.items():
-            try:
-                price = float(v)
-                if price > 1.01:
-                    outcomes.append({"name": k, "price": price})
-            except: pass
-
-    if not home or not away or not outcomes:
-        return None
-    return {
-        "id": f"bcgame_{abs(hash(home+away+str(start)))}",
-        "sport_title": sport,
-        "home_team": home,
-        "away_team": away,
-        "commence_time": str(start),
-        "bookmakers": [{
-            "key": "bcgame", "title": "BC.Game",
-            "last_update": datetime.now(timezone.utc).isoformat(),
-            "markets": [{"key": "h2h", "outcomes": outcomes}]
-        }]
-    }
-
 def fetch_bcgame_events() -> list:
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Origin": "https://bc.game",
-        "Referer": "https://bc.game/",
-        "Cache-Control": "no-cache"
-    }
     try:
-        r = requests.get(BCGAME_URL, headers=headers, timeout=25)
-        log.info(f"BC.Game status={r.status_code} size={len(r.content)}B content-type={r.headers.get('Content-Type','?')}")
-        if r.status_code != 200:
-            return []
-        try:
-            raw = r.json()
-        except Exception as e:
-            log.error(f"BC.Game JSON parse error: {e} | preview: {r.text[:200]}")
-            return []
-
-        log.info(f"BC.Game root type={type(raw).__name__} keys={list(raw.keys()) if isinstance(raw,dict) else len(raw)}")
-        raw_evs = _extract_bc_events(raw)
-        log.info(f"BC.Game: extracted {len(raw_evs)} raw objects")
-
+        r = requests.get(BCGAME_URL, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"}, timeout=15)
+        if r.status_code != 200: return []
+        raw_evs = r.json().get("data", {}).get("list", [])
         converted = []
-        for ev in raw_evs[:400]:
-            parsed = _parse_bc_event(ev)
-            if parsed:
-                converted.append(parsed)
-        log.info(f"BC.Game: {len(converted)} events successfully parsed.")
+        for ev in raw_evs:
+            home = ev.get("homeName", "Home")
+            away = ev.get("awayName", "Away")
+            outs = [{"name": o.get("name"), "price": float(o.get("price"))} for m in ev.get("markets", []) for o in m.get("outcomes", []) if float(o.get("price", 0)) > 1.01]
+            if outs: converted.append({"id": f"bc_{hash(home+away)}", "sport_title": ev.get("sportName", "Unknown"), "home_team": home, "away_team": away, "commence_time": ev.get("startTime", ""), "bookmakers": [{"key": "bcgame", "title": "BC.Game", "markets": [{"key": "h2h", "outcomes": outs}]}]})
         return converted
-    except requests.exceptions.Timeout:
-        log.error("BC.Game timeout")
-        return []
-    except Exception as e:
-        log.error(f"BC.Game error: {e}")
-        return []
-
-def similarity(a: str, b: str) -> float:
-    return SequenceMatcher(None, a.lower().strip(), b.lower().strip()).ratio()
-
-def merge_bcgame(odds_events: list, bc_events: list) -> list:
-    merged = 0
-    for bc_ev in bc_events:
-        bh, ba = bc_ev["home_team"], bc_ev["away_team"]
-        best_ev, best_score = None, 0.0
-        for ev in odds_events:
-            s = (similarity(bh, ev.get("home_team","")) + similarity(ba, ev.get("away_team",""))) / 2
-            if s > best_score:
-                best_score, best_ev = s, ev
-        if best_score > 0.72 and best_ev:
-            best_ev["bookmakers"].extend(bc_ev["bookmakers"])
-            merged += 1
-        else:
-            odds_events.append(bc_ev)
-    log.info(f"BC.Game merge: {merged} integrated, {len(bc_events)-merged} standalone.")
-    return odds_events
-
+    except: return []
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# QUANT ENGINE
-# ═══════════════════════════════════════════════════════════════════════════════
-def remove_vig(outcomes: list) -> dict:
-    raw = {}
-    for o in outcomes:
-        try: raw[o["name"]] = 1.0 / float(o["price"])
-        except: pass
-    total = sum(raw.values())
-    return {k: v/total for k,v in raw.items()} if total > 0 else {}
-
-def kelly_stake(edge: float, odds: float, bank: float) -> float:
-    b = odds - 1.0
-    if b <= 0: return 0.0
-    p = 1.0 / (odds / (1.0 + edge))
-    kf = (b*p - (1-p)) / b
-    return round(KELLY_FRACTION * kf * bank, 2) if kf > 0 else 0.0
-
-def round10(x: float) -> float:
-    return round(round(x/10)*10, 2)
-
-def calc_stakes(odds_list: list, total: float = 1000.0) -> list:
-    impl = sum(1.0/o for o in odds_list)
-    if impl >= 1.0: return [0.0]*len(odds_list)
-    return [(1.0/o)/impl*total for o in odds_list]
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# ARB SCANNER — itertools.combinations: catches ALL 2-way and 3-way arbs
+# QUANT ENGINE (Arbs & EV)
 # ═══════════════════════════════════════════════════════════════════════════════
 def scan_arbitrage(events: list) -> list:
     arbs = []
     for ev in events:
-        home  = ev.get("home_team","?")
-        away  = ev.get("away_team","?")
-        sport = ev.get("sport_title","Unknown")
-        com   = ev.get("commence_time","")
-
         for mkey in MARKETS:
-            # Build best-price map across all bookmakers
-            best: dict = {}
+            best = {}
             for bm in ev.get("bookmakers", []):
                 for mkt in bm.get("markets", []):
                     if mkt.get("key") != mkey: continue
                     for o in mkt.get("outcomes", []):
-                        name = str(o.get("name",""))
-                        pt   = o.get("point")
-                        if pt is not None:
-                            try: name = f"{name}_{abs(float(pt))}"
-                            except: pass
-                        try: price = float(o.get("price", 0))
-                        except: continue
-                        if price <= 1.0: continue
-                        if name not in best or price > best[name][0]:
-                            best[name] = (price, bm.get("title","?"), bm.get("key","?"))
-
+                        name = str(o.get("name","")) + str(o.get("point", ""))
+                        try:
+                            price = float(o.get("price", 0))
+                            if price > best.get(name, (0,))[0]: best[name] = (price, bm.get("title"), bm.get("key"))
+                        except: pass
             ol = list(best.items())
-            if len(ol) < 2: continue
-
-            # 2-way
-            for combo in itertools.combinations(ol, 2):
-                prices = [x[1][0] for x in combo]
-                impl   = sum(1.0/p for p in prices)
-                if impl < 1.0:
-                    pct = (1.0/impl - 1.0)*100
-                    if pct >= MIN_ARB_PROFIT*100:
-                        stakes = calc_stakes(prices)
+            for ways in [2, 3]:
+                for combo in itertools.combinations(ol, ways):
+                    prices = [x[1][0] for x in combo]
+                    impl = sum(1.0/p for p in prices)
+                    if impl < 1.0 and (1.0/impl - 1.0) >= MIN_ARB_PROFIT:
                         arbs.append({
-                            "ways": 2, "market": mkey.upper(), "sport": sport,
-                            "match": f"{home} vs {away}", "commence": com,
-                            "profit_pct": round(pct, 3),
-                            "profit_amt": round((1.0/impl-1.0)*1000, 2),
-                            "outcomes": [{
-                                "name": x[0], "odds": round(x[1][0],3),
-                                "book": x[1][1], "book_key": x[1][2],
-                                "stake": round(s,2), "stake_rounded": round10(s)
-                            } for x,s in zip(combo, stakes)]
+                            "id": f"arb_{abs(hash(ev.get('home_team')+str(impl)))}",
+                            "ways": ways, "market": mkey.upper(), "sport": ev.get("sport_title", ""),
+                            "match": f"{ev.get('home_team')} vs {ev.get('away_team')}", "commence": ev.get("commence_time"),
+                            "profit_pct": round((1.0/impl - 1.0)*100, 3),
+                            "outcomes": [{"name": x[0], "odds": x[1][0], "book": x[1][1], "book_key": x[1][2]} for x in combo]
                         })
+    return sorted(arbs, key=lambda x: x["profit_pct"], reverse=True)[:200]
 
-            # 3-way
-            for combo in itertools.combinations(ol, 3):
-                prices = [x[1][0] for x in combo]
-                impl   = sum(1.0/p for p in prices)
-                if impl < 1.0:
-                    pct = (1.0/impl - 1.0)*100
-                    if pct >= MIN_ARB_PROFIT*100:
-                        stakes = calc_stakes(prices)
-                        arbs.append({
-                            "ways": 3, "market": mkey.upper(), "sport": sport,
-                            "match": f"{home} vs {away}", "commence": com,
-                            "profit_pct": round(pct, 3),
-                            "profit_amt": round((1.0/impl-1.0)*1000, 2),
-                            "outcomes": [{
-                                "name": x[0], "odds": round(x[1][0],3),
-                                "book": x[1][1], "book_key": x[1][2],
-                                "stake": round(s,2), "stake_rounded": round10(s)
-                            } for x,s in zip(combo, stakes)]
-                        })
-
-    arbs.sort(key=lambda x: x["profit_pct"], reverse=True)
-    log.info(f"Arbitrage: {len(arbs)} found.")
-    return arbs[:200]
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# EV SCANNER
-# ═══════════════════════════════════════════════════════════════════════════════
 def scan_ev_bets(events: list) -> list:
     bets = []
     for ev in events:
-        home  = ev.get("home_team","?")
-        away  = ev.get("away_team","?")
-        sport = ev.get("sport_title","Unknown")
-        com   = ev.get("commence_time","")
-
         for mkey in MARKETS:
-            pin_out = None
-            for bm in ev.get("bookmakers",[]):
-                if bm.get("key") == "pinnacle":
-                    for m in bm.get("markets",[]):
-                        if m.get("key") == mkey:
-                            pin_out = m.get("outcomes",[])
-            if not pin_out or len(pin_out) < 2: continue
-
-            true_probs = remove_vig(pin_out)
-            if not true_probs: continue
-
-            for bm in ev.get("bookmakers",[]):
+            pin_out = next((m.get("outcomes", []) for bm in ev.get("bookmakers", []) if bm.get("key") == "pinnacle" for m in bm.get("markets", []) if m.get("key") == mkey), None)
+            if not pin_out: continue
+            raw_vig = {o["name"]: 1.0/float(o["price"]) for o in pin_out if "price" in o}
+            total_vig = sum(raw_vig.values())
+            if total_vig == 0: continue
+            true_probs = {k: v/total_vig for k,v in raw_vig.items()}
+            
+            for bm in ev.get("bookmakers", []):
                 if bm.get("key") == "pinnacle": continue
-                for m in bm.get("markets",[]):
+                for m in bm.get("markets", []):
                     if m.get("key") != mkey: continue
-                    for o in m.get("outcomes",[]):
-                        name = o.get("name","")
-                        if name not in true_probs: continue
-                        try: price = float(o["price"])
-                        except: continue
-                        if price <= 1.0: continue
-                        tp   = true_probs[name]
-                        to   = 1.0/tp
-                        edge = (price - to)/to
-                        if edge >= MIN_EV_EDGE:
-                            ks = kelly_stake(edge, price, BANK_SIZE)
-                            bets.append({
-                                "market": mkey.upper(), "sport": sport,
-                                "match": f"{home} vs {away}", "commence": com,
-                                "outcome": name, "book": bm.get("title","?"),
-                                "book_key": bm.get("key","?"),
-                                "offered_odds": round(price,3),
-                                "true_odds": round(to,3),
-                                "true_prob_pct": round(tp*100,2),
-                                "edge_pct": round(edge*100,3),
-                                "kelly_stake": ks,
-                                "kelly_stake_rounded": round10(ks)
-                            })
-    bets.sort(key=lambda x: x["edge_pct"], reverse=True)
-    log.info(f"EV bets: {len(bets)} found.")
-    return bets[:300]
+                    for o in m.get("outcomes", []):
+                        name = o.get("name", "")
+                        if name in true_probs:
+                            price = float(o.get("price", 0))
+                            tp = true_probs[name]
+                            if tp > 0 and price > 1.0:
+                                edge = (price - (1.0/tp)) / (1.0/tp)
+                                if edge >= MIN_EV_EDGE:
+                                    bets.append({
+                                        "id": f"ev_{abs(hash(ev.get('home_team')+str(edge)))}",
+                                        "market": mkey.upper(), "sport": ev.get("sport_title", ""),
+                                        "match": f"{ev.get('home_team')} vs {ev.get('away_team')}", "commence": ev.get("commence_time"),
+                                        "outcome": name, "book": bm.get("title"), "book_key": bm.get("key"),
+                                        "offered_odds": price, "true_odds": round(1.0/tp, 3), "true_prob_pct": round(tp*100, 2), "edge_pct": round(edge*100, 2)
+                                    })
+    return sorted(bets, key=lambda x: x["edge_pct"], reverse=True)[:300]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# PUSH NOTIFICATION
-# ═══════════════════════════════════════════════════════════════════════════════
-def send_push(arbs: list, evs: list):
-    if not arbs and not evs: return
-    if arbs:
-        t   = arbs[0]
-        msg = f"TOP ARB: {t['match']} | +{t['profit_pct']}% | {t['ways']}-way {t['market']} | {len(evs)} EV bets"
-    else:
-        t   = evs[0]
-        msg = f"TOP EV: {t['match']} | +{t['edge_pct']}% edge | {t['book']} | {len(evs)} total"
-    try:
-        r = requests.post(NTFY_URL, data=msg.encode("utf-8"), headers={
-            "Title": "Arb Sniper Alert", "Priority": "high",
-            "Tags": "zap,moneybag", "Content-Type": "text/plain; charset=utf-8"
-        }, timeout=10)
-        log.info(f"Push: {r.status_code}")
-    except Exception as e:
-        log.error(f"Push error: {e}")
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# HTML DASHBOARD GENERATOR
+# FULL HTML/JS/CSS GENERATOR
 # ═══════════════════════════════════════════════════════════════════════════════
 def generate_html(arbs, evs, raw_bc, state, key_status) -> str:
-    IST      = timezone(timedelta(hours=5, minutes=30))
-    ist_now  = datetime.now(IST).strftime("%d %b %Y, %I:%M:%S %p IST")
-    pass_hash = hashlib.sha256(DASHBOARD_PASS.encode()).hexdigest()
+    IST = timezone(timedelta(hours=5, minutes=30))
+    ist_now = datetime.now(IST).strftime("%d %b %Y, %I:%M:%S %p IST")
     total_quota = sum(k["remaining"] for k in key_status)
 
     return f"""<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="neobrutalism">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
-<title>Arb Sniper v4.0</title>
+<title>Arb Sniper v5.0 Elite</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
 <style>
-:root{{
-  --bg0:#08080a;--bg1:#0f0f12;--bg2:#17171c;--bg3:#1e1e26;--bg4:#27272f;
-  --border:#2e2e38;--accent:#22d3ee;--purple:#a78bfa;--green:#4ade80;
-  --red:#f87171;--yellow:#fbbf24;--orange:#fb923c;
-  --txt:#e2e2e8;--txt2:#9898a8;--txt3:#5a5a6a;
-  --font:'JetBrains Mono',monospace;
-}}
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@600;700;800&display=swap');
-*{{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}}
-body{{background:var(--bg0);color:var(--txt);font-family:var(--font);min-height:100vh;overflow-x:hidden}}
-::-webkit-scrollbar{{width:4px;height:4px}}::-webkit-scrollbar-track{{background:var(--bg1)}}::-webkit-scrollbar-thumb{{background:var(--bg4);border-radius:2px}}
+/* =========================================
+   BASE & RESET
+   ========================================= */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Inter:wght@400;700;900&display=swap');
+* {{ box-sizing: border-box; margin: 0; padding: 0; transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease; }}
+body {{ min-height: 100vh; overflow-x: hidden; padding-bottom: 50px; }}
+::-webkit-scrollbar {{ height: 6px; width: 6px; }}
+::-webkit-scrollbar-track {{ background: transparent; }}
+::-webkit-scrollbar-thumb {{ background: var(--border); border-radius: 10px; }}
 
-/* LOCK */
-#lock{{position:fixed;inset:0;z-index:9999;background:var(--bg0);display:flex;align-items:center;justify-content:center}}
-.lbox{{background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:36px 32px;width:90%;max-width:340px;display:flex;flex-direction:column;align-items:center;gap:18px;box-shadow:0 0 80px rgba(34,211,238,.07)}}
-.lock-icon{{font-size:44px;color:var(--accent);animation:glow 2s infinite alternate}}
-@keyframes glow{{from{{text-shadow:0 0 8px var(--accent)}}to{{text-shadow:0 0 24px var(--accent),0 0 48px rgba(34,211,238,.3)}}}}
-.lock-title{{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:3px}}
-.lock-sub{{font-size:10px;color:var(--txt3);letter-spacing:2px;text-transform:uppercase}}
-#linput{{background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--txt);font-size:18px;padding:14px;width:100%;text-align:center;letter-spacing:6px;outline:none;transition:border .2s}}
-#linput:focus{{border-color:var(--accent)}}
-#lbtn{{background:linear-gradient(135deg,var(--accent),var(--purple));color:#000;font-family:'Syne',sans-serif;font-weight:800;border:none;border-radius:10px;padding:14px;width:100%;font-size:13px;cursor:pointer;letter-spacing:1.5px}}
-#lerr{{color:var(--red);font-size:11px;display:none}}
+/* =========================================
+   THEMES (Minimalism, Neobrutalism, Glass, Clay, Liquid)
+   ========================================= */
+[data-theme="minimalism"] {{ --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0; --text: #0f172a; --text-muted: #64748b; --accent: #2563eb; --green: #16a34a; --font: 'Inter', sans-serif; }}
+[data-theme="minimalism"] .card, [data-theme="minimalism"] .csec, [data-theme="minimalism"] .modal {{ background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }}
 
-/* APP */
-#app{{display:none}}
-.topbar{{background:var(--bg1);border-bottom:1px solid var(--border);padding:0 20px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200}}
-.logo{{font-family:'Syne',sans-serif;font-size:15px;font-weight:800;background:linear-gradient(120deg,var(--accent),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
-.topbar-r{{display:flex;align-items:center;gap:10px}}
-.live-dot{{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:blink 1.4s infinite}}
-@keyframes blink{{0%,100%{{opacity:1}}50%{{opacity:.2}}}}
-.top-btn{{background:none;border:1px solid var(--border);border-radius:6px;color:var(--txt2);font-family:var(--font);font-size:11px;padding:5px 10px;cursor:pointer;display:flex;align-items:center;gap:5px;transition:all .2s}}
-.top-btn:hover{{border-color:var(--accent);color:var(--accent)}}
+[data-theme="neobrutalism"] {{ --bg: #ffde59; --surface: #ffffff; --border: #000000; --text: #000000; --text-muted: #333333; --accent: #ff00ff; --green: #00ff00; --font: 'JetBrains Mono', monospace; }}
+[data-theme="neobrutalism"] body {{ font-weight: bold; text-transform: uppercase; }}
+[data-theme="neobrutalism"] .card, [data-theme="neobrutalism"] .csec, [data-theme="neobrutalism"] .modal {{ background: var(--surface); border: 4px solid var(--border); border-radius: 0; box-shadow: 8px 8px 0px var(--border); }}
+[data-theme="neobrutalism"] input, [data-theme="neobrutalism"] select, [data-theme="neobrutalism"] button {{ border: 3px solid #000; box-shadow: 4px 4px 0 #000; font-weight: bold; border-radius: 0; }}
 
-/* STATS */
-.statsbar{{background:var(--bg1);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}}
-.statsbar::-webkit-scrollbar{{display:none}}
-.ss{{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 14px;min-width:95px;white-space:nowrap}}
-.ss-l{{font-size:9px;color:var(--txt3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:3px}}
-.ss-v{{font-size:15px;font-weight:700;font-family:'Syne',sans-serif}}
+[data-theme="glassmorphism"] {{ --bg: #0f172a; --surface: rgba(255,255,255,0.05); --border: rgba(255,255,255,0.1); --text: #f8fafc; --text-muted: #94a3b8; --accent: #38bdf8; --green: #4ade80; --font: 'Inter', sans-serif; }}
+[data-theme="glassmorphism"] body {{ background: linear-gradient(135deg, #020617 0%, #1e1b4b 100%); }}
+[data-theme="glassmorphism"] .card, [data-theme="glassmorphism"] .csec, [data-theme="glassmorphism"] .modal {{ background: var(--surface); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1); }}
 
-/* TABS */
-.tabs{{display:flex;gap:4px;padding:12px 20px;background:var(--bg1);border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}}
-.tabs::-webkit-scrollbar{{display:none}}
-.tab{{background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--txt3);font-family:var(--font);font-size:11px;padding:9px 14px;cursor:pointer;white-space:nowrap;font-weight:600;display:flex;align-items:center;gap:6px;transition:all .2s}}
-.tab.active{{background:rgba(34,211,238,.08);color:var(--accent);border-color:rgba(34,211,238,.35)}}
-.tbadge{{background:var(--accent);color:#000;font-size:9px;padding:1px 5px;border-radius:8px;font-weight:800}}
-.tbadge.p{{background:var(--purple)}}
-.tbadge.y{{background:var(--yellow);color:#000}}
-.tc{{display:none;padding:16px 20px 40px}}
-.tc.active{{display:block}}
+[data-theme="claymorphism"] {{ --bg: #e0e5ec; --surface: #e0e5ec; --border: transparent; --text: #4a5568; --text-muted: #a0aec0; --accent: #ff7b54; --green: #38a169; --font: 'Inter', sans-serif; }}
+[data-theme="claymorphism"] .card, [data-theme="claymorphism"] .csec, [data-theme="claymorphism"] .modal {{ border-radius: 36px; border: none; box-shadow: 20px 20px 60px #bec3c9, -20px -20px 60px #ffffff, inset 4px 4px 8px rgba(255, 255, 255, 0.4), inset -4px -4px 8px rgba(0, 0, 0, 0.05); }}
+[data-theme="claymorphism"] input, [data-theme="claymorphism"] select, [data-theme="claymorphism"] button {{ box-shadow: 6px 6px 12px #bec3c9, -6px -6px 12px #ffffff; border: none; border-radius: 16px; }}
 
-/* FILTER BAR */
-.fbar{{display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap}}
-.fsel{{background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--txt2);font-family:var(--font);font-size:11px;padding:7px 10px;outline:none;cursor:pointer}}
-.fsel:focus{{border-color:var(--accent)}}
-.fpill{{display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:7px 12px;font-size:11px;color:var(--txt2)}}
-input[type=range]{{accent-color:var(--accent);width:90px;cursor:pointer}}
-.fsearch{{background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--txt);font-family:var(--font);font-size:11px;padding:7px 12px;outline:none;flex:1;min-width:140px}}
-.fsearch:focus{{border-color:var(--accent)}}
+[data-theme="liquid"] {{ --bg: #000000; --surface: rgba(0, 255, 204, 0.05); --border: rgba(0, 255, 204, 0.2); --text: #ffffff; --text-muted: rgba(255,255,255,0.6); --accent: #00ffcc; --green: #00ffcc; --font: 'Inter', sans-serif; }}
+[data-theme="liquid"] .grid {{ filter: url('#goo'); padding-bottom: 40px; }}
+[data-theme="liquid"] .card, [data-theme="liquid"] .csec, [data-theme="liquid"] .modal {{ border: 1px solid var(--border); border-radius: 50px; box-shadow: 0 0 20px rgba(0,255,204,0.05); }}
 
-/* CARDS */
-.grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}}
-.card{{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;transition:border-color .2s,box-shadow .2s;position:relative;overflow:hidden}}
-.card:hover{{border-color:rgba(34,211,238,.25);box-shadow:0 4px 24px rgba(0,0,0,.4)}}
-.cstripe{{position:absolute;top:0;left:0;right:0;height:3px}}
-.cs-g{{background:linear-gradient(90deg,var(--green),#86efac)}}
-.cs-c{{background:linear-gradient(90deg,var(--accent),var(--purple))}}
-.cs-y{{background:linear-gradient(90deg,var(--yellow),var(--orange))}}
-.ch{{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;margin-top:4px}}
-.ctype{{font-size:9px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;padding:3px 8px;border-radius:5px}}
-.ctype.arb{{background:rgba(74,222,128,.1);color:var(--green);border:1px solid rgba(74,222,128,.25)}}
-.ctype.ev{{background:rgba(34,211,238,.1);color:var(--accent);border:1px solid rgba(34,211,238,.25)}}
-.ctype.bc{{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.25)}}
-.cprofit{{font-family:'Syne',sans-serif;font-weight:800;font-size:20px}}
-.cmatch{{font-size:13px;font-weight:600;margin-bottom:6px;color:var(--txt);line-height:1.3}}
-.cmeta{{font-size:10px;color:var(--txt3);margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px}}
-.ctable{{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:12px}}
-.ctable th{{color:var(--txt3);text-align:left;padding:0 6px 7px;border-bottom:1px solid var(--border);font-weight:500;font-size:9px;letter-spacing:1px;text-transform:uppercase}}
-.ctable td{{padding:7px 6px;border-bottom:1px solid rgba(46,46,56,.7)}}
-.ctable tr:last-child td{{border:none}}
-.btag{{background:var(--bg4);border:1px solid var(--border);border-radius:4px;padding:2px 5px;font-size:9px;font-weight:700;color:var(--txt2)}}
-.oval{{color:var(--yellow);font-weight:700;font-size:12px}}
-.stake-x{{font-size:9px;color:var(--txt3);display:block}}
-.stake-m{{font-size:13px;font-weight:700;color:var(--txt)}}
-.cfoot{{display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}}
-.cfoot-l{{font-size:10px;color:var(--txt3)}}
-.cbtn{{background:none;border:1px solid var(--purple);color:var(--purple);font-family:var(--font);font-size:10px;padding:5px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:4px;transition:all .2s}}
-.cbtn:hover{{background:var(--purple);color:#000}}
-.empty{{text-align:center;padding:60px 20px;color:var(--txt3);grid-column:1/-1}}
-.empty i{{font-size:36px;margin-bottom:12px;opacity:.3;display:block}}
-
-/* CALCULATOR */
-.calc-wrap{{max-width:580px}}
-.csec{{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:14px}}
-.csec-title{{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}}
-.ctabs{{display:flex;gap:6px;margin-bottom:14px}}
-.ctab{{background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--txt2);font-family:var(--font);font-size:11px;padding:8px 16px;cursor:pointer;transition:all .2s}}
-.ctab.active{{background:rgba(167,139,250,.12);color:var(--purple);border-color:rgba(167,139,250,.4)}}
-.cig{{margin-bottom:12px}}
-.cil{{font-size:10px;color:var(--txt3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:5px}}
-.cinput{{background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--txt);font-family:var(--font);font-size:14px;padding:11px 14px;width:100%;outline:none;transition:border .2s}}
-.cinput:focus{{border-color:var(--purple)}}
-.run-btn{{width:100%;background:linear-gradient(135deg,var(--purple),var(--accent));color:#000;font-family:'Syne',sans-serif;font-weight:800;border:none;border-radius:10px;padding:13px;font-size:13px;cursor:pointer;letter-spacing:1px;margin-top:4px}}
-.cresult{{background:var(--bg0);border:1px solid var(--border);border-radius:10px;padding:16px;margin-top:14px}}
-.crrow{{display:flex;justify-content:space-between;padding:7px 0;font-size:12px;border-bottom:1px solid rgba(46,46,56,.6)}}
-.crrow:last-child{{border:none;font-weight:700;font-size:13px}}
-
-/* API TABLE */
-.atable{{width:100%;border-collapse:collapse;font-size:12px}}
-.atable th{{background:var(--bg3);color:var(--txt3);text-align:left;padding:10px 14px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid var(--border)}}
-.atable td{{padding:10px 14px;border-bottom:1px solid var(--border)}}
-.atable tr:hover td{{background:rgba(30,30,38,.5)}}
-.qbar{{background:var(--bg4);border-radius:3px;height:5px;margin-top:4px;overflow:hidden}}
-.qfill{{height:100%;border-radius:3px}}
+/* =========================================
+   STRUCTURAL CSS
+   ========================================= */
+body {{ font-family: var(--font); background: var(--bg); color: var(--text); }}
+.topbar {{ display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: var(--bg); z-index: 100; position: sticky; top:0; }}
+.statsbar {{ display: flex; gap: 15px; padding: 10px 20px; overflow-x: auto; white-space: nowrap; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: bold; background: var(--bg); }}
+.tabs {{ display: flex; gap: 12px; padding: 15px 20px; overflow-x: auto; background: var(--bg); }}
+.tab {{ padding: 10px 20px; background: var(--surface); color: var(--text); border: 1px solid var(--border); cursor: pointer; border-radius: 8px; font-weight: bold; }}
+.tab.active {{ background: var(--accent); color: var(--bg); border-color: var(--accent); }}
+.tc {{ display: none; padding: 0 20px; }} .tc.active {{ display: block; }}
+.fbar {{ display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }}
+input, select, button {{ padding: 10px 14px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; outline: none; }}
+.grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 25px; }}
+.card {{ padding: 24px; position: relative; }}
+.ctable {{ width: 100%; border-collapse: collapse; margin: 15px 0; }}
+.ctable td {{ padding: 8px 0; border-bottom: 1px solid rgba(128,128,128,0.2); font-size: 14px; }}
+.cbtn {{ background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 5px 10px; cursor: pointer; border-radius: 6px; font-size: 11px; font-weight: bold; }}
+.cbtn:hover {{ background: var(--accent); color: var(--bg); }}
 
 /* MODAL */
-.modal-bg{{position:fixed;inset:0;z-index:800;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center}}
-.modal-bg.open{{display:flex}}
-.modal{{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:28px;width:92%;max-width:460px;max-height:90vh;overflow-y:auto}}
-.modal-title{{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}}
-.closex{{background:none;border:none;color:var(--txt3);font-size:18px;cursor:pointer}}
-
-/* ODDS CONVERTER GRID */
-.ogrid{{display:grid;grid-template-columns:1fr 1fr;gap:12px}}
-
-@media(max-width:600px){{
-  .topbar{{padding:0 14px}}.tc{{padding:12px 14px 28px}}.grid{{grid-template-columns:1fr}}.ogrid{{grid-template-columns:1fr}}
-}}
+.modal-bg {{ position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 999; display: none; align-items: center; justify-content: center; }}
+.modal-bg.open {{ display: flex; }}
+.modal {{ width: 90%; max-width: 500px; padding: 30px; position: relative; }}
+.closex {{ position: absolute; right: 20px; top: 20px; background: transparent; border: none; color: var(--text); font-size: 20px; cursor: pointer; box-shadow: none !important; }}
 </style>
 </head>
 <body>
 
-<!-- LOCKSCREEN -->
-<div id="lock">
-  <div class="lbox">
-    <i class="fas fa-crosshairs lock-icon"></i>
-    <div class="lock-title">ARB SNIPER</div>
-    <div class="lock-sub">v4.0 — Elite Edition</div>
-    <input id="linput" type="password" placeholder="••••••••" autocomplete="current-password"/>
-    <button id="lbtn" onclick="unlock()"><i class="fas fa-unlock-alt"></i>&nbsp; UNLOCK</button>
-    <div id="lerr"><i class="fas fa-triangle-exclamation"></i> Invalid password</div>
-  </div>
-</div>
+<svg style="width:0;height:0;position:absolute;" aria-hidden="true"><defs><filter id="goo"><feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" /><feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -9" result="goo" /><feBlend in="SourceGraphic" in2="goo" /></filter></defs></svg>
 
-<!-- APP -->
 <div id="app">
   <div class="topbar">
-    <div class="logo"><i class="fas fa-crosshairs"></i> ARB SNIPER v4.0</div>
-    <div class="topbar-r">
-      <div class="live-dot"></div>
-      <span style="font-size:10px;color:var(--txt3)">{ist_now}</span>
-      <button class="top-btn" onclick="logout()"><i class="fas fa-right-from-bracket"></i></button>
+    <div class="logo"><strong><i class="fas fa-crosshairs"></i> ARB SNIPER v5.0 ELITE</strong></div>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <input type="number" id="user-bankroll" title="Bankroll" onchange="updateBankroll(this.value)" style="width: 100px;" />
+      <select id="theme-selector" onchange="switchTheme(this.value)">
+        <option value="minimalism">Minimalism</option><option value="neobrutalism">Neo-Brutalism</option>
+        <option value="glassmorphism">Glassmorphism</option><option value="claymorphism">Claymorphism</option>
+        <option value="liquid">Liquid Glass</option>
+      </select>
     </div>
   </div>
 
   <div class="statsbar">
-    <div class="ss"><div class="ss-l">Arbs</div><div class="ss-v" style="color:var(--green)" id="ss-arb">0</div></div>
-    <div class="ss"><div class="ss-l">+EV Bets</div><div class="ss-v" style="color:var(--accent)" id="ss-ev">0</div></div>
-    <div class="ss"><div class="ss-l">BC Events</div><div class="ss-v" style="color:var(--purple)" id="ss-bc">0</div></div>
-    <div class="ss"><div class="ss-l">Top Arb</div><div class="ss-v" style="color:var(--green)" id="ss-toparb">—</div></div>
-    <div class="ss"><div class="ss-l">Top EV</div><div class="ss-v" style="color:var(--accent)" id="ss-topev">—</div></div>
-    <div class="ss"><div class="ss-l">Profit/Rs1K</div><div class="ss-v" style="color:var(--yellow)" id="ss-profit">—</div></div>
-    <div class="ss"><div class="ss-l">Events</div><div class="ss-v">{state.get('total_events_scanned',0)}</div></div>
-    <div class="ss"><div class="ss-l">API Quota</div><div class="ss-v" style="color:var(--yellow)">{total_quota}</div></div>
-    <div class="ss"><div class="ss-l">Keys</div><div class="ss-v">{len(key_status)}</div></div>
+    <span style="color:var(--text-muted)"><i class="fas fa-clock"></i> {ist_now}</span>
+    <span style="color:var(--accent)"><i class="fas fa-server"></i> API Quota: {total_quota}</span>
+    <span style="color:var(--green)"><i class="fas fa-bolt"></i> Total Events Scanned: {state.get('total_events_scanned',0)}</span>
   </div>
 
   <div class="tabs">
-    <button class="tab active" id="tb-arb" onclick="swTab('arb',this)"><i class="fas fa-percent"></i> Arbitrage <span class="tbadge" id="cnt-arb">0</span></button>
-    <button class="tab" id="tb-ev"  onclick="swTab('ev',this)"><i class="fas fa-chart-line"></i> +EV <span class="tbadge p" id="cnt-ev">0</span></button>
-    <button class="tab" id="tb-bc"  onclick="swTab('bc',this)"><i class="fas fa-gamepad"></i> BC.Game <span class="tbadge y" id="cnt-bc">0</span></button>
-    <button class="tab" id="tb-calc" onclick="swTab('calc',this)"><i class="fas fa-calculator"></i> Calculator</button>
-    <button class="tab" id="tb-api" onclick="swTab('api',this)"><i class="fas fa-server"></i> API Keys</button>
+    <button class="tab active" onclick="swTab('arb', this)"><i class="fas fa-percent"></i> Arbs <span id="cnt-arb">0</span></button>
+    <button class="tab" onclick="swTab('ev', this)"><i class="fas fa-chart-line"></i> +EV <span id="cnt-ev">0</span></button>
+    <button class="tab" onclick="swTab('bc', this)"><i class="fas fa-gamepad"></i> BC.Game <span id="cnt-bc">0</span></button>
+    <button class="tab" onclick="swTab('track', this)"><i class="fas fa-bookmark"></i> Tracker</button>
+    <button class="tab" onclick="swTab('calc', this)"><i class="fas fa-calculator"></i> Calculators</button>
   </div>
 
-  <!-- ARB -->
   <div id="tc-arb" class="tc active">
     <div class="fbar">
-      <input class="fsearch" id="arb-q" placeholder="Search match / sport..." oninput="renderArbs()"/>
-      <select class="fsel" id="arb-sport" onchange="renderArbs()"><option value="">All Sports</option></select>
-      <select class="fsel" id="arb-ways" onchange="renderArbs()"><option value="">All Ways</option><option value="2">2-Way</option><option value="3">3-Way</option></select>
-      <div class="fpill">Min<input type="range" id="arb-min" min="0" max="5" step="0.1" value="0" oninput="document.getElementById('arb-minv').textContent=this.value+'%';renderArbs()"/><span id="arb-minv">0%</span></div>
+      <input type="text" id="arb-q" placeholder="Search team..." oninput="renderArbs()" style="flex:1" />
+      <select id="arb-sport" onchange="renderArbs()"><option value="">All Sports</option></select>
+      <select id="arb-ways" onchange="renderArbs()"><option value="">All Ways</option><option value="2">2-Way</option><option value="3">3-Way</option></select>
     </div>
     <div class="grid" id="grid-arb"></div>
   </div>
 
-  <!-- EV -->
   <div id="tc-ev" class="tc">
     <div class="fbar">
-      <input class="fsearch" id="ev-q" placeholder="Search match / book..." oninput="renderEvs()"/>
-      <select class="fsel" id="ev-sport" onchange="renderEvs()"><option value="">All Sports</option></select>
-      <select class="fsel" id="ev-book"  onchange="renderEvs()"><option value="">All Books</option></select>
-      <div class="fpill">Min Edge<input type="range" id="ev-min" min="0" max="20" step="0.5" value="0" oninput="document.getElementById('ev-minv').textContent=this.value+'%';renderEvs()"/><span id="ev-minv">0%</span></div>
+      <input type="text" id="ev-q" placeholder="Search team or book..." oninput="renderEvs()" style="flex:1" />
+      <select id="ev-sport" onchange="renderEvs()"><option value="">All Sports</option></select>
     </div>
     <div class="grid" id="grid-ev"></div>
   </div>
 
-  <!-- BC.GAME -->
-  <div id="tc-bc" class="tc">
-    <div class="fbar">
-      <input class="fsearch" id="bc-q" placeholder="Search BC.Game..." oninput="renderBc()"/>
-      <select class="fsel" id="bc-sport" onchange="renderBc()"><option value="">All Sports</option></select>
+  <div id="tc-bc" class="tc"><div class="grid" id="grid-bc"></div></div>
+
+  <div id="tc-track" class="tc">
+    <div style="margin-bottom: 20px; display:flex; justify-content:space-between; align-items:center;">
+      <h3><i class="fas fa-bookmark" style="color:var(--accent)"></i> My Tracked Bets (Local Storage)</h3>
+      <button class="cbtn" onclick="clearTracker()"><i class="fas fa-trash"></i> Clear All</button>
     </div>
-    <div class="grid" id="grid-bc"></div>
+    <div class="grid" id="grid-track"></div>
   </div>
 
-  <!-- CALCULATOR -->
   <div id="tc-calc" class="tc">
-    <div class="calc-wrap">
-
-      <div class="csec">
-        <div class="csec-title"><i class="fas fa-percent" style="color:var(--green)"></i> Arbitrage Calculator</div>
-        <div class="ctabs">
-          <button class="ctab active" id="ct2" onclick="swCalc(2,this)">2-Way</button>
-          <button class="ctab" id="ct3" onclick="swCalc(3,this)">3-Way</button>
+    <div class="grid">
+        <div class="csec card">
+          <h3 style="margin-bottom: 15px;"><i class="fas fa-brain" style="color:var(--accent)"></i> Kelly Calculator</h3>
+          <input style="width:100%; margin-bottom:10px" id="kp" type="number" step="0.1" placeholder="Win Prob % (e.g. 55.0)"/>
+          <input style="width:100%; margin-bottom:10px" id="ko" type="number" step="0.01" placeholder="Dec Odds (e.g. 2.10)"/>
+          <button style="width:100%; background:var(--accent); color:var(--bg)" onclick="runKelly()">CALCULATE</button>
+          <div id="kelly-res" style="margin-top:15px; font-weight:bold;"></div>
         </div>
-        <div id="calc2">
-          <div class="cig"><div class="cil">Outcome 1 Odds</div><input class="cinput" id="c2o1" type="number" step="0.01" placeholder="e.g. 2.15"/></div>
-          <div class="cig"><div class="cil">Outcome 2 Odds</div><input class="cinput" id="c2o2" type="number" step="0.01" placeholder="e.g. 2.05"/></div>
-          <div class="cig"><div class="cil">Total Stake (Rs)</div><input class="cinput" id="c2s" type="number" value="10000"/></div>
-          <button class="run-btn" onclick="runCalc(2)"><i class="fas fa-bolt"></i>&nbsp;CALCULATE</button>
+        <div class="csec card">
+          <h3 style="margin-bottom: 15px;"><i class="fas fa-arrows-rotate" style="color:var(--green)"></i> Odds Converter</h3>
+          <input style="width:100%; margin-bottom:10px" id="od" type="number" step="0.001" placeholder="Decimal" oninput="convOdds('d')"/>
+          <input style="width:100%; margin-bottom:10px" id="oa" type="number" placeholder="American" oninput="convOdds('a')"/>
+          <input style="width:100%; margin-bottom:10px" id="oi" type="number" step="0.01" placeholder="Implied %" oninput="convOdds('i')"/>
         </div>
-        <div id="calc3" style="display:none">
-          <div class="cig"><div class="cil">Home Odds</div><input class="cinput" id="c3o1" type="number" step="0.01" placeholder="e.g. 2.50"/></div>
-          <div class="cig"><div class="cil">Draw Odds</div><input class="cinput" id="c3o2" type="number" step="0.01" placeholder="e.g. 3.20"/></div>
-          <div class="cig"><div class="cil">Away Odds</div><input class="cinput" id="c3o3" type="number" step="0.01" placeholder="e.g. 2.80"/></div>
-          <div class="cig"><div class="cil">Total Stake (Rs)</div><input class="cinput" id="c3s" type="number" value="10000"/></div>
-          <button class="run-btn" onclick="runCalc(3)"><i class="fas fa-bolt"></i>&nbsp;CALCULATE</button>
-        </div>
-        <div id="calc-res" class="cresult" style="display:none"></div>
-      </div>
-
-      <div class="csec">
-        <div class="csec-title"><i class="fas fa-brain" style="color:var(--accent)"></i> Kelly Criterion Calculator</div>
-        <div class="cig"><div class="cil">Your Win Probability (%)</div><input class="cinput" id="kp" type="number" step="0.1" placeholder="e.g. 55.0"/></div>
-        <div class="cig"><div class="cil">Decimal Odds Offered</div><input class="cinput" id="ko" type="number" step="0.01" placeholder="e.g. 2.10"/></div>
-        <div class="cig"><div class="cil">Bank Size (Rs)</div><input class="cinput" id="kb" type="number" value="10000"/></div>
-        <button class="run-btn" onclick="runKelly()"><i class="fas fa-calculator"></i>&nbsp;CALC KELLY</button>
-        <div id="kelly-res" class="cresult" style="display:none"></div>
-      </div>
-
-      <div class="csec">
-        <div class="csec-title"><i class="fas fa-arrows-rotate" style="color:var(--yellow)"></i> Odds Converter</div>
-        <div class="ogrid">
-          <div class="cig"><div class="cil">Decimal</div><input class="cinput" id="od" type="number" step="0.001" placeholder="2.000" oninput="convOdds('d')"/></div>
-          <div class="cig"><div class="cil">Fractional</div><input class="cinput" id="of" type="text" placeholder="1/1" oninput="convOdds('f')"/></div>
-          <div class="cig"><div class="cil">American</div><input class="cinput" id="oa" type="number" placeholder="+100" oninput="convOdds('a')"/></div>
-          <div class="cig"><div class="cil">Implied %</div><input class="cinput" id="oi" type="number" step="0.01" placeholder="50.00" oninput="convOdds('i')"/></div>
-        </div>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- API KEYS -->
-  <div id="tc-api" class="tc">
-    <div class="csec">
-      <div class="csec-title"><i class="fas fa-key" style="color:var(--accent)"></i> API Key Status — {len(key_status)} Keys</div>
-      <table class="atable">
-        <thead><tr><th>#</th><th>Key (masked)</th><th>Remaining</th><th>Quota Bar</th></tr></thead>
-        <tbody id="key-tbody"></tbody>
-      </table>
-    </div>
-    <div class="csec">
-      <div class="csec-title"><i class="fas fa-chart-pie" style="color:var(--purple)"></i> Run Statistics</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px">
-        <div style="background:var(--bg3);border-radius:8px;padding:12px"><div style="color:var(--txt3);font-size:9px;margin-bottom:4px;letter-spacing:1px">LAST SYNC</div><div style="font-weight:700">{ist_now}</div></div>
-        <div style="background:var(--bg3);border-radius:8px;padding:12px"><div style="color:var(--txt3);font-size:9px;margin-bottom:4px;letter-spacing:1px">EVENTS SCANNED</div><div style="color:var(--green);font-weight:700">{state.get('total_events_scanned',0)}</div></div>
-        <div style="background:var(--bg3);border-radius:8px;padding:12px"><div style="color:var(--txt3);font-size:9px;margin-bottom:4px;letter-spacing:1px">TOTAL KEYS</div><div style="color:var(--accent);font-weight:700">{len(key_status)}</div></div>
-        <div style="background:var(--bg3);border-radius:8px;padding:12px"><div style="color:var(--txt3);font-size:9px;margin-bottom:4px;letter-spacing:1px">COMBINED QUOTA</div><div style="color:var(--yellow);font-weight:700">{total_quota}</div></div>
-      </div>
     </div>
   </div>
 </div>
 
-<!-- QUICK CALC MODAL -->
 <div class="modal-bg" id="qm">
   <div class="modal">
-    <div class="modal-title"><span><i class="fas fa-calculator"></i> Quick Calc</span><button class="closex" onclick="closeModal()"><i class="fas fa-xmark"></i></button></div>
+    <button class="closex" onclick="closeModal()"><i class="fas fa-xmark"></i></button>
+    <h3 style="margin-bottom: 15px; color:var(--accent)"><i class="fas fa-calculator"></i> Quick Calc</h3>
     <div id="qm-body"></div>
   </div>
 </div>
 
 <script>
-const ARBS   = {json.dumps(arbs)};
-const EVS    = {json.dumps(evs)};
+const ARBS = {json.dumps(arbs)};
+const EVS  = {json.dumps(evs)};
 const BC_RAW = {json.dumps(raw_bc)};
-const KEYS   = {json.dumps(key_status)};
-const PH     = "{pass_hash}";
 
-// AUTH
-if(localStorage.getItem('sauth')===PH) boot();
-function unlock(){{
-  const h=CryptoJS.SHA256(document.getElementById('linput').value).toString();
-  if(h===PH){{localStorage.setItem('sauth',PH);boot();}}
-  else{{document.getElementById('lerr').style.display='block';document.getElementById('linput').value='';document.getElementById('linput').style.borderColor='var(--red)';setTimeout(()=>document.getElementById('linput').style.borderColor='',1500);}}
-}}
-document.getElementById('linput').addEventListener('keydown',e=>{{if(e.key==='Enter')unlock()}});
-function logout(){{localStorage.removeItem('sauth');location.reload();}}
-function boot(){{
-  document.getElementById('lock').style.display='none';
-  document.getElementById('app').style.display='block';
-  init();
-}}
+// STATE & AUDIO ENGINE
+let CURRENT_BANKROLL = localStorage.getItem('arb_bankroll') || 10000;
+document.getElementById('user-bankroll').value = CURRENT_BANKROLL;
+const savedTheme = localStorage.getItem('arb_theme') || 'neobrutalism';
+document.documentElement.setAttribute('data-theme', savedTheme);
+document.getElementById('theme-selector').value = savedTheme;
 
-// TABS
-function swTab(id,btn){{
-  document.querySelectorAll('.tc').forEach(t=>t.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('tc-'+id).classList.add('active');
-  if(btn)btn.classList.add('active');
+// SYNTHESIZED UI SOUNDS
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playSound(type) {{
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  const now = audioCtx.currentTime;
+  const theme = document.documentElement.getAttribute('data-theme');
+  
+  if(theme === 'neobrutalism') {{ osc.type = 'square'; osc.frequency.setValueAtTime(150, now); gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1); osc.start(now); osc.stop(now + 0.1); }}
+  else if(theme === 'liquid') {{ osc.type = 'sine'; osc.frequency.setValueAtTime(400, now); osc.frequency.exponentialRampToValueAtTime(800, now + 0.3); gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.3); osc.start(now); osc.stop(now + 0.3); }}
+  else {{ osc.type = 'triangle'; osc.frequency.setValueAtTime(600, now); gain.gain.setValueAtTime(0.05, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1); osc.start(now); osc.stop(now + 0.1); }}
 }}
 
-// INIT
-function init(){{
-  const aS=[...new Set(ARBS.map(a=>a.sport))].sort();
-  const eS=[...new Set(EVS.map(e=>e.sport))].sort();
-  const eB=[...new Set(EVS.map(e=>e.book_key))].sort();
-  const bS=[...new Set(BC_RAW.map(b=>b.sport_title||'Unknown'))].sort();
-  const add=(id,arr)=>arr.forEach(v=>document.getElementById(id).add(new Option(v,v)));
-  add('arb-sport',aS); add('ev-sport',eS); add('ev-book',eB); add('bc-sport',bS);
-  // Stats
-  document.getElementById('ss-arb').textContent   = ARBS.length;
-  document.getElementById('ss-ev').textContent    = EVS.length;
-  document.getElementById('ss-bc').textContent    = BC_RAW.length;
-  document.getElementById('ss-toparb').textContent= ARBS.length?'+'+ARBS[0].profit_pct+'%':'--';
-  document.getElementById('ss-topev').textContent = EVS.length?'+'+EVS[0].edge_pct+'%':'--';
-  document.getElementById('ss-profit').textContent= ARBS.length?'Rs'+ARBS[0].profit_amt:'--';
-  document.getElementById('cnt-arb').textContent  = ARBS.length;
-  document.getElementById('cnt-ev').textContent   = EVS.length;
-  document.getElementById('cnt-bc').textContent   = BC_RAW.length;
-  renderArbs(); renderEvs(); renderBc(); renderKeys();
+// POPULATE FILTERS
+const aS = [...new Set(ARBS.map(a => a.sport))].sort();
+const eS = [...new Set(EVS.map(e => e.sport))].sort();
+aS.forEach(v => document.getElementById('arb-sport').add(new Option(v.replace(/_/g,' '), v)));
+eS.forEach(v => document.getElementById('ev-sport').add(new Option(v.replace(/_/g,' '), v)));
+
+// TAB & THEME LOGIC
+function swTab(id, btn) {{
+  playSound();
+  document.querySelectorAll('.tc').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tc-' + id).classList.add('active');
+  if(btn) btn.classList.add('active');
+  if(id === 'track') renderTracker();
+  animateCards(document.documentElement.getAttribute('data-theme'));
 }}
 
-// HELPERS
-const fd=d=>{{try{{return new Date(d).toLocaleString('en-IN',{{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}});}}catch{{return String(d)}}}};
-const si=s=>{{s=(s||'').toLowerCase();if(s.includes('soccer')||s.includes('football'))return'fa-futbol';if(s.includes('basket'))return'fa-basketball';if(s.includes('hockey'))return'fa-hockey-puck';if(s.includes('tennis'))return'fa-table-tennis-paddle-ball';if(s.includes('mma')||s.includes('box'))return'fa-hand-fist';if(s.includes('cricket'))return'fa-cricket-bat-ball';if(s.includes('baseball'))return'fa-baseball';if(s.includes('golf'))return'fa-golf-ball-tee';return'fa-trophy';}};
-const bs=k=>({{pinnacle:'PIN',bet365:'B365',betway:'BW',draftkings:'DK',fanduel:'FD',betmgm:'MGM',unibet:'UNI',stake:'STK',marathonbet:'MAR',parimatch:'PAR',betfair:'BF',dafabet:'DAF',bovada:'BOV',onexbet:'1XB',bcgame:'BCG'}})[k]||(k||'').toUpperCase().slice(0,4);
+function switchTheme(theme) {{
+  playSound();
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('arb_theme', theme);
+  animateCards(theme);
+}}
+
+function updateBankroll(val) {{
+  CURRENT_BANKROLL = parseFloat(val) || 10000;
+  localStorage.setItem('arb_bankroll', CURRENT_BANKROLL);
+  renderAll(); 
+}}
+
+// BET TRACKER LOGIC
+function getTracked() {{ return JSON.parse(localStorage.getItem('arb_tracker') || '[]'); }}
+function trackBet(type, id) {{
+  playSound();
+  let tracked = getTracked();
+  if(!tracked.some(t => t.id === id)) {{
+    const item = type === 'arb' ? ARBS.find(a => a.id === id) : EVS.find(e => e.id === id);
+    item.track_type = type; item.track_date = new Date().toLocaleString();
+    tracked.push(item);
+    localStorage.setItem('arb_tracker', JSON.stringify(tracked));
+    alert('Saved to Tracker!');
+  }}
+}}
+function clearTracker() {{ playSound(); localStorage.removeItem('arb_tracker'); renderTracker(); }}
+
+function renderTracker() {{
+  const g = document.getElementById('grid-track');
+  const tracked = getTracked();
+  if(!tracked.length) {{ g.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px">Tracker empty.</div>'; return; }}
+  
+  g.innerHTML = tracked.map(t => `<div class="card item">
+    <div style="color:var(--accent); font-weight:bold; margin-bottom:5px;">${{t.track_type.toUpperCase()}} - Saved ${{t.track_date}}</div>
+    <div style="font-weight: 900; font-size: 16px;">${{t.match}}</div>
+    <div style="margin-top:10px; font-size:12px">${{t.sport.replace(/_/g,' ')}}</div>
+  </div>`).join('');
+}}
 
 // RENDER ARBS
-function renderArbs(){{
-  const q=document.getElementById('arb-q').value.toLowerCase();
-  const sp=document.getElementById('arb-sport').value;
-  const wy=document.getElementById('arb-ways').value;
-  const mn=parseFloat(document.getElementById('arb-min').value)||0;
-  const data=ARBS.filter(a=>(!sp||a.sport===sp)&&(!wy||String(a.ways)===wy)&&a.profit_pct>=mn&&(!q||a.match.toLowerCase().includes(q)||a.sport.toLowerCase().includes(q)));
-  document.getElementById('cnt-arb').textContent=data.length;
-  const g=document.getElementById('grid-arb');
-  if(!data.length){{g.innerHTML='<div class="empty"><i class="fas fa-magnifying-glass"></i>No arbitrage opportunities match filters.<br><small>Try lowering the minimum % or broadening search.</small></div>';return;}}
-  g.innerHTML=data.map((a,i)=>{{
-    const rows=a.outcomes.map(o=>`<tr><td><span class="btag">${{bs(o.book_key)}}</span> ${{o.name}}</td><td><span class="oval">${{o.odds}}</span></td><td><span class="stake-x">exact Rs${{o.stake}}</span><span class="stake-m">Rs${{o.stake_rounded}}</span></td></tr>`).join('');
-    const oa=JSON.stringify(a.outcomes.map(o=>o.odds));
-    return `<div class="card"><div class="cstripe cs-g"></div>
-      <div class="ch"><span class="ctype arb"><i class="fas fa-percent"></i> ${{a.ways}}-WAY ARB · ${{a.market}}</span><span class="cprofit" style="color:var(--green)">+${{a.profit_pct}}%</span></div>
-      <div class="cmatch"><i class="fas ${{si(a.sport)}}"></i> ${{a.match}}</div>
-      <div class="cmeta"><span><i class="fas fa-calendar"></i> ${{fd(a.commence)}}</span><span><i class="fas fa-tag"></i> ${{a.sport.replace(/_/g,' ')}}</span></div>
-      <table class="ctable"><thead><tr><th>Outcome / Book</th><th>Odds</th><th>Stake on Rs1000</th></tr></thead><tbody>${{rows}}</tbody></table>
-      <div class="cfoot"><span class="cfoot-l"><i class="fas fa-coins"></i> Profit: Rs${{a.profit_amt}} / Rs1000</span><button class="cbtn" onclick='openQC(${{oa}},${{a.ways}})'><i class="fas fa-calculator"></i> Calc</button></div>
+function renderArbs() {{
+  const q = document.getElementById('arb-q').value.toLowerCase();
+  const sp = document.getElementById('arb-sport').value;
+  const wy = document.getElementById('arb-ways').value;
+  
+  const data = ARBS.filter(a => (!sp || a.sport === sp) && (!wy || String(a.ways) === wy) && (!q || a.match.toLowerCase().includes(q)));
+  document.getElementById('cnt-arb').textContent = data.length;
+  const g = document.getElementById('grid-arb');
+  if(!data.length) {{ g.innerHTML = '<div style="padding:40px">No arbs found.</div>'; return; }}
+  
+  g.innerHTML = data.map(a => {{
+    const impl = a.outcomes.reduce((sum, o) => sum + (1 / o.odds), 0);
+    const profitAmt = (CURRENT_BANKROLL * (1/impl - 1)).toFixed(2);
+    const oa = JSON.stringify(a.outcomes.map(o => o.odds));
+    
+    const rows = a.outcomes.map(o => {{
+        const stake = ((1 / o.odds) / impl * CURRENT_BANKROLL).toFixed(2);
+        return `<tr><td>${{o.name}}<br><small style="color:var(--text-muted)">${{o.book_key}}</small></td><td style="text-align:right; font-weight:bold">${{o.odds}}</td><td style="text-align:right; color:var(--accent); font-weight:bold">Rs${{stake}}</td></tr>`;
+    }}).join('');
+
+    return `<div class="card item">
+      <div style="display:flex; justify-content:space-between; margin-bottom: 12px;">
+        <span style="color:var(--accent); font-weight:bold">${{a.ways}}-WAY ARB</span>
+        <span style="color:var(--green); font-weight:bold; font-size: 18px;">+${{a.profit_pct}}%</span>
+      </div>
+      <div style="font-weight: 900; font-size: 16px;">${{a.match}}</div>
+      <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">${{a.market}}</div>
+      <table class="ctable">${{rows}}</table>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top: 15px;">
+        <span style="font-weight: 900; font-size: 15px;"><i class="fas fa-coins" style="color:var(--green)"></i> PROFIT: Rs${{profitAmt}}</span>
+        <div>
+          <button class="cbtn" onclick='openQC(${{oa}})'><i class="fas fa-calculator"></i> Calc</button>
+          <button class="cbtn" onclick='trackBet("arb", "${{a.id}}")'><i class="fas fa-bookmark"></i> Track</button>
+        </div>
+      </div>
     </div>`;
   }}).join('');
 }}
 
-// RENDER EVS
-function renderEvs(){{
-  const q=document.getElementById('ev-q').value.toLowerCase();
-  const sp=document.getElementById('ev-sport').value;
-  const bk=document.getElementById('ev-book').value;
-  const mn=parseFloat(document.getElementById('ev-min').value)||0;
-  const data=EVS.filter(v=>(!sp||v.sport===sp)&&(!bk||v.book_key===bk)&&v.edge_pct>=mn&&(!q||v.match.toLowerCase().includes(q)||(v.book_key||'').includes(q)));
-  document.getElementById('cnt-ev').textContent=data.length;
-  const g=document.getElementById('grid-ev');
-  if(!data.length){{g.innerHTML='<div class="empty"><i class="fas fa-chart-line"></i>No value bets match filters.</div>';return;}}
-  g.innerHTML=data.map(v=>`
-    <div class="card"><div class="cstripe cs-c"></div>
-      <div class="ch"><span class="ctype ev"><i class="fas fa-chart-line"></i> +EV · ${{v.market}}</span><span class="cprofit" style="color:var(--accent)">+${{v.edge_pct}}%</span></div>
-      <div class="cmatch"><i class="fas ${{si(v.sport)}}"></i> ${{v.match}}</div>
-      <div class="cmeta"><span><i class="fas fa-calendar"></i> ${{fd(v.commence)}}</span><span>${{v.sport.replace(/_/g,' ')}}</span></div>
-      <table class="ctable">
-        <tr><td>Outcome</td><td colspan=2><strong>${{v.outcome}}</strong></td></tr>
-        <tr><td>Bookmaker</td><td colspan=2><span class="btag">${{bs(v.book_key)}}</span> ${{v.book}}</td></tr>
-        <tr><td>Offered Odds</td><td colspan=2><span class="oval">${{v.offered_odds}}</span></td></tr>
-        <tr><td>True Odds</td><td colspan=2>${{v.true_odds}} <small style="color:var(--txt3)">(${{v.true_prob_pct}}%)</small></td></tr>
-        <tr><td>Kelly Stake (30%)</td><td colspan=2><span class="stake-x">exact Rs${{v.kelly_stake}}</span><span class="stake-m">Rs${{v.kelly_stake_rounded}}</span></td></tr>
+// RENDER EV
+function renderEvs() {{
+  const q = document.getElementById('ev-q').value.toLowerCase();
+  const sp = document.getElementById('ev-sport').value;
+  const data = EVS.filter(v => (!sp || v.sport === sp) && (!q || v.match.toLowerCase().includes(q) || v.book.toLowerCase().includes(q)));
+  document.getElementById('cnt-ev').textContent = data.length;
+  
+  const g = document.getElementById('grid-ev');
+  if(!data.length) return g.innerHTML = '<div style="padding:40px">No +EV bets found.</div>';
+  
+  g.innerHTML = data.map(v => {{
+    const kf = ((v.offered_odds-1) * (v.true_prob_pct/100) - (1-(v.true_prob_pct/100))) / (v.offered_odds-1);
+    const stake = kf > 0 ? (0.3 * kf * CURRENT_BANKROLL).toFixed(2) : "0.00";
+
+    return `<div class="card item">
+      <div style="display:flex; justify-content:space-between; margin-bottom: 12px;">
+        <span style="color:var(--accent); font-weight:bold">+EV BET</span><span style="color:var(--green); font-weight:bold; font-size: 18px;">+${{v.edge_pct}}% EDGE</span>
+      </div>
+      <div style="font-weight: 900; font-size: 16px;">${{v.match}}</div>
+      <table class="ctable" style="margin-top:15px">
+        <tr><td style="color:var(--text-muted)">Outcome</td><td style="text-align:right; font-weight:bold">${{v.outcome}}</td></tr>
+        <tr><td style="color:var(--text-muted)">Bookmaker</td><td style="text-align:right; font-weight:bold">${{v.book}}</td></tr>
+        <tr><td style="color:var(--text-muted)">Offered / True</td><td style="text-align:right; font-weight:bold">${{v.offered_odds}} / ${{v.true_odds}}</td></tr>
+        <tr><td style="color:var(--text-muted)">Rec. Stake (30%)</td><td style="text-align:right; font-weight:bold; color:var(--accent)">Rs${{stake}}</td></tr>
       </table>
-    </div>`).join('');
-}}
-
-// RENDER BC
-function renderBc(){{
-  const q=document.getElementById('bc-q').value.toLowerCase();
-  const sp=document.getElementById('bc-sport').value;
-  const data=BC_RAW.filter(b=>(!sp||b.sport_title===sp)&&(!q||(b.home_team+' '+b.away_team).toLowerCase().includes(q)));
-  document.getElementById('cnt-bc').textContent=data.length;
-  const g=document.getElementById('grid-bc');
-  if(!data.length){{g.innerHTML='<div class="empty"><i class="fas fa-gamepad"></i>No BC.Game events available.<br><small>The endpoint may be temporarily down or returning an unexpected format.</small></div>';return;}}
-  g.innerHTML=data.slice(0,100).map(b=>{{
-    const outs=b.bookmakers[0].markets[0].outcomes;
-    return `<div class="card"><div class="cstripe cs-y"></div>
-      <div class="ch"><span class="ctype bc"><i class="fas fa-gamepad"></i> BC.GAME</span></div>
-      <div class="cmatch">${{b.home_team}} vs ${{b.away_team}}</div>
-      <div class="cmeta"><span><i class="fas fa-calendar"></i> ${{fd(b.commence_time)}}</span><span>${{b.sport_title}}</span></div>
-      <table class="ctable">${{outs.map(o=>`<tr><td>${{o.name}}</td><td><span class="oval">${{o.price}}</span></td></tr>`).join('')}}</table>
+      <div style="text-align:right; margin-top:10px;"><button class="cbtn" onclick='trackBet("ev", "${{v.id}}")'><i class="fas fa-bookmark"></i> Track</button></div>
     </div>`;
   }}).join('');
 }}
 
-// RENDER KEYS
-function renderKeys(){{
-  document.getElementById('key-tbody').innerHTML=KEYS.map((k,i)=>{{
-    const pct=Math.max(0,Math.min(100,(k.remaining/500)*100));
-    const col=pct>50?'var(--green)':pct>15?'var(--yellow)':'var(--red)';
-    return `<tr><td style="color:var(--txt3)">#${{i+1}}</td><td style="font-family:monospace;color:var(--accent)">${{k.key}}</td><td style="font-weight:700;color:${{col}}">${{k.remaining}}</td><td style="width:110px"><div class="qbar"><div class="qfill" style="width:${{pct}}%;background:${{col}}"></div></div></td></tr>`;
-  }}).join('');
+function renderBc() {{
+  const g = document.getElementById('grid-bc');
+  document.getElementById('cnt-bc').textContent = BC_RAW.length;
+  g.innerHTML = BC_RAW.slice(0, 50).map(b => `<div class="card item"><div style="color:var(--accent); font-weight:bold; margin-bottom: 12px;">BC.GAME EXCLUSIVE</div><div style="font-weight: 900; font-size: 16px;">${{b.home_team}} vs ${{b.away_team}}</div><table class="ctable">${{b.bookmakers[0].markets[0].outcomes.map(o => `<tr><td>${{o.name}}</td><td style="text-align:right; font-weight:bold">${{o.price}}</td></tr>`).join('')}}</table></div>`).join('');
 }}
 
-// QUICK CALC MODAL
-function openQC(oa, ways){{
-  // Pre-fill full calc
-  if(ways===2){{document.getElementById('c2o1').value=oa[0]||'';document.getElementById('c2o2').value=oa[1]||'';swCalc(2,document.getElementById('ct2'));}}
-  else{{document.getElementById('c3o1').value=oa[0]||'';document.getElementById('c3o2').value=oa[1]||'';document.getElementById('c3o3').value=oa[2]||'';swCalc(3,document.getElementById('ct3'));}}
-  const stake=10000;
-  const impl=oa.reduce((s,o)=>s+1/o,0);
-  const pct=(1/impl-1)*100;
-  const stakes=oa.map(o=>(1/o)/impl*stake);
-  const profit=stake*(1/impl-1);
-  document.getElementById('qm-body').innerHTML=`
-    <div class="cresult">
-      ${{oa.map((o,i)=>`<div class="crrow"><span>Leg ${{i+1}} @ ${{o}}</span><span>Rs${{stakes[i].toFixed(2)}}</span></div>`).join('')}}
-      <div class="crrow"><span>Implied</span><span>${{(impl*100).toFixed(3)}}%</span></div>
-      ${{pct>0?`<div class="crrow" style="color:var(--green)"><span>PROFIT on Rs10,000</span><span>+Rs${{profit.toFixed(2)}} (+${{pct.toFixed(3)}}%)</span></div>`:`<div class="crrow" style="color:var(--red)"><span>NOT ARB</span><span>Over-round ${{Math.abs(pct).toFixed(3)}}%</span></div>`}}
-    </div>
-    <button class="run-btn" style="margin-top:12px" onclick="closeModal();swTab('calc',document.getElementById('tb-calc'))"><i class="fas fa-arrow-right"></i> Full Calculator</button>`;
+// MODAL QUICK CALC
+function openQC(oa) {{
+  playSound();
+  const impl = oa.reduce((s, o) => s + 1/o, 0);
+  const pct = (1/impl - 1) * 100;
+  const stakes = oa.map(o => ((1/o)/impl * CURRENT_BANKROLL).toFixed(2));
+  document.getElementById('qm-body').innerHTML = `
+    <table class="ctable">${{oa.map((o,i) => `<tr><td>Leg ${{i+1}} @ ${{o}}</td><td style="text-align:right; font-weight:bold; color:var(--accent)">Rs${{stakes[i]}}</td></tr>`).join('')}}</table>
+    <div style="margin-top:15px; font-weight:bold; font-size:16px; color:${{pct>0?'var(--green)':'var(--red)'}}">PROFIT: Rs${{(CURRENT_BANKROLL * (1/impl - 1)).toFixed(2)}}</div>
+  `;
   document.getElementById('qm').classList.add('open');
 }}
-function closeModal(){{document.getElementById('qm').classList.remove('open');}}
-document.getElementById('qm').addEventListener('click',e=>{{if(e.target===e.currentTarget)closeModal();}});
+function closeModal() {{ playSound(); document.getElementById('qm').classList.remove('open'); }}
 
-// ARB CALCULATOR
-function swCalc(n,btn){{
-  document.querySelectorAll('.ctab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('calc2').style.display=n===2?'block':'none';
-  document.getElementById('calc3').style.display=n===3?'block':'none';
-  document.getElementById('calc-res').style.display='none';
-}}
-function runCalc(n){{
-  let odds=[],stake=0;
-  if(n===2){{odds=[+document.getElementById('c2o1').value,+document.getElementById('c2o2').value];stake=+document.getElementById('c2s').value||10000;}}
-  else{{odds=[+document.getElementById('c3o1').value,+document.getElementById('c3o2').value,+document.getElementById('c3o3').value];stake=+document.getElementById('c3s').value||10000;}}
-  if(odds.some(o=>!o||o<=1)){{alert('Enter valid odds > 1');return;}}
-  const impl=odds.reduce((s,o)=>s+1/o,0);
-  const pct=(1/impl-1)*100;
-  const stakes=odds.map(o=>(1/o)/impl*stake);
-  const profit=stake*(1/impl-1);
-  const rb=document.getElementById('calc-res');
-  rb.innerHTML=[
-    ...odds.map((o,i)=>`<div class="crrow"><span>Leg ${{i+1}} @ ${{o}}</span><span>Rs${{stakes[i].toFixed(2)}} <small style="color:var(--txt3)">(Rs${{Math.round(stakes[i]/10)*10}} rounded)</small></span></div>`),
-    `<div class="crrow"><span>Total Stake</span><span>Rs${{stake.toFixed(2)}}</span></div>`,
-    `<div class="crrow"><span>Implied Total</span><span style="color:${{impl<1?'var(--green)':'var(--red)}}">${{(impl*100).toFixed(3)}}%</span></div>`,
-    pct>0?`<div class="crrow" style="color:var(--green)"><span>PROFIT</span><span>+Rs${{profit.toFixed(2)}} (+${{pct.toFixed(3)}}%)</span></div>`:`<div class="crrow" style="color:var(--red)"><span>NO ARB — Over-round</span><span>${{Math.abs(pct).toFixed(3)}}%</span></div>`
-  ].join('');
-  rb.style.display='block';
+// ANIMATION ENGINE
+function animateCards(theme) {{
+  const cards = document.querySelectorAll('.tc.active .card');
+  if (!cards.length) return;
+  gsap.killTweensOf(cards);
+  if (theme === 'neobrutalism') gsap.fromTo(cards, {{ y: -40, opacity: 0, rotation: -2, scale: 0.95 }}, {{ y: 0, opacity: 1, rotation: 0, scale: 1, duration: 0.6, stagger: 0.04, ease: "elastic.out(1, 0.5)" }});
+  else if (theme === 'claymorphism') gsap.fromTo(cards, {{ scale: 0.85, opacity: 0, y: 30 }}, {{ scale: 1, opacity: 1, y: 0, duration: 0.7, stagger: 0.05, ease: "back.out(1.5)" }});
+  else if (theme === 'liquid') gsap.fromTo(cards, {{ y: 40, opacity: 0, scale: 0.9 }}, {{ y: 0, opacity: 1, scale: 1, duration: 1.0, stagger: 0.1, ease: "sine.inOut" }});
+  else if (theme === 'glassmorphism') gsap.fromTo(cards, {{ y: 30, opacity: 0 }}, {{ y: 0, opacity: 1, duration: 0.7, stagger: 0.06, ease: "power2.out" }});
+  else gsap.fromTo(cards, {{ opacity: 0, y: 10 }}, {{ opacity: 1, y:0, duration: 0.3, stagger: 0.02, ease: "linear" }});
 }}
 
-// KELLY CALCULATOR
-function runKelly(){{
-  const p=parseFloat(document.getElementById('kp').value)/100;
-  const o=parseFloat(document.getElementById('ko').value);
-  const bank=parseFloat(document.getElementById('kb').value)||10000;
-  if(!p||!o||p<=0||p>=1||o<=1){{alert('Enter valid probability (1-99) and odds > 1');return;}}
-  const b=o-1,q=1-p;
-  const kf=(b*p-q)/b;
-  const full=kf>0?kf*bank:0;
-  const frac=kf>0?0.3*kf*bank:0;
-  const ev=(p*b-q)*100;
-  const rb=document.getElementById('kelly-res');
-  rb.innerHTML=`
-    <div class="crrow"><span>Expected Value</span><span style="color:${{ev>0?'var(--green)':'var(--red)}}">${{ev>0?'+':''}}${{ev.toFixed(2)}}% per bet</span></div>
-    <div class="crrow"><span>Full Kelly Stake</span><span>Rs${{full.toFixed(2)}}</span></div>
-    <div class="crrow"><span>30% Fractional Kelly</span><span style="color:var(--green)">Rs${{frac.toFixed(2)}} <small style="color:var(--txt3)">(Rs${{Math.round(frac/10)*10}} rounded)</small></span></div>
-    <div class="crrow"><span>% of Bankroll</span><span>${{(frac/bank*100).toFixed(2)}}%</span></div>`;
-  rb.style.display='block';
+// CALC UTILS
+function runKelly() {{
+  playSound();
+  const p = parseFloat(document.getElementById('kp').value) / 100; const o = parseFloat(document.getElementById('ko').value);
+  if(!p || !o) return;
+  const kf = ((o-1)*p - (1-p)) / (o-1);
+  const res = document.getElementById('kelly-res');
+  res.innerHTML = `EV: <span style="color:var(--green)">${{((p*(o-1)-(1-p))*100).toFixed(2)}}%</span><br>Rec Stake (30%): <span style="color:var(--accent)">Rs${{(kf>0 ? 0.3*kf*CURRENT_BANKROLL : 0).toFixed(2)}}</span>`;
+}}
+let _cv = false;
+function convOdds(f) {{
+  if(_cv) return; _cv = true;
+  try {{
+    if(f==='d') {{ const v = parseFloat(document.getElementById('od').value); if(v>1) {{ document.getElementById('oa').value = v>=2 ? '+'+Math.round((v-1)*100) : '-'+Math.round(100/(v-1)); document.getElementById('oi').value = (100/v).toFixed(2); }} }}
+  }} finally {{ _cv = false; }}
 }}
 
-// ODDS CONVERTER
-let _cv=false;
-function convOdds(from){{
-  if(_cv)return;_cv=true;
-  const setAll=(dec)=>{{
-    document.getElementById('od').value=dec.toFixed(3);
-    const am=dec>=2?'+'+Math.round((dec-1)*100):'-'+Math.round(100/(dec-1));
-    document.getElementById('oa').value=am;
-    const imp=(100/dec).toFixed(2);document.getElementById('oi').value=imp;
-    const[n,d]=d2f(dec);document.getElementById('of').value=n+'/'+d;
-  }};
-  try{{
-    if(from==='d'){{const v=parseFloat(document.getElementById('od').value);if(v>1)setAll(v);}}
-    else if(from==='a'){{const a=parseFloat(document.getElementById('oa').value);const v=a>0?a/100+1:100/Math.abs(a)+1;if(v>1)setAll(v);}}
-    else if(from==='f'){{const p=document.getElementById('of').value.split('/');const v=p.length===2?parseFloat(p[0])/parseFloat(p[1])+1:0;if(v>1)setAll(v);}}
-    else if(from==='i'){{const i=parseFloat(document.getElementById('oi').value);const v=i>0&&i<100?100/i:0;if(v>1)setAll(v);}}
-  }}finally{{_cv=false;}}
-}}
-function d2f(d){{const t=1e-5;let h1=1,h2=0,k1=0,k2=1,b=d-1;for(let i=0;i<40;i++){{const a=Math.floor(b),ah=h1;h1=a*h1+h2;h2=ah;const ak=k1;k1=a*k1+k2;k2=ak;if(Math.abs(b-a)<t)break;b=1/(b-a);}}return[h1,k1];}}
+// BOOT
+function renderAll() {{ renderArbs(); renderEvs(); renderBc(); renderTracker(); animateCards(document.documentElement.getAttribute('data-theme')); }}
+renderAll();
 </script>
 </body></html>"""
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
-# MAIN
+# MAIN EXECUTION
 # ═══════════════════════════════════════════════════════════════════════════════
 def main():
-    log.info("╔══ ARB SNIPER v4.0 — Starting Run ══╗")
+    log.info("╔══ ARB SNIPER v5.0 ELITE — Starting ══╗")
     state = load_state()
 
     odds_events = fetch_all_odds(state)
     bc_events   = fetch_bcgame_events()
-    raw_bc_copy = list(bc_events)
-    all_events  = merge_bcgame(odds_events, bc_events)
-
+    all_events  = odds_events + bc_events 
+    
     save_state(state)
 
     arbs = scan_arbitrage(all_events)
     evs  = scan_ev_bets(all_events)
-    state["last_arb_count"] = len(arbs)
-    state["last_ev_count"]  = len(evs)
-    save_state(state)
 
-    send_push(arbs, evs)
+    # Push Notification
+    if arbs or evs:
+        msg = f"ARB: {len(arbs)} | EV: {len(evs)} | Quota: {ROTATOR.total_remaining()}"
+        try: requests.post(NTFY_URL, data=msg.encode("utf-8"), headers={"Title": "Arb Sniper Run Complete", "Priority": "default"}, timeout=5)
+        except: pass
 
     key_status = ROTATOR.status()
-    html = generate_html(arbs, evs, raw_bc_copy, state, key_status)
+    html = generate_html(arbs, evs, bc_events, state, key_status)
     with open(OUTPUT_HTML, "w", encoding="utf-8") as f:
         f.write(html)
 
-    log.info(f"  Arbs:        {len(arbs)}")
+    log.info(f"  Arbs Found:  {len(arbs)}")
     log.info(f"  EV Bets:     {len(evs)}")
-    log.info(f"  BC Events:   {len(raw_bc_copy)}")
-    log.info(f"  Total Quota: {ROTATOR.total_remaining()}")
     log.info("╚══ Run Complete ══╝")
 
 if __name__ == "__main__":
