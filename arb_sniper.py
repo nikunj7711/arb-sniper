@@ -290,6 +290,7 @@ def scan_ev_bets(events: list) -> list:
     return ev_bets
 
 # ─── Dashboard HTML Generator ──────────────────────────────────────────────────
+# ─── Dashboard HTML Generator ──────────────────────────────────────────────────
 def generate_html(arbs: list, evs: list, raw_bc: list, state: dict, api_key: str) -> str:
     ist_now = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p IST")
     pass_hash = hashlib.sha256(DASHBOARD_PASS.encode()).hexdigest()
@@ -319,7 +320,6 @@ def generate_html(arbs: list, evs: list, raw_bc: list, state: dict, api_key: str
   .topbar{{background:var(--bg1);border-bottom:1px solid var(--border);padding:15px 20px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100;}}
   .logo{{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--accent);}}
   
-  /* 📱 MOBILE OPTIMIZED TABS */
   .main-tabs{{
     display:flex; gap:10px; padding:15px 20px; border-bottom:1px solid var(--border);
     overflow-x:auto; white-space:nowrap; -webkit-overflow-scrolling:touch; scrollbar-width:none;
@@ -349,7 +349,6 @@ def generate_html(arbs: list, evs: list, raw_bc: list, state: dict, api_key: str
   .odds{{color:var(--yellow);font-weight:700;}}
   .stake{{font-weight:700;font-size:13px;float:right;}}
 
-  /* API Panel Styles */
   .api-card{{background:linear-gradient(145deg, var(--bg2), var(--bg1)); border-left:4px solid var(--accent2);}}
   .api-stat-row{{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);font-size:13px;}}
   .api-stat-row:last-child{{border:none;}}
@@ -372,7 +371,10 @@ def generate_html(arbs: list, evs: list, raw_bc: list, state: dict, api_key: str
 <div id="app">
   <div class="topbar">
     <div class="logo"><i class="fas fa-crosshairs"></i> SNIPER v3.5</div>
-    <div style="font-size:11px;color:var(--txt3)"><i class="fas fa-clock"></i> {ist_now}</div>
+    <div style="display:flex; gap:12px; align-items:center;">
+      <div style="font-size:11px;color:var(--txt3)"><i class="fas fa-clock"></i> {ist_now}</div>
+      <button onclick="logout()" style="background:none; border:none; color:var(--red); font-size:16px; cursor:pointer;" title="Logout"><i class="fas fa-right-from-bracket"></i></button>
+    </div>
   </div>
 
   <div class="main-tabs">
@@ -414,9 +416,18 @@ const ARBS = {json.dumps(arbs)};
 const EVS = {json.dumps(evs)};
 const BC_RAW = {json.dumps(raw_bc)};
 
+// 🛠️ THE FIX: Check Browser Memory on Load!
+if (localStorage.getItem('sniper_auth') === PASS_HASH) {{
+  document.getElementById('lockscreen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  renderData();
+}}
+
 function checkPass() {{
   const val = document.getElementById('lock-input').value;
   if (CryptoJS.SHA256(val).toString() === PASS_HASH) {{
+    // 🛠️ THE FIX: Save to Browser Memory!
+    localStorage.setItem('sniper_auth', PASS_HASH);
     document.getElementById('lockscreen').style.display='none';
     document.getElementById('app').style.display='block';
     renderData();
@@ -426,6 +437,11 @@ function checkPass() {{
   }}
 }}
 document.getElementById('lock-input').addEventListener('keydown',e=>{{if(e.key==='Enter')checkPass()}});
+
+function logout() {{
+  localStorage.removeItem('sniper_auth');
+  location.reload();
+}}
 
 function switchTab(tabId) {{
   document.querySelectorAll('.main-tab').forEach(t=>t.classList.remove('active'));
@@ -440,7 +456,6 @@ function renderData() {{
   document.getElementById('count-arb').textContent = ARBS.length;
   document.getElementById('count-ev').textContent = EVS.length;
 
-  // Render Arbs
   const arbGrid = document.getElementById('grid-arb');
   if(!ARBS.length) arbGrid.innerHTML = '<div class="empty-state"><i class="fas fa-ghost fa-2x"></i><p style="margin-top:10px">No Arbs Found</p></div>';
   else arbGrid.innerHTML = ARBS.map(a => `
@@ -453,7 +468,6 @@ function renderData() {{
       </table>
     </div>`).join('');
 
-  // Render EVs
   const evGrid = document.getElementById('grid-ev');
   if(!EVS.length) evGrid.innerHTML = '<div class="empty-state"><i class="fas fa-ghost fa-2x"></i><p style="margin-top:10px">No Value Bets Found</p></div>';
   else evGrid.innerHTML = EVS.map(e => `
@@ -468,7 +482,6 @@ function renderData() {{
       </table>
     </div>`).join('');
 
-  // Render BC.Game Raw
   const bcGrid = document.getElementById('grid-bc');
   if(!BC_RAW.length) bcGrid.innerHTML = '<div class="empty-state"><p>No BC.Game Data Available</p></div>';
   else bcGrid.innerHTML = BC_RAW.slice(0,50).map(b => {{
