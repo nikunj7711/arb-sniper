@@ -79,15 +79,8 @@ class StateManager:
         self.state = self._load_state()
     
     def _load_state(self) -> Dict[str, Any]:
-        """Load state from JSON file or create new."""
-        if os.path.exists(self.filepath):
-            try:
-                with open(self.filepath, 'r') as f:
-                    return json.load(f)
-            except Exception as e:
-                logger.warning(f"Failed to load state: {e}. Creating new state.")
-        
-        return {
+        """Load state from JSON file or create new, merging with defaults."""
+        defaults = {
             "last_run": None,
             "api_requests_remaining": 500,
             "api_requests_used": 0,
@@ -95,6 +88,17 @@ class StateManager:
             "arbs_found": 0,
             "evs_found": 0
         }
+        if os.path.exists(self.filepath):
+            try:
+                with open(self.filepath, 'r') as f:
+                    loaded = json.load(f)
+                # Merge: defaults first, then override with loaded values
+                defaults.update(loaded)
+                return defaults
+            except Exception as e:
+                logger.warning(f"Failed to load state: {e}. Creating new state.")
+        
+        return defaults
     
     def save(self):
         """Save state to JSON file."""
