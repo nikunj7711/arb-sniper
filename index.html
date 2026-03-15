@@ -1,322 +1,880 @@
-<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arbitrage & Value Betting Scanner</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
-        body { background:#09090b; color:#fff; font-family:-apple-system, sans-serif; padding:15px; max-width:600px; margin:auto; }
-        .card { background:#18181b; border:1px solid #27272a; padding:15px; border-radius:12px; margin-bottom:12px; }
-        .tab { flex:1; text-align:center; padding:12px; background:#18181b; border-radius:8px; cursor:pointer; font-size:12px; color:#a1a1aa; font-weight:bold; border:1px solid transparent; }
-        .tab.active { background:#3f3f46; color:#fff; border-color:#06b6d4; }
-        .pane { display:none; } .active-pane { display:block; }
-        .btn { background:#27272a; color:#fff; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; font-size:12px; display:flex; align-items:center; gap:5px; font-weight:bold; }
-        .btn-primary { background: rgba(6,182,212,0.1); color:#06b6d4; border:1px solid #06b6d4; }
-        .badge { font-size:11px; padding:4px 8px; border-radius:6px; font-weight:bold; color:#000; display:inline-flex; align-items:center; gap:4px; }
-        .input-box { background:#000; border:1px solid #27272a; color:#10b981; padding:12px; border-radius:8px; width:100%; font-size:16px; font-weight:bold; margin-bottom:15px; box-sizing:border-box; outline:none; }
-        .input-box:focus { border-color: #06b6d4; }
-        .clock { background:rgba(16,185,129,0.1); color:#10b981; padding:4px 8px; border-radius:6px; font-family:monospace; font-size:11px; display:inline-flex; align-items:center; gap:4px; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
         
-        /* Filter Panel Styles */
-        #filterPanel { position:fixed; top:0; right:-100%; width:85%; max-width:400px; height:100%; background:#09090b; border-left:1px solid #27272a; z-index:1000; transition:0.3s; padding:20px; box-sizing:border-box; overflow-y:auto; box-shadow: -5px 0 15px rgba(0,0,0,0.5); }
-        #filterPanel.open { right:0; }
-        .filter-section { margin-bottom:20px; }
-        .filter-title { font-size:12px; color:#06b6d4; text-transform:uppercase; margin-bottom:10px; font-weight:bold; letter-spacing:1px; }
-        .cb-label { display:flex; justify-content:space-between; align-items:center; font-size:13px; margin-bottom:8px; color:#ddd; cursor:pointer; background:#18181b; padding:8px 12px; border-radius:6px; border:1px solid #27272a; }
-        .cb-label input { accent-color: #06b6d4; width:16px; height:16px; }
-        .count-pill { background:#3f3f46; color:#fff; font-size:10px; padding:2px 6px; border-radius:10px; font-weight:bold; }
-        #sliderVal { float:right; color:#10b981; font-weight:bold; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
         
-        /* Bookie Logos */
-        .bk-logo { font-size:10px; background:#27272a; padding:3px 6px; border-radius:4px; color:#fff; text-transform:uppercase; font-weight:bold; border:1px solid #3f3f46; display:inline-flex; align-items:center; gap:4px; }
-    </style></head><body>
-        <div id='lock-screen' style='position:fixed; top:0; left:0; width:100%; height:100%; background:#09090b; z-index:999; display:flex; flex-direction:column; align-items:center; justify-content:center;'>
-            <h2 style='color:#06b6d4; letter-spacing: 2px;'><i class="fa-solid fa-crosshairs"></i> SNIPER TERMINAL</h2>
-            <input type='password' id='ps' style='background:#18181b; border:1px solid #27272a; color:#fff; padding:12px; border-radius:8px; text-align:center; margin-bottom:10px; width:200px;' placeholder='Authorization Code'>
-            <button onclick='ck()' style='background:#06b6d4; color:#000; border:none; padding:10px 20px; border-radius:8px; font-weight:bold; cursor:pointer; width:225px;'><i class="fa-solid fa-unlock"></i> ENTER SYSTEM</button>
-            <p id='err' style='color:#ef4444; font-size:12px; margin-top:10px;'></p>
+        .lock-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            backdrop-filter: blur(10px);
+        }
+        
+        .lock-container {
+            background: rgba(30, 41, 59, 0.9);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 12px;
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+        }
+        
+        .lock-icon {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .lock-icon i {
+            font-size: 48px;
+            color: #60a5fa;
+        }
+        
+        .lock-title {
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #f1f5f9;
+        }
+        
+        .lock-subtitle {
+            text-align: center;
+            font-size: 14px;
+            color: #94a3b8;
+            margin-bottom: 30px;
+        }
+        
+        .lock-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            border-radius: 8px;
+            color: #e2e8f0;
+            font-size: 16px;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+        
+        .lock-input:focus {
+            outline: none;
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
+        }
+        
+        .lock-button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .lock-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+        }
+        
+        .lock-button:active {
+            transform: translateY(0);
+        }
+        
+        .lock-error {
+            color: #ef4444;
+            font-size: 12px;
+            margin-top: 10px;
+            text-align: center;
+            display: none;
+        }
+        
+        .dashboard {
+            display: none;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+            padding: 20px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+        
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header-title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #f1f5f9;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .header-title i {
+            color: #60a5fa;
+        }
+        
+        .header-stats {
+            display: flex;
+            gap: 30px;
+            align-items: center;
+        }
+        
+        .stat {
+            text-align: right;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #60a5fa;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-btn {
+            padding: 10px 20px;
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.5);
+            border-radius: 8px;
+            color: #60a5fa;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+        
+        .filter-btn:hover {
+            background: rgba(59, 130, 246, 0.3);
+        }
+        
+        .filter-panel {
+            display: none;
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 300px;
+            height: 100vh;
+            background: rgba(15, 23, 42, 0.98);
+            border-right: 1px solid rgba(148, 163, 184, 0.2);
+            padding: 20px;
+            overflow-y: auto;
+            z-index: 200;
+            backdrop-filter: blur(10px);
+        }
+        
+        .filter-panel.active {
+            display: block;
+        }
+        
+        .filter-close {
+            float: right;
+            cursor: pointer;
+            color: #94a3b8;
+            font-size: 24px;
+        }
+        
+        .filter-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            clear: both;
+            color: #f1f5f9;
+        }
+        
+        .filter-group {
+            margin-bottom: 25px;
+        }
+        
+        .filter-group-title {
+            font-size: 12px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+        
+        .checkbox-item input {
+            margin-right: 10px;
+            cursor: pointer;
+            accent-color: #60a5fa;
+        }
+        
+        .checkbox-item label {
+            cursor: pointer;
+            flex: 1;
+        }
+        
+        .slider-container {
+            margin-top: 15px;
+        }
+        
+        .slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(148, 163, 184, 0.2);
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #60a5fa;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(96, 165, 250, 0.3);
+        }
+        
+        .slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #60a5fa;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 0 10px rgba(96, 165, 250, 0.3);
+        }
+        
+        .slider-value {
+            text-align: center;
+            margin-top: 8px;
+            color: #60a5fa;
+            font-weight: 600;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        }
+        
+        .tab {
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .tab.active {
+            color: #60a5fa;
+            border-bottom-color: #60a5fa;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        
+        .card {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.8) 100%);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(96, 165, 250, 0.5);
+            box-shadow: 0 10px 30px rgba(96, 165, 250, 0.1);
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 15px;
+        }
+        
+        .card-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #f1f5f9;
+            flex: 1;
+        }
+        
+        .card-badge {
+            background: rgba(96, 165, 250, 0.2);
+            color: #60a5fa;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        
+        .card-profit {
+            font-size: 28px;
+            font-weight: bold;
+            color: #10b981;
+            margin-bottom: 15px;
+        }
+        
+        .card-details {
+            font-size: 13px;
+            color: #cbd5e1;
+            margin-bottom: 12px;
+            line-height: 1.6;
+        }
+        
+        .card-stake {
+            font-size: 11px;
+            color: #64748b;
+            margin-bottom: 12px;
+        }
+        
+        .card-stake-bold {
+            font-size: 18px;
+            font-weight: bold;
+            color: #60a5fa;
+            margin-top: 5px;
+        }
+        
+        .card-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .card-button {
+            flex: 1;
+            padding: 8px 12px;
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.5);
+            border-radius: 6px;
+            color: #60a5fa;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .card-button:hover {
+            background: rgba(59, 130, 246, 0.3);
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #94a3b8;
+        }
+        
+        .empty-state i {
+            font-size: 48px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        
+        .empty-state p {
+            font-size: 16px;
+        }
+        
+        .calculator {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+            width: 350px;
+            max-height: 500px;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            display: none;
+            z-index: 300;
+            backdrop-filter: blur(10px);
+        }
+        
+        .calculator.active {
+            display: block;
+        }
+        
+        .calculator-close {
+            float: right;
+            cursor: pointer;
+            color: #94a3b8;
+            font-size: 20px;
+        }
+        
+        .calculator-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            clear: both;
+            color: #f1f5f9;
+        }
+        
+        .calc-input {
+            width: 100%;
+            padding: 10px;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            border-radius: 6px;
+            color: #e2e8f0;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        .calc-result {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 15px;
+            color: #10b981;
+            font-weight: 600;
+            text-align: center;
+        }
+        
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .header-stats {
+                width: 100%;
+                justify-content: space-around;
+            }
+            
+            .cards-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .calculator {
+                width: calc(100% - 40px);
+                right: 20px;
+                bottom: 20px;
+            }
+            
+            .filter-panel {
+                width: 250px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="lock-screen" id="lockScreen">
+        <div class="lock-container">
+            <div class="lock-icon">
+                <i class="fas fa-lock"></i>
+            </div>
+            <div class="lock-title">Secure Access</div>
+            <div class="lock-subtitle">Enter password to view dashboard</div>
+            <input type="password" class="lock-input" id="passwordInput" placeholder="Password">
+            <button class="lock-button" onclick="unlockDashboard()">Unlock</button>
+            <div class="lock-error" id="lockError">Invalid password</div>
         </div>
-
-        <div id='filterPanel'>
-            <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;'>
-                <h3 style='margin:0; color:#fff;'><i class="fa-solid fa-sliders"></i> Filters</h3>
-                <button onclick='toggleFilters()' class='btn' style='background:transparent;'><i class="fa-solid fa-xmark fa-lg"></i></button>
+    </div>
+    
+    <div class="dashboard" id="dashboard">
+        <div class="header">
+            <div class="header-content">
+                <div class="header-title">
+                    <i class="fas fa-chart-line"></i>
+                    Arbitrage Scanner
+                </div>
+                <div class="header-stats">
+                    <div class="stat">
+                        <div class="stat-label">Arbitrages</div>
+                        <div class="stat-value" id="arbCount">0</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Value Bets</div>
+                        <div class="stat-value" id="evCount">0</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Last Update</div>
+                        <div class="stat-value" id="lastUpdate">--:--</div>
+                    </div>
+                </div>
             </div>
-            
-            <div class='filter-section'>
-                <div class='filter-title'>Minimum Profit</div>
-                <input type='range' id='profitSlider' min='0' max='20' step='0.5' value='0.5' style='width:100%; accent-color:#10b981;' oninput='updateSliderVal()'>
-                <div style='margin-top:5px; font-size:12px; color:#aaa;'>Current: <span id='sliderVal'>0.5%</span></div>
-            </div>
-
-            <div class='filter-section'>
-                <div class='filter-title'>Sports</div>
-                <div id='sportFilters'></div>
-            </div>
-
-            <div class='filter-section'>
-                <div class='filter-title'>Bookmakers</div>
-                <div id='bookieFilters'></div>
-            </div>
-            
-            <button onclick='applyFilters()' class='btn btn-primary' style='width:100%; justify-content:center;'><i class="fa-solid fa-check"></i> Apply Filters</button>
         </div>
-
-        <div id='content' style='display:none;'>
-            <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;'>
-                <div>
-                    <h2 style='color:#06b6d4; margin:0;'><i class="fa-solid fa-crosshairs"></i> SNIPER PRO</h2>
-                    <small style='color:#a1a1aa;'><i class="fa-solid fa-rotate"></i> Synced: 15 Mar, 05:59 PM IST</small>
-                </div>
-                <div style='display:flex; gap:8px;'>
-                    <button onclick='toggleFilters()' class='btn btn-primary'><i class="fa-solid fa-filter"></i> Filter</button>
-                    <button onclick='localStorage.clear(); location.reload();' class='btn' style='background:#ef4444;'><i class="fa-solid fa-power-off"></i></button>
-                </div>
+        
+        <div class="container">
+            <div class="controls">
+                <button class="filter-btn" onclick="toggleFilterPanel()">
+                    <i class="fas fa-filter"></i> Filters
+                </button>
+                <button class="filter-btn" onclick="toggleCalculator()">
+                    <i class="fas fa-calculator"></i> Calculator
+                </button>
             </div>
-
-            <div style='background:#18181b; padding:15px; border-radius:12px; border:1px solid #27272a; margin-bottom:15px;'>
-                <label style='font-size:11px; color:#a1a1aa; font-weight:bold; display:block; margin-bottom:8px;'><i class="fa-solid fa-wallet"></i> MASTER BANKROLL (₹)</label>
-                <input type='number' id='userBankroll' class='input-box' value='5000' style='margin-bottom:0;' oninput='saveBankroll()'>
-            </div>
-
-            <div style='display:flex; gap:5px; margin-bottom:20px; position:sticky; top:0; z-index:10; background:#09090b; padding-bottom:10px;'>
-                <div class='tab active' onclick='sw(0)' id='tabArb'>ARBS</div>
-                <div class='tab' onclick='sw(1)' id='tabEv'>EV</div>
-                <div class='tab' onclick='sw(2)'><i class="fa-solid fa-calculator"></i> CALC</div>
-                <div class='tab' onclick='sw(3)'><i class="fa-solid fa-key"></i> KEYS</div>
-            </div>
-
-            <div id='p0' class='pane active-pane'></div>
-            <div id='p1' class='pane'></div>
             
-            <div id='p2' class='pane'>
-                <div class='card'>
-                    <h3 style='margin-top:0; color:#06b6d4;'><i class="fa-solid fa-scale-balanced"></i> Smart Calculator</h3>
-                    <label style='font-size:10px; color:#aaa;'>Investment Amount</label>
-                    <input type='number' id='calcBank' class='input-box' placeholder='Investment Amount' oninput='runCalc()'>
-                    <label style='font-size:10px; color:#aaa;'>Odd 1</label>
-                    <input type='number' id='odd1' class='input-box' placeholder='Odd 1' oninput='runCalc()'>
-                    <label style='font-size:10px; color:#aaa;'>Odd 2</label>
-                    <input type='number' id='odd2' class='input-box' placeholder='Odd 2' oninput='runCalc()'>
-                    <label style='font-size:10px; color:#aaa;'>Odd 3 (Optional)</label>
-                    <input type='number' id='odd3' class='input-box' placeholder='Odd 3 (Optional)' oninput='runCalc()'>
-                    <div id='calcResult' style='margin-top:5px; padding:15px; background:#000; border-radius:8px; border:1px solid #222;'>Awaiting Input...</div>
+            <div class="filter-panel" id="filterPanel">
+                <span class="filter-close" onclick="toggleFilterPanel()">×</span>
+                <div class="filter-title">Filters</div>
+                
+                <div class="filter-group">
+                    <div class="filter-group-title">Sports</div>
+                    <div id="sportsFilter"></div>
+                </div>
+                
+                <div class="filter-group">
+                    <div class="filter-group-title">Bookmakers</div>
+                    <div id="bookmakersFilter"></div>
+                </div>
+                
+                <div class="filter-group">
+                    <div class="filter-group-title">Minimum Profit %</div>
+                    <div class="slider-container">
+                        <input type="range" min="0" max="10" value="0" class="slider" id="profitSlider" oninput="updateProfitValue()">
+                        <div class="slider-value" id="profitValue">0%</div>
+                    </div>
                 </div>
             </div>
-
-            <div id='p3' class='pane'><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #1 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>c5c5••••e127</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #2 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>4130••••e50b</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #3 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>dd73••••db34</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #4 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>5df6••••6bdf</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #5 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>0c68••••e8a2</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #6 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>2c49••••f3b0</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #7 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>0a51••••fc96</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #8 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>087f••••f22e</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #9 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>1727••••81db</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #10 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>baa5••••474c</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #11 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>a58d••••75ce</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #12 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>7513••••a79e</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #13 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>b148••••95d4</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>-10</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #06b6d4; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #14 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#06b6d4; border:1px solid #06b6d4;'>ACTIVE</span></div><div style='font-family:monospace; color:#fff;'>f633••••fc2c</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#06b6d4;'>354</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #15 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>4ed1••••93cf</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #16 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>d29c••••ac67</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #17 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>97f5••••0b1d</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #18 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>26f8••••9f6e</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div><div style='background:#18181b; border:1px solid #27272a; padding:15px; border-radius:8px; border-left:4px solid #3f3f46; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;'><div><div style='font-size:12px; color:#a1a1aa; margin-bottom:4px;'><i class='fa-solid fa-key'></i> KEY #19 <span style='background:#000; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:5px; color:#3f3f46; border:1px solid #3f3f46;'>IDLE</span></div><div style='font-family:monospace; color:#fff;'>2596••••e1c4</div></div><div style='text-align:right;'><div style='font-size:10px; color:#a1a1aa;'>CALLS</div><div style='font-size:20px; font-weight:bold; color:#3f3f46;'>??</div></div></div></div>
+            
+            <div class="calculator" id="calculator">
+                <span class="calculator-close" onclick="toggleCalculator()">×</span>
+                <div class="calculator-title">Arbitrage Calculator</div>
+                <input type="number" class="calc-input" id="odds1" placeholder="Odds 1" step="0.01">
+                <input type="number" class="calc-input" id="odds2" placeholder="Odds 2" step="0.01">
+                <input type="number" class="calc-input" id="odds3" placeholder="Odds 3 (optional)" step="0.01">
+                <button class="card-button" onclick="calculateArbitrage()" style="width: 100%; margin-top: 10px;">Calculate</button>
+                <div class="calc-result" id="calcResult" style="display: none;"></div>
+            </div>
+            
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('arbitrages')">
+                    <i class="fas fa-zap"></i> Arbitrages
+                </button>
+                <button class="tab" onclick="switchTab('valuebets')">
+                    <i class="fas fa-star"></i> Value Bets
+                </button>
+            </div>
+            
+            <div id="arbitrages" class="tab-content active">
+                <div class="cards-grid" id="arbitragesGrid"></div>
+            </div>
+            
+            <div id="valuebets" class="tab-content">
+                <div class="cards-grid" id="valuebetsGrid"></div>
+            </div>
         </div>
-
-        <script>
-            const EXPECTED_HASH = '2986aa2732ab10167c3c738108433d437ccfa4d8f7fc99f24aad4d0214ef5bf7';
-            const rawArbs = [{"match": "Islam Makhachev vs Kamaru Usman", "sport": "Mma Mixed Martial Arts", "raw_time": "2026-12-31T19:25:00Z", "time": "01 Jan | 12:55 AM", "pct": 7.429237429237434, "line": "H2H", "ways": 3, "margin": 0.9257076257076257, "sides": [{"sel": "Islam Makhachev", "pr": 1.32, "bk": "draftkings"}, {"sel": "Kamaru Usman", "pr": 6.5, "bk": "onexbet"}, {"sel": "Draw", "pr": 70.0, "bk": "onexbet"}]}, {"match": "Genk vs Sint Truiden", "sport": "Upcoming", "raw_time": "2026-03-15T12:30:00Z", "time": "15 Mar | 06:00 PM", "pct": 0.9661835748792202, "line": "TOTALS 2.5", "ways": 2, "margin": 0.9903381642512078, "sides": [{"sel": "Over", "pr": 1.8, "bk": "onexbet"}, {"sel": "Under", "pr": 2.3, "bk": "unibet"}]}];
-            const rawEvs = [{"match": "St Mirren vs Rangers", "sport": "Upcoming", "raw_time": "2026-03-15T12:00:00Z", "time": "15 Mar | 05:30 PM", "pct": 32.13107285191246, "line": "H2H", "ways": 3, "sel": "St Mirren", "odds": 9.0, "trueO": 6.811418242313723, "bk": "draftkings"}, {"match": "Bayern Munich vs Atalanta BC", "sport": "Football: Uefa Champs League", "raw_time": "2026-03-18T20:00:00Z", "time": "19 Mar | 01:30 AM", "pct": 21.844204439024306, "line": "H2H", "ways": 3, "sel": "Atalanta BC", "odds": 9.75, "trueO": 8.002021963120361, "bk": "onexbet"}, {"match": "Real Madrid vs Atl\u00e9tico Madrid", "sport": "Football: Spain La Liga", "raw_time": "2026-03-22T20:00:00Z", "time": "23 Mar | 01:30 AM", "pct": 10.755029286231599, "line": "H2H", "ways": 3, "sel": "Atl\u00e9tico Madrid", "odds": 3.98, "trueO": 3.593516272488377, "bk": "onexbet"}, {"match": "Barcelona vs Rayo Vallecano", "sport": "Football: Spain La Liga", "raw_time": "2026-03-22T13:00:00Z", "time": "22 Mar | 06:30 PM", "pct": 9.940157363968849, "line": "H2H", "ways": 3, "sel": "Rayo Vallecano", "odds": 11.9, "trueO": 10.824070371851258, "bk": "onexbet"}, {"match": "Liverpool vs Galatasaray", "sport": "Football: Uefa Champs League", "raw_time": "2026-03-18T20:00:00Z", "time": "19 Mar | 01:30 AM", "pct": 8.38828033606298, "line": "H2H", "ways": 3, "sel": "Galatasaray", "odds": 11.0, "trueO": 10.148698702381827, "bk": "unibet"}, {"match": "Movsar Evloev vs Lerone Murphy", "sport": "Mma Mixed Martial Arts", "raw_time": "2026-03-21T22:45:00Z", "time": "22 Mar | 04:15 AM", "pct": 7.158878504672894, "line": "H2H", "ways": 2, "sel": "Lerone Murphy", "odds": 3.12, "trueO": 2.9115646258503403, "bk": "onexbet"}, {"match": "Arka Gdynia vs Widzew \u0141\u00f3d\u017a", "sport": "Upcoming", "raw_time": "2026-03-15T11:15:00Z", "time": "15 Mar | 04:45 PM", "pct": 5.757891230115764, "line": "H2H", "ways": 3, "sel": "Widzew \u0141\u00f3d\u017a", "odds": 3.55, "trueO": 3.356723511322337, "bk": "draftkings"}, {"match": "Manchester City vs Real Madrid", "sport": "Football: Uefa Champs League", "raw_time": "2026-03-17T20:00:00Z", "time": "18 Mar | 01:30 AM", "pct": 5.493690011655006, "line": "H2H", "ways": 3, "sel": "Real Madrid", "odds": 5.5, "trueO": 5.213581968165448, "bk": "betmgm"}, {"match": "Chengdu Rongcheng FC vs Qingdao Hainiu FC", "sport": "Upcoming", "raw_time": "2026-03-15T11:35:00Z", "time": "15 Mar | 05:05 PM", "pct": 4.032266731490131, "line": "H2H", "ways": 3, "sel": "Draw", "odds": 3.3, "trueO": 3.1720927589873456, "bk": "fanduel"}, {"match": "CA Osasuna vs Girona", "sport": "Football: Spain La Liga", "raw_time": "2026-03-21T17:30:00Z", "time": "21 Mar | 11:00 PM", "pct": 3.3566585805809623, "line": "H2H", "ways": 3, "sel": "Girona", "odds": 3.4, "trueO": 3.2895800296690365, "bk": "unibet"}, {"match": "C\u00f3rdoba vs Real Sociedad B", "sport": "Upcoming", "raw_time": "2026-03-15T13:00:00Z", "time": "15 Mar | 06:30 PM", "pct": 2.8584021901752132, "line": "H2H", "ways": 3, "sel": "Real Sociedad B", "odds": 4.6, "trueO": 4.472167467170106, "bk": "unibet"}, {"match": "Barcelona vs Newcastle United", "sport": "Football: Uefa Champs League", "raw_time": "2026-03-18T17:45:00Z", "time": "18 Mar | 11:15 PM", "pct": 2.673731348695574, "line": "H2H", "ways": 3, "sel": "Newcastle United", "odds": 5.25, "trueO": 5.11328450913136, "bk": "unibet"}, {"match": "Arka Gdynia vs Widzew \u0141\u00f3d\u017a", "sport": "Upcoming", "raw_time": "2026-03-15T11:15:00Z", "time": "15 Mar | 04:45 PM", "pct": 2.5964020987756964, "line": "H2H", "ways": 3, "sel": "Arka Gdynia", "odds": 3.75, "trueO": 3.6550989345509897, "bk": "unibet"}, {"match": "Ilia Topuria vs Justin Gaethje", "sport": "Mma Mixed Martial Arts", "raw_time": "2026-06-15T03:00:00Z", "time": "15 Jun | 08:30 AM", "pct": 2.202472952086554, "line": "H2H", "ways": 2, "sel": "Ilia Topuria", "odds": 1.25, "trueO": 1.223062381852552, "bk": "onexbet"}, {"match": "Bo Nickal vs Kyle Daukaus", "sport": "Mma Mixed Martial Arts", "raw_time": "2026-06-15T01:00:00Z", "time": "15 Jun | 06:30 AM", "pct": 1.5524193548386966, "line": "H2H", "ways": 2, "sel": "Bo Nickal", "odds": 1.38, "trueO": 1.358904109589041, "bk": "draftkings"}, {"match": "Mauricio Ruffy vs Michael Chandler", "sport": "Mma Mixed Martial Arts", "raw_time": "2026-06-15T01:30:00Z", "time": "15 Jun | 07:00 AM", "pct": 1.2796486090776105, "line": "H2H", "ways": 2, "sel": "Mauricio Ruffy", "odds": 1.22, "trueO": 1.204585537918871, "bk": "draftkings"}, {"match": "Abdul-Kareem Al-Selwady vs Shem Rock", "sport": "Mma Mixed Martial Arts", "raw_time": "2026-03-21T16:00:00Z", "time": "21 Mar | 09:30 PM", "pct": 1.1439588688946012, "line": "H2H", "ways": 2, "sel": "Abdul-Kareem Al-Selwady", "odds": 1.83, "trueO": 1.8093023255813954, "bk": "betmgm"}, {"match": "FC Twente Enschede vs FC Utrecht", "sport": "Upcoming", "raw_time": "2026-03-15T11:17:00Z", "time": "15 Mar | 04:47 PM", "pct": 1.0640120234651773, "line": "H2H", "ways": 3, "sel": "FC Twente Enschede", "odds": 5.4, "trueO": 5.343148260081167, "bk": "fanduel"}, {"match": "Shanelle Dyer vs Ravena Oliveira", "sport": "Mma Mixed Martial Arts", "raw_time": "2026-03-21T16:00:00Z", "time": "21 Mar | 09:30 PM", "pct": 0.8266666666666644, "line": "H2H", "ways": 2, "sel": "Shanelle Dyer", "odds": 1.33, "trueO": 1.3190954773869348, "bk": "betway"}, {"match": "Villarreal vs Real Sociedad", "sport": "Football: Spain La Liga", "raw_time": "2026-03-20T20:00:00Z", "time": "21 Mar | 01:30 AM", "pct": 0.5754296626352406, "line": "H2H", "ways": 3, "sel": "Villarreal", "odds": 1.98, "trueO": 1.9686716791979952, "bk": "onexbet"}];
+    </div>
+    
+    <script>
+        // Embedded data
+        const ARBITRAGES = [];
+        const VALUE_BETS = [];
+        const PASSWORD_HASH = "2986aa2732ab10167c3c738108433d437ccfa4d8f7fc99f24aad4d0214ef5bf7";
+        
+        let filteredArbs = [...ARBITRAGES];
+        let filteredEvs = [...VALUE_BETS];
+        
+        function unlockDashboard() {
+            const password = document.getElementById('passwordInput').value;
+            const hash = CryptoJS.SHA256(password).toString();
             
-            let filteredArbs = [];
-            let filteredEvs = [];
-
-            // Sport Icon Mapper
-            function getSportIcon(sportName) {
-                let s = sportName.toLowerCase();
-                if(s.includes('soccer') || s.includes('football:')) return 'fa-futbol';
-                if(s.includes('basket')) return 'fa-basketball';
-                if(s.includes('tennis')) return 'fa-baseball'; // closest generic ball
-                if(s.includes('hockey')) return 'fa-hockey-puck';
-                if(s.includes('american')) return 'fa-football';
-                if(s.includes('cricket')) return 'fa-cricket-bat-ball';
-                return 'fa-trophy';
+            if (hash === PASSWORD_HASH) {
+                document.getElementById('lockScreen').style.display = 'none';
+                document.getElementById('dashboard').style.display = 'block';
+                initializeDashboard();
+            } else {
+                document.getElementById('lockError').style.display = 'block';
+                setTimeout(() => {
+                    document.getElementById('lockError').style.display = 'none';
+                }, 3000);
             }
-
-            function initFilters() {
-                const sportsMap = new Map();
-                const bookieMap = new Map();
-                
-                rawArbs.concat(rawEvs).forEach(item => {
-                    sportsMap.set(item.sport, (sportsMap.get(item.sport) || 0) + 1);
-                    if(item.sides) item.sides.forEach(s => bookieMap.set(s.bk, (bookieMap.get(s.bk) || 0) + 1));
-                    if(item.bk) bookieMap.set(item.bk, (bookieMap.get(item.bk) || 0) + 1);
-                });
-
-                let sHtml = "";
-                sportsMap.forEach((count, sport) => {
-                    sHtml += `<label class='cb-label'>
-                        <span><i class="fa-solid ${getSportIcon(sport)}" style="width:20px;"></i> ${sport}</span>
-                        <div><span class='count-pill'>${count}</span> <input type='checkbox' class='sport-cb' value='${sport}' checked></div>
-                    </label>`;
-                });
-                document.getElementById('sportFilters').innerHTML = sHtml || "<div style='color:#666; font-size:12px;'>No active sports</div>";
-
-                let bHtml = "";
-                bookieMap.forEach((count, bk) => {
-                    bHtml += `<label class='cb-label'>
-                        <span style='text-transform:capitalize;'><i class="fa-solid fa-building" style="width:20px;"></i> ${bk}</span>
-                        <div><span class='count-pill'>${count}</span> <input type='checkbox' class='bookie-cb' value='${bk}' checked></div>
-                    </label>`;
-                });
-                document.getElementById('bookieFilters').innerHTML = bHtml || "<div style='color:#666; font-size:12px;'>No active bookies</div>";
-                
-                applyFilters();
-            }
-
-            function toggleFilters() {
-                const panel = document.getElementById('filterPanel');
-                panel.classList.toggle('open');
-            }
-
-            function updateSliderVal() {
-                document.getElementById('sliderVal').innerText = document.getElementById('profitSlider').value + "%+";
-            }
-
-            function applyFilters() {
-                const minP = parseFloat(document.getElementById('profitSlider').value);
-                const selSports = Array.from(document.querySelectorAll('.sport-cb:checked')).map(cb => cb.value);
-                const selBookies = Array.from(document.querySelectorAll('.bookie-cb:checked')).map(cb => cb.value);
-
-                filteredArbs = rawArbs.filter(a => {
-                    if(a.pct < minP) return false;
-                    if(!selSports.includes(a.sport)) return false;
-                    // For an arb, ALL legs must be in selected bookies
-                    return a.sides.every(s => selBookies.includes(s.bk));
-                });
-
-                filteredEvs = rawEvs.filter(e => {
-                    if(e.pct < minP) return false;
-                    if(!selSports.includes(e.sport)) return false;
-                    return selBookies.includes(e.bk);
-                });
-
-                document.getElementById('tabArb').innerHTML = `ARBS (${filteredArbs.length})`;
-                document.getElementById('tabEv').innerHTML = `EV (${filteredEvs.length})`;
-                
-                toggleFilters(); // close panel
-                renderAll();
-            }
-
-            if(localStorage.getItem('savedBankroll')) {
-                document.getElementById('userBankroll').value = localStorage.getItem('savedBankroll');
-                document.getElementById('calcBank').value = localStorage.getItem('savedBankroll');
-            }
-
-            function saveBankroll() {
-                const val = document.getElementById('userBankroll').value;
-                localStorage.setItem('savedBankroll', val);
-                document.getElementById('calcBank').value = val;
-                renderAll(); runCalc();
-            }
-
-            function ck() { 
-                if(CryptoJS.SHA256(document.getElementById('ps').value).toString() === EXPECTED_HASH) { 
-                    document.getElementById('lock-screen').style.display='none'; 
-                    document.getElementById('content').style.display='block'; 
-                    localStorage.setItem('auth_hash', EXPECTED_HASH); 
-                    initFilters();
-                } else { document.getElementById('err').innerText = 'Access Denied'; }
+        }
+        
+        function initializeDashboard() {
+            updateStats();
+            buildFilters();
+            renderCards();
+            
+            // Allow Enter key to unlock
+            document.getElementById('passwordInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') unlockDashboard();
+            });
+        }
+        
+        function updateStats() {
+            document.getElementById('arbCount').textContent = ARBITRAGES.length;
+            document.getElementById('evCount').textContent = VALUE_BETS.length;
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = now.toLocaleTimeString('en-US', {hour: '2-digit', minute:'2-digit'});
+        }
+        
+        function buildFilters() {
+            const sports = new Set();
+            const bookmakers = new Set();
+            
+            ARBITRAGES.forEach(arb => {
+                sports.add(arb.sport);
+                if (arb.bookmakers) arb.bookmakers.forEach(b => bookmakers.add(b));
+            });
+            
+            VALUE_BETS.forEach(ev => {
+                sports.add(ev.sport);
+                bookmakers.add(ev.bookmaker);
+            });
+            
+            const sportsHtml = Array.from(sports).sort().map(sport => `
+                <div class="checkbox-item">
+                    <input type="checkbox" id="sport_${sport}" checked onchange="applyFilters()">
+                    <label for="sport_${sport}">${sport}</label>
+                </div>
+            `).join('');
+            
+            const bookmakersHtml = Array.from(bookmakers).sort().map(bm => `
+                <div class="checkbox-item">
+                    <input type="checkbox" id="bm_${bm}" checked onchange="applyFilters()">
+                    <label for="bm_${bm}">${bm}</label>
+                </div>
+            `).join('');
+            
+            document.getElementById('sportsFilter').innerHTML = sportsHtml;
+            document.getElementById('bookmakersFilter').innerHTML = bookmakersHtml;
+        }
+        
+        function applyFilters() {
+            const selectedSports = Array.from(document.querySelectorAll('#sportsFilter input:checked')).map(el => el.id.replace('sport_', ''));
+            const selectedBookmakers = Array.from(document.querySelectorAll('#bookmakersFilter input:checked')).map(el => el.id.replace('bm_', ''));
+            const minProfit = parseFloat(document.getElementById('profitSlider').value);
+            
+            filteredArbs = ARBITRAGES.filter(arb => 
+                selectedSports.includes(arb.sport) && 
+                arb.profit >= minProfit
+            );
+            
+            filteredEvs = VALUE_BETS.filter(ev => 
+                selectedSports.includes(ev.sport) && 
+                selectedBookmakers.includes(ev.bookmaker) &&
+                ev.ev >= minProfit
+            );
+            
+            renderCards();
+        }
+        
+        function updateProfitValue() {
+            const value = document.getElementById('profitSlider').value;
+            document.getElementById('profitValue').textContent = value + '%';
+            applyFilters();
+        }
+        
+        function renderCards() {
+            renderArbitrages();
+            renderValueBets();
+        }
+        
+        function renderArbitrages() {
+            const grid = document.getElementById('arbitragesGrid');
+            
+            if (filteredArbs.length === 0) {
+                grid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;"><i class="fas fa-inbox"></i><p>No arbitrage opportunities found</p></div>';
+                return;
             }
             
-            if(localStorage.getItem('auth_hash') === EXPECTED_HASH) { 
-                document.getElementById('lock-screen').style.display='none'; 
-                document.getElementById('content').style.display='block'; 
-                initFilters();
-            }
-
-            function sw(i) { document.querySelectorAll('.tab').forEach((t,j)=>j==i?t.classList.add('active'):t.classList.remove('active')); document.querySelectorAll('.pane').forEach((p,j)=>j==i?p.classList.add('active-pane') : p.classList.remove('active-pane')); window.scrollTo(0,0); }
-
-            function formatTimeDiff(iso) {
-                let d = new Date(iso) - new Date();
-                if(d < 0) return "LIVE NOW";
-                return `${Math.floor(d/3600000)}h ${Math.floor((d%3600000)/60000)}m`;
-            }
-
-            setInterval(() => {
-                document.querySelectorAll('.live-clock').forEach(el => el.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> ' + formatTimeDiff(el.dataset.iso));
-            }, 1000);
-
-            function copyText(txt) { navigator.clipboard.writeText(txt); alert("Copied: " + txt); }
-
-            function renderAll() {
-                const bank = parseFloat(document.getElementById('userBankroll').value) || 0;
+            grid.innerHTML = filteredArbs.map(arb => {
+                const stake = Math.round(100 / (1 + arb.profit / 100));
+                const roundedStake = Math.round(stake / 10) * 10;
                 
-                let arbHTML = "";
-                filteredArbs.forEach((a, i) => {
-                    let profit = (bank / a.margin) - bank;
-                    let pColor = profit > 0 ? '#10b981' : '#ef4444';
-                    let legs = "";
-                    
-                    a.sides.forEach(s => {
-                        let rawStk = (bank / a.margin) / s.pr;
-                        let roundedStk = Math.round(rawStk / 10) * 10; 
-                        legs += `<div style='display:flex; justify-content:space-between; align-items:center; background:#000; padding:10px; border-radius:6px; margin-top:6px; border:1px solid #222;'>
-                            <span>${s.sel} @ <b style='color:#f59e0b'>${s.pr}</b> <span class='bk-logo'><i class="fa-solid fa-building"></i> ${s.bk}</span></span>
-                            <div style='text-align:right;'><div style='color:#fff; font-weight:bold;'>₹${roundedStk}</div><div style='color:#666; font-size:9px;'>Ex: ₹${rawStk.toFixed(1)}</div></div>
-                        </div>`;
-                    });
-
-                    arbHTML += `<div class='card' style='border-left: 4px solid #f59e0b;'>
-                        <div style='display:flex; justify-content:space-between; align-items:center;'>
-                            <span class='badge' style='background:#f59e0b;'><i class="fa-solid fa-bolt"></i> ${a.pct.toFixed(2)}% ARB</span>
-                            <div style='display:flex; gap:5px;'>
-                                <button class='btn btn-primary' onclick='sendToCalc(${a.sides[0]?.pr || 0}, ${a.sides[1]?.pr || 0}, ${a.sides[2]?.pr || 0})'><i class="fa-solid fa-calculator"></i></button>
-                                <button class='btn' style='background:#3f3f46;' onclick='copyText("${a.match}")'><i class="fa-solid fa-copy"></i></button>
-                            </div>
+                return `
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">${arb.match}</div>
+                            <div class="card-badge">${arb.type}</div>
                         </div>
-                        <div style='font-size:16px; font-weight:bold; margin: 10px 0;'>${a.match}</div>
-                        <div style='display:flex; gap:10px; font-size:11px; margin-bottom:10px;'>
-                            <span style='background:#222; padding:4px 8px; border-radius:6px; display:flex; align-items:center; gap:4px;'><i class="fa-solid fa-calendar-days"></i> ${a.time}</span>
-                            <span class='live-clock clock' data-iso='${a.raw_time}'></span>
+                        <div class="card-profit">${arb.profit.toFixed(2)}%</div>
+                        <div class="card-details">
+                            <strong>Sport:</strong> ${arb.sport}<br>
+                            <strong>Market:</strong> ${arb.market}<br>
+                            <strong>Odds:</strong> ${arb.odds.map(o => o.toFixed(2)).join(' / ')}
                         </div>
-                        <div style='font-size:12px; color:#06b6d4; font-weight:bold; margin-bottom:5px;'><i class="fa-solid ${getSportIcon(a.sport)}"></i> ${a.sport} <span style='color:#aaa; font-weight:normal;'>| ${a.line} (${a.ways}-Way)</span></div>
-                        ${legs}
-                        <div style='text-align:right; font-weight:bold; color:${pColor}; margin-top:12px; font-size:18px;'>Profit: ₹${profit.toFixed(0)}</div>
-                    </div>`;
-                });
-                document.getElementById('p0').innerHTML = arbHTML || "<div style='padding:40px 20px; text-align:center; color:#666;'><i class='fa-solid fa-ghost fa-2x' style='margin-bottom:10px;'></i><br>No Matches pass your current filters.</div>";
-
-                let evHTML = "";
-                filteredEvs.forEach((e, i) => {
-                    let b = e.odds - 1; let p = 1 / e.trueO;
-                    let kelly = ((b * p - (1-p)) / b) * 0.30;
-                    let rawStk = Math.min(Math.max(20, bank * Math.min(kelly, 0.05)), 1000);
-                    let roundedStk = Math.round(rawStk / 10) * 10;
-                    
-                    evHTML += `<div class='card' style='border-left: 4px solid #06b6d4;'>
-                        <div style='display:flex; justify-content:space-between; align-items:center;'>
-                            <span class='badge' style='background:#06b6d4;'><i class="fa-solid fa-chart-line"></i> ${e.pct.toFixed(2)}% EV</span>
-                            <div style='display:flex; gap:5px; align-items:center;'>
-                                <span class='live-clock clock' data-iso='${e.raw_time}'></span>
-                                <button class='btn' style='background:#3f3f46;' onclick='copyText("${e.match}")'><i class="fa-solid fa-copy"></i></button>
-                            </div>
+                        <div class="card-stake">
+                            <small>Exact Stake: ₹${stake.toFixed(0)}</small>
+                            <div class="card-stake-bold">₹${roundedStake}</div>
                         </div>
-                        <div style='font-size:16px; font-weight:bold; margin: 10px 0;'>${e.match}</div>
-                        <div style='font-size:11px; color:#06b6d4; font-weight:bold; margin-bottom:8px;'><i class="fa-solid ${getSportIcon(e.sport)}"></i> ${e.sport} <span style='color:#aaa; font-weight:normal;'>| ${e.line}</span></div>
-                        <div style='background:#000; padding:12px; border-radius:6px; border:1px solid #222;'>Bet <b>${e.sel.toUpperCase()}</b> @ <b style='color:#06b6d4;'>${e.odds}</b> <span class='bk-logo' style='float:right;'><i class="fa-solid fa-building"></i> ${e.bk}</span></div>
-                        <div style='display:flex; justify-content:space-between; align-items:center; margin-top:10px;'>
-                            <div><div style='color:#fff; font-weight:bold;'>Stake: ₹${roundedStk}</div><div style='color:#666; font-size:9px;'>Exact: ₹${rawStk.toFixed(2)}</div></div>
-                            <span style='color:#444; font-size:11px;'>True Odd: ${e.trueO.toFixed(3)}</span>
+                        <div class="card-buttons">
+                            <button class="card-button" onclick="copyToCalc(${arb.odds.join(', ')})">Calc</button>
+                            <button class="card-button" onclick="copyToClipboard('${arb.match}')">Copy</button>
                         </div>
-                    </div>`;
-                });
-                document.getElementById('p1').innerHTML = evHTML || "<div style='padding:40px 20px; text-align:center; color:#666;'><i class='fa-solid fa-ghost fa-2x' style='margin-bottom:10px;'></i><br>No Matches pass your current filters.</div>";
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function renderValueBets() {
+            const grid = document.getElementById('valuebetsGrid');
+            
+            if (filteredEvs.length === 0) {
+                grid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;"><i class="fas fa-inbox"></i><p>No value bets found</p></div>';
+                return;
             }
-
-            function sendToCalc(o1, o2, o3) { sw(2); document.getElementById('odd1').value = o1; document.getElementById('odd2').value = o2; document.getElementById('odd3').value = o3 > 0 ? o3 : ""; runCalc(); }
-
-            function runCalc() {
-                const b = parseFloat(document.getElementById('calcBank').value) || 0;
-                const o1 = parseFloat(document.getElementById('odd1').value) || 0;
-                const o2 = parseFloat(document.getElementById('odd2').value) || 0;
-                const o3 = parseFloat(document.getElementById('odd3').value) || 0;
+            
+            grid.innerHTML = filteredEvs.map(ev => {
+                const roundedStake = Math.round(ev.kelly_stake / 10) * 10;
                 
-                if(o1 > 0 && o2 > 0) {
-                    let invSum = (1/o1) + (1/o2) + (o3 > 0 ? (1/o3) : 0);
-                    let pct = (1 - invSum) * 100;
-                    let stk1 = (b/invSum) / o1;
-                    let stk2 = (b/invSum) / o2;
-                    let stk3 = o3 > 0 ? ((b/invSum) / o3) : 0;
-                    let prof = (b/invSum) - b;
-                    let color = prof > 0 ? '#10b981' : '#ef4444';
-                    
-                    let resultHTML = `<div style='display:flex; justify-content:space-between; margin-bottom:8px; color:#ccc;'><span>Leg 1 Exact:</span><b style='color:#fff;'>₹${stk1.toFixed(2)}</b></div><div style='display:flex; justify-content:space-between; margin-bottom:10px; color:#ccc;'><span>Leg 2 Exact:</span><b style='color:#fff;'>₹${stk2.toFixed(2)}</b></div>`;
-                    if(o3 > 0) resultHTML += `<div style='display:flex; justify-content:space-between; margin-bottom:10px; color:#ccc;'><span>Leg 3 Exact:</span><b style='color:#fff;'>₹${stk3.toFixed(2)}</b></div>`;
-                    resultHTML += `<hr style='border:none; border-top:1px solid #333; margin:15px 0;'><div style='display:flex; justify-content:space-between; margin-bottom:8px; color:${color};'><span>Arbitrage %:</span><b style='font-size:16px;'>${pct.toFixed(2)}%</b></div><div style='display:flex; justify-content:space-between; color:${color}; align-items:center;'><span>Profit:</span><b style='font-size:24px;'>₹${prof.toFixed(0)}</b></div>`;
-                    document.getElementById('calcResult').innerHTML = resultHTML;
-                } else { document.getElementById('calcResult').innerHTML = "Awaiting valid odds input..."; }
+                return `
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">${ev.match}</div>
+                            <div class="card-badge">${ev.outcome}</div>
+                        </div>
+                        <div class="card-profit">+${ev.ev.toFixed(2)}%</div>
+                        <div class="card-details">
+                            <strong>Sport:</strong> ${ev.sport}<br>
+                            <strong>Bookmaker:</strong> ${ev.bookmaker}<br>
+                            <strong>Odds:</strong> ${ev.odds.toFixed(2)} (True: ${ev.true_odds.toFixed(2)})
+                        </div>
+                        <div class="card-stake">
+                            <small>Kelly Stake: ₹${ev.kelly_stake.toFixed(0)}</small>
+                            <div class="card-stake-bold">₹${roundedStake}</div>
+                        </div>
+                        <div class="card-buttons">
+                            <button class="card-button" onclick="copyToCalc(${ev.odds})">Calc</button>
+                            <button class="card-button" onclick="copyToClipboard('${ev.match}')">Copy</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function toggleFilterPanel() {
+            document.getElementById('filterPanel').classList.toggle('active');
+        }
+        
+        function toggleCalculator() {
+            document.getElementById('calculator').classList.toggle('active');
+        }
+        
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            event.target.closest('.tab').classList.add('active');
+            document.getElementById(tab).classList.add('active');
+        }
+        
+        function copyToCalc(...odds) {
+            const inputs = document.querySelectorAll('.calc-input');
+            odds.forEach((odd, i) => {
+                if (inputs[i]) inputs[i].value = odd;
+            });
+            toggleCalculator();
+        }
+        
+        function calculateArbitrage() {
+            const odds1 = parseFloat(document.getElementById('odds1').value);
+            const odds2 = parseFloat(document.getElementById('odds2').value);
+            const odds3 = parseFloat(document.getElementById('odds3').value) || 0;
+            
+            if (!odds1 || !odds2) {
+                alert('Please enter at least 2 odds');
+                return;
             }
-        </script>
-    </body></html>
+            
+            let totalProb, profit;
+            
+            if (odds3 > 0) {
+                totalProb = (1/odds1) + (1/odds2) + (1/odds3);
+            } else {
+                totalProb = (1/odds1) + (1/odds2);
+            }
+            
+            if (totalProb < 1) {
+                profit = ((1 / totalProb) - 1) * 100;
+                document.getElementById('calcResult').innerHTML = `<strong>✓ Arbitrage Found!</strong><br>Profit: ${profit.toFixed(2)}%`;
+            } else {
+                profit = (1 - totalProb) * 100;
+                document.getElementById('calcResult').innerHTML = `<strong>✗ No Arbitrage</strong><br>Margin: ${profit.toFixed(2)}%`;
+            }
+            
+            document.getElementById('calcResult').style.display = 'block';
+        }
+        
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied: ' + text);
+            });
+        }
+    </script>
+</body>
+</html>
