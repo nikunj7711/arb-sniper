@@ -49,13 +49,16 @@ REGIONS  = "eu,uk,us,au"
 
 # ─── State Management ──────────────────────────────────────────────────────────
 def load_state():
+    defaults = {"remaining_requests": 500, "used_today": 0, "last_reset": str(datetime.utcnow().date())}
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE) as f:
-                return json.load(f)
+                saved = json.load(f)
+            if isinstance(saved, dict):
+                defaults.update(saved)   # saved values win, but defaults fill any missing keys
         except Exception:
             pass
-    return {"remaining_requests": 500, "used_today": 0, "last_reset": str(datetime.utcnow().date())}
+    return defaults
 
 def save_state(state):
     with open(STATE_FILE, "w") as f:
