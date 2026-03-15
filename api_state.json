@@ -1,8 +1,10 @@
 {
-  "last_run": "2026-03-15T13:56:44.656318+00:00",
-  "api_requests_remaining": 500,
-  "api_requests_used": 0,
-  "last_error": null,
+  "last_run": "2026-03-15T14:01:38.143574+00:00",
+  "api_requests_remaining": 161,
+  "api_requests_used": 339,
+  "active_index": 15,
+  "stats": {},
   "arbs_found": 0,
-  "evs_found": 0
+  "evs_found": 0,
+  "last_error": null
 }

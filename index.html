@@ -7,544 +7,72 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            color: #e2e8f0;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-        
-        .lock-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
-            backdrop-filter: blur(10px);
-        }
-        
-        .lock-container {
-            background: rgba(30, 41, 59, 0.9);
-            border: 1px solid rgba(148, 163, 184, 0.2);
-            border-radius: 12px;
-            padding: 40px;
-            width: 100%;
-            max-width: 400px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(10px);
-        }
-        
-        .lock-icon {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        
-        .lock-icon i {
-            font-size: 48px;
-            color: #60a5fa;
-        }
-        
-        .lock-title {
-            text-align: center;
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: #f1f5f9;
-        }
-        
-        .lock-subtitle {
-            text-align: center;
-            font-size: 14px;
-            color: #94a3b8;
-            margin-bottom: 30px;
-        }
-        
-        .lock-input {
-            width: 100%;
-            padding: 12px 16px;
-            background: rgba(15, 23, 42, 0.8);
-            border: 1px solid rgba(148, 163, 184, 0.3);
-            border-radius: 8px;
-            color: #e2e8f0;
-            font-size: 16px;
-            margin-bottom: 20px;
-            transition: all 0.3s ease;
-        }
-        
-        .lock-input:focus {
-            outline: none;
-            border-color: #60a5fa;
-            box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
-        }
-        
-        .lock-button {
-            width: 100%;
-            padding: 12px;
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-            border: none;
-            border-radius: 8px;
-            color: white;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        
-        .lock-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
-        }
-        
-        .lock-button:active {
-            transform: translateY(0);
-        }
-        
-        .lock-error {
-            color: #ef4444;
-            font-size: 12px;
-            margin-top: 10px;
-            text-align: center;
-            display: none;
-        }
-        
-        .dashboard {
-            display: none;
-        }
-        
-        .header {
-            background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%);
-            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-            padding: 20px;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            backdrop-filter: blur(10px);
-        }
-        
-        .header-content {
-            max-width: 1400px;
-            margin: 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .header-title {
-            font-size: 28px;
-            font-weight: bold;
-            color: #f1f5f9;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        
-        .header-title i {
-            color: #60a5fa;
-        }
-        
-        .header-stats {
-            display: flex;
-            gap: 30px;
-            align-items: center;
-        }
-        
-        .stat {
-            text-align: right;
-        }
-        
-        .stat-label {
-            font-size: 12px;
-            color: #94a3b8;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .stat-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #60a5fa;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 30px 20px;
-        }
-        
-        .controls {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 30px;
-            flex-wrap: wrap;
-        }
-        
-        .filter-btn {
-            padding: 10px 20px;
-            background: rgba(59, 130, 246, 0.2);
-            border: 1px solid rgba(59, 130, 246, 0.5);
-            border-radius: 8px;
-            color: #60a5fa;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 600;
-        }
-        
-        .filter-btn:hover {
-            background: rgba(59, 130, 246, 0.3);
-        }
-        
-        .filter-panel {
-            display: none;
-            position: fixed;
-            left: 0;
-            top: 0;
-            width: 300px;
-            height: 100vh;
-            background: rgba(15, 23, 42, 0.98);
-            border-right: 1px solid rgba(148, 163, 184, 0.2);
-            padding: 20px;
-            overflow-y: auto;
-            z-index: 200;
-            backdrop-filter: blur(10px);
-        }
-        
-        .filter-panel.active {
-            display: block;
-        }
-        
-        .filter-close {
-            float: right;
-            cursor: pointer;
-            color: #94a3b8;
-            font-size: 24px;
-        }
-        
-        .filter-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 20px;
-            clear: both;
-            color: #f1f5f9;
-        }
-        
-        .filter-group {
-            margin-bottom: 25px;
-        }
-        
-        .filter-group-title {
-            font-size: 12px;
-            color: #94a3b8;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 10px;
-            font-weight: 600;
-        }
-        
-        .checkbox-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 8px;
-            cursor: pointer;
-        }
-        
-        .checkbox-item input {
-            margin-right: 10px;
-            cursor: pointer;
-            accent-color: #60a5fa;
-        }
-        
-        .checkbox-item label {
-            cursor: pointer;
-            flex: 1;
-        }
-        
-        .slider-container {
-            margin-top: 15px;
-        }
-        
-        .slider {
-            width: 100%;
-            height: 6px;
-            border-radius: 3px;
-            background: rgba(148, 163, 184, 0.2);
-            outline: none;
-            -webkit-appearance: none;
-        }
-        
-        .slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            background: #60a5fa;
-            cursor: pointer;
-            box-shadow: 0 0 10px rgba(96, 165, 250, 0.3);
-        }
-        
-        .slider::-moz-range-thumb {
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            background: #60a5fa;
-            cursor: pointer;
-            border: none;
-            box-shadow: 0 0 10px rgba(96, 165, 250, 0.3);
-        }
-        
-        .slider-value {
-            text-align: center;
-            margin-top: 8px;
-            color: #60a5fa;
-            font-weight: 600;
-        }
-        
-        .tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 30px;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-        }
-        
-        .tab {
-            padding: 12px 20px;
-            background: none;
-            border: none;
-            color: #94a3b8;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            border-bottom: 3px solid transparent;
-            transition: all 0.3s ease;
-        }
-        
-        .tab.active {
-            color: #60a5fa;
-            border-bottom-color: #60a5fa;
-        }
-        
-        .tab-content {
-            display: none;
-        }
-        
-        .tab-content.active {
-            display: block;
-        }
-        
-        .cards-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 20px;
-        }
-        
-        .card {
-            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.8) 100%);
-            border: 1px solid rgba(148, 163, 184, 0.2);
-            border-radius: 12px;
-            padding: 20px;
-            transition: all 0.3s ease;
-            cursor: pointer;
-        }
-        
-        .card:hover {
-            transform: translateY(-5px);
-            border-color: rgba(96, 165, 250, 0.5);
-            box-shadow: 0 10px 30px rgba(96, 165, 250, 0.1);
-        }
-        
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: start;
-            margin-bottom: 15px;
-        }
-        
-        .card-title {
-            font-size: 16px;
-            font-weight: bold;
-            color: #f1f5f9;
-            flex: 1;
-        }
-        
-        .card-badge {
-            background: rgba(96, 165, 250, 0.2);
-            color: #60a5fa;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            white-space: nowrap;
-        }
-        
-        .card-profit {
-            font-size: 28px;
-            font-weight: bold;
-            color: #10b981;
-            margin-bottom: 15px;
-        }
-        
-        .card-details {
-            font-size: 13px;
-            color: #cbd5e1;
-            margin-bottom: 12px;
-            line-height: 1.6;
-        }
-        
-        .card-stake {
-            font-size: 11px;
-            color: #64748b;
-            margin-bottom: 12px;
-        }
-        
-        .card-stake-bold {
-            font-size: 18px;
-            font-weight: bold;
-            color: #60a5fa;
-            margin-top: 5px;
-        }
-        
-        .card-buttons {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-        }
-        
-        .card-button {
-            flex: 1;
-            padding: 8px 12px;
-            background: rgba(59, 130, 246, 0.2);
-            border: 1px solid rgba(59, 130, 246, 0.5);
-            border-radius: 6px;
-            color: #60a5fa;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-            transition: all 0.3s ease;
-        }
-        
-        .card-button:hover {
-            background: rgba(59, 130, 246, 0.3);
-        }
-        
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: #94a3b8;
-        }
-        
-        .empty-state i {
-            font-size: 48px;
-            margin-bottom: 20px;
-            opacity: 0.5;
-        }
-        
-        .empty-state p {
-            font-size: 16px;
-        }
-        
-        .calculator {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%);
-            border: 1px solid rgba(148, 163, 184, 0.2);
-            border-radius: 12px;
-            padding: 20px;
-            width: 350px;
-            max-height: 500px;
-            overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-            display: none;
-            z-index: 300;
-            backdrop-filter: blur(10px);
-        }
-        
-        .calculator.active {
-            display: block;
-        }
-        
-        .calculator-close {
-            float: right;
-            cursor: pointer;
-            color: #94a3b8;
-            font-size: 20px;
-        }
-        
-        .calculator-title {
-            font-size: 16px;
-            font-weight: bold;
-            margin-bottom: 15px;
-            clear: both;
-            color: #f1f5f9;
-        }
-        
-        .calc-input {
-            width: 100%;
-            padding: 10px;
-            background: rgba(15, 23, 42, 0.8);
-            border: 1px solid rgba(148, 163, 184, 0.3);
-            border-radius: 6px;
-            color: #e2e8f0;
-            margin-bottom: 10px;
-            font-size: 14px;
-        }
-        
-        .calc-result {
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px solid rgba(16, 185, 129, 0.3);
-            border-radius: 6px;
-            padding: 12px;
-            margin-top: 15px;
-            color: #10b981;
-            font-weight: 600;
-            text-align: center;
-        }
-        
-        @media (max-width: 768px) {
-            .header-content {
-                flex-direction: column;
-                gap: 15px;
-            }
-            
-            .header-stats {
-                width: 100%;
-                justify-content: space-around;
-            }
-            
-            .cards-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .calculator {
-                width: calc(100% - 40px);
-                right: 20px;
-                bottom: 20px;
-            }
-            
-            .filter-panel {
-                width: 250px;
-            }
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #e2e8f0; min-height: 100vh; overflow-x: hidden; }
+        .lock-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); display: flex; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(10px); }
+        .lock-container { background: rgba(30, 41, 59, 0.9); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; padding: 40px; width: 100%; max-width: 400px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); backdrop-filter: blur(10px); }
+        .lock-icon { text-align: center; margin-bottom: 30px; }
+        .lock-icon i { font-size: 48px; color: #60a5fa; }
+        .lock-title { text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #f1f5f9; }
+        .lock-subtitle { text-align: center; font-size: 14px; color: #94a3b8; margin-bottom: 30px; }
+        .lock-input { width: 100%; padding: 12px 16px; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 8px; color: #e2e8f0; font-size: 16px; margin-bottom: 20px; transition: all 0.3s ease; }
+        .lock-input:focus { outline: none; border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1); }
+        .lock-button { width: 100%; padding: 12px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border: none; border-radius: 8px; color: white; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; }
+        .lock-button:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3); }
+        .lock-error { color: #ef4444; font-size: 12px; margin-top: 10px; text-align: center; display: none; }
+        .dashboard { display: none; }
+        .header { background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%); border-bottom: 1px solid rgba(148, 163, 184, 0.2); padding: 20px; position: sticky; top: 0; z-index: 100; backdrop-filter: blur(10px); }
+        .header-content { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
+        .header-title { font-size: 28px; font-weight: bold; color: #f1f5f9; display: flex; align-items: center; gap: 12px; }
+        .header-title i { color: #60a5fa; }
+        .header-stats { display: flex; gap: 30px; align-items: center; }
+        .stat { text-align: right; }
+        .stat-label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #60a5fa; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 30px 20px; }
+        .controls { display: flex; gap: 20px; margin-bottom: 30px; flex-wrap: wrap; }
+        .filter-btn { padding: 10px 20px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.5); border-radius: 8px; color: #60a5fa; cursor: pointer; transition: all 0.3s ease; font-weight: 600; }
+        .filter-panel { display: none; position: fixed; left: 0; top: 0; width: 300px; height: 100vh; background: rgba(15, 23, 42, 0.98); border-right: 1px solid rgba(148, 163, 184, 0.2); padding: 20px; overflow-y: auto; z-index: 200; backdrop-filter: blur(10px); }
+        .filter-panel.active { display: block; }
+        .filter-close { float: right; cursor: pointer; color: #94a3b8; font-size: 24px; }
+        .filter-title { font-size: 18px; font-weight: bold; margin-bottom: 20px; clear: both; color: #f1f5f9; }
+        .filter-group { margin-bottom: 25px; }
+        .filter-group-title { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; font-weight: 600; }
+        .checkbox-item { display: flex; align-items: center; margin-bottom: 8px; cursor: pointer; }
+        .checkbox-item input { margin-right: 10px; cursor: pointer; accent-color: #60a5fa; }
+        .slider-container { margin-top: 15px; }
+        .slider { width: 100%; height: 6px; border-radius: 3px; background: rgba(148, 163, 184, 0.2); outline: none; -webkit-appearance: none; }
+        .slider::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #60a5fa; cursor: pointer; }
+        .slider-value { text-align: center; margin-top: 8px; color: #60a5fa; font-weight: 600; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 30px; border-bottom: 1px solid rgba(148, 163, 184, 0.2); }
+        .tab { padding: 12px 20px; background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px; font-weight: 600; border-bottom: 3px solid transparent; transition: all 0.3s ease; }
+        .tab.active { color: #60a5fa; border-bottom-color: #60a5fa; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
+        .card { background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.8) 100%); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; padding: 20px; transition: all 0.3s ease; cursor: pointer; }
+        .card:hover { transform: translateY(-5px); border-color: rgba(96, 165, 250, 0.5); box-shadow: 0 10px 30px rgba(96, 165, 250, 0.1); }
+        .card-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px; }
+        .card-title { font-size: 16px; font-weight: bold; color: #f1f5f9; flex: 1; }
+        .card-badge { background: rgba(96, 165, 250, 0.2); color: #60a5fa; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+        .card-profit { font-size: 28px; font-weight: bold; color: #10b981; margin-bottom: 15px; }
+        .card-details { font-size: 13px; color: #cbd5e1; margin-bottom: 12px; line-height: 1.6; }
+        .card-stake { font-size: 11px; color: #64748b; margin-bottom: 12px; }
+        .card-stake-bold { font-size: 18px; font-weight: bold; color: #60a5fa; margin-top: 5px; }
+        .card-buttons { display: flex; gap: 10px; margin-top: 15px; }
+        .card-button { flex: 1; padding: 8px 12px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.5); border-radius: 6px; color: #60a5fa; cursor: pointer; font-size: 12px; font-weight: 600; }
+        .empty-state { text-align: center; padding: 60px 20px; color: #94a3b8; }
+        .calculator { position: fixed; bottom: 30px; right: 30px; background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; padding: 20px; width: 350px; display: none; z-index: 300; backdrop-filter: blur(10px); }
+        .calculator.active { display: block; }
+        .calculator-close { float: right; cursor: pointer; color: #94a3b8; font-size: 20px; }
+        .calc-input { width: 100%; padding: 10px; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 6px; color: #e2e8f0; margin-bottom: 10px; }
+        .calc-result { background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 12px; margin-top: 15px; color: #10b981; font-weight: 600; text-align: center; }
     </style>
 </head>
 <body>
     <div class="lock-screen" id="lockScreen">
         <div class="lock-container">
-            <div class="lock-icon">
-                <i class="fas fa-lock"></i>
-            </div>
+            <div class="lock-icon"><i class="fas fa-lock"></i></div>
             <div class="lock-title">Secure Access</div>
             <div class="lock-subtitle">Enter password to view dashboard</div>
             <input type="password" class="lock-input" id="passwordInput" placeholder="Password">
@@ -556,51 +84,26 @@
     <div class="dashboard" id="dashboard">
         <div class="header">
             <div class="header-content">
-                <div class="header-title">
-                    <i class="fas fa-chart-line"></i>
-                    Arbitrage Scanner
-                </div>
+                <div class="header-title"><i class="fas fa-chart-line"></i> Arbitrage Scanner</div>
                 <div class="header-stats">
-                    <div class="stat">
-                        <div class="stat-label">Arbitrages</div>
-                        <div class="stat-value" id="arbCount">0</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-label">Value Bets</div>
-                        <div class="stat-value" id="evCount">0</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-label">Last Update</div>
-                        <div class="stat-value" id="lastUpdate">--:--</div>
-                    </div>
+                    <div class="stat"><div class="stat-label">Arbitrages</div><div class="stat-value" id="arbCount">0</div></div>
+                    <div class="stat"><div class="stat-label">Value Bets</div><div class="stat-value" id="evCount">0</div></div>
+                    <div class="stat"><div class="stat-label">Last Update</div><div class="stat-value" id="lastUpdate">--:--</div></div>
                 </div>
             </div>
         </div>
         
         <div class="container">
             <div class="controls">
-                <button class="filter-btn" onclick="toggleFilterPanel()">
-                    <i class="fas fa-filter"></i> Filters
-                </button>
-                <button class="filter-btn" onclick="toggleCalculator()">
-                    <i class="fas fa-calculator"></i> Calculator
-                </button>
+                <button class="filter-btn" onclick="toggleFilterPanel()"><i class="fas fa-filter"></i> Filters</button>
+                <button class="filter-btn" onclick="toggleCalculator()"><i class="fas fa-calculator"></i> Calculator</button>
             </div>
             
             <div class="filter-panel" id="filterPanel">
                 <span class="filter-close" onclick="toggleFilterPanel()">×</span>
                 <div class="filter-title">Filters</div>
-                
-                <div class="filter-group">
-                    <div class="filter-group-title">Sports</div>
-                    <div id="sportsFilter"></div>
-                </div>
-                
-                <div class="filter-group">
-                    <div class="filter-group-title">Bookmakers</div>
-                    <div id="bookmakersFilter"></div>
-                </div>
-                
+                <div class="filter-group"><div class="filter-group-title">Sports</div><div id="sportsFilter"></div></div>
+                <div class="filter-group"><div class="filter-group-title">Bookmakers</div><div id="bookmakersFilter"></div></div>
                 <div class="filter-group">
                     <div class="filter-group-title">Minimum Profit %</div>
                     <div class="slider-container">
@@ -621,26 +124,16 @@
             </div>
             
             <div class="tabs">
-                <button class="tab active" onclick="switchTab('arbitrages')">
-                    <i class="fas fa-zap"></i> Arbitrages
-                </button>
-                <button class="tab" onclick="switchTab('valuebets')">
-                    <i class="fas fa-star"></i> Value Bets
-                </button>
+                <button class="tab active" onclick="switchTab('arbitrages')"><i class="fas fa-zap"></i> Arbitrages</button>
+                <button class="tab" onclick="switchTab('valuebets')"><i class="fas fa-star"></i> Value Bets</button>
             </div>
             
-            <div id="arbitrages" class="tab-content active">
-                <div class="cards-grid" id="arbitragesGrid"></div>
-            </div>
-            
-            <div id="valuebets" class="tab-content">
-                <div class="cards-grid" id="valuebetsGrid"></div>
-            </div>
+            <div id="arbitrages" class="tab-content active"><div class="cards-grid" id="arbitragesGrid"></div></div>
+            <div id="valuebets" class="tab-content"><div class="cards-grid" id="valuebetsGrid"></div></div>
         </div>
     </div>
     
     <script>
-        // Embedded data
         const ARBITRAGES = [];
         const VALUE_BETS = [];
         const PASSWORD_HASH = "2986aa2732ab10167c3c738108433d437ccfa4d8f7fc99f24aad4d0214ef5bf7";
@@ -651,67 +144,39 @@
         function unlockDashboard() {
             const password = document.getElementById('passwordInput').value;
             const hash = CryptoJS.SHA256(password).toString();
-            
             if (hash === PASSWORD_HASH) {
                 document.getElementById('lockScreen').style.display = 'none';
                 document.getElementById('dashboard').style.display = 'block';
                 initializeDashboard();
             } else {
                 document.getElementById('lockError').style.display = 'block';
-                setTimeout(() => {
-                    document.getElementById('lockError').style.display = 'none';
-                }, 3000);
+                setTimeout(() => document.getElementById('lockError').style.display = 'none', 3000);
             }
         }
         
         function initializeDashboard() {
-            updateStats();
-            buildFilters();
-            renderCards();
-            
-            // Allow Enter key to unlock
-            document.getElementById('passwordInput').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') unlockDashboard();
-            });
+            updateStats(); buildFilters(); renderCards();
+            document.getElementById('passwordInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') unlockDashboard(); });
         }
         
         function updateStats() {
             document.getElementById('arbCount').textContent = ARBITRAGES.length;
             document.getElementById('evCount').textContent = VALUE_BETS.length;
-            const now = new Date();
-            document.getElementById('lastUpdate').textContent = now.toLocaleTimeString('en-US', {hour: '2-digit', minute:'2-digit'});
+            document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('en-US', {hour: '2-digit', minute:'2-digit'});
         }
         
         function buildFilters() {
-            const sports = new Set();
-            const bookmakers = new Set();
+            const sports = new Set(); const bookmakers = new Set();
+            ARBITRAGES.forEach(arb => { sports.add(arb.sport); if (arb.bookmakers) arb.bookmakers.forEach(b => bookmakers.add(b)); });
+            VALUE_BETS.forEach(ev => { sports.add(ev.sport); bookmakers.add(ev.bookmaker); });
             
-            ARBITRAGES.forEach(arb => {
-                sports.add(arb.sport);
-                if (arb.bookmakers) arb.bookmakers.forEach(b => bookmakers.add(b));
-            });
-            
-            VALUE_BETS.forEach(ev => {
-                sports.add(ev.sport);
-                bookmakers.add(ev.bookmaker);
-            });
-            
-            const sportsHtml = Array.from(sports).sort().map(sport => `
-                <div class="checkbox-item">
-                    <input type="checkbox" id="sport_${sport}" checked onchange="applyFilters()">
-                    <label for="sport_${sport}">${sport}</label>
-                </div>
+            document.getElementById('sportsFilter').innerHTML = Array.from(sports).sort().map(sport => `
+                <div class="checkbox-item"><input type="checkbox" id="sport_${sport}" checked onchange="applyFilters()"><label for="sport_${sport}">${sport}</label></div>
             `).join('');
             
-            const bookmakersHtml = Array.from(bookmakers).sort().map(bm => `
-                <div class="checkbox-item">
-                    <input type="checkbox" id="bm_${bm}" checked onchange="applyFilters()">
-                    <label for="bm_${bm}">${bm}</label>
-                </div>
+            document.getElementById('bookmakersFilter').innerHTML = Array.from(bookmakers).sort().map(bm => `
+                <div class="checkbox-item"><input type="checkbox" id="bm_${bm}" checked onchange="applyFilters()"><label for="bm_${bm}">${bm}</label></div>
             `).join('');
-            
-            document.getElementById('sportsFilter').innerHTML = sportsHtml;
-            document.getElementById('bookmakersFilter').innerHTML = bookmakersHtml;
         }
         
         function applyFilters() {
@@ -719,125 +184,66 @@
             const selectedBookmakers = Array.from(document.querySelectorAll('#bookmakersFilter input:checked')).map(el => el.id.replace('bm_', ''));
             const minProfit = parseFloat(document.getElementById('profitSlider').value);
             
-            filteredArbs = ARBITRAGES.filter(arb => 
-                selectedSports.includes(arb.sport) && 
-                arb.profit >= minProfit
-            );
-            
-            filteredEvs = VALUE_BETS.filter(ev => 
-                selectedSports.includes(ev.sport) && 
-                selectedBookmakers.includes(ev.bookmaker) &&
-                ev.ev >= minProfit
-            );
-            
+            filteredArbs = ARBITRAGES.filter(arb => selectedSports.includes(arb.sport) && arb.profit >= minProfit);
+            filteredEvs = VALUE_BETS.filter(ev => selectedSports.includes(ev.sport) && selectedBookmakers.includes(ev.bookmaker) && ev.ev >= minProfit);
             renderCards();
         }
         
         function updateProfitValue() {
-            const value = document.getElementById('profitSlider').value;
-            document.getElementById('profitValue').textContent = value + '%';
+            document.getElementById('profitValue').textContent = document.getElementById('profitSlider').value + '%';
             applyFilters();
         }
         
         function renderCards() {
-            renderArbitrages();
-            renderValueBets();
-        }
-        
-        function renderArbitrages() {
-            const grid = document.getElementById('arbitragesGrid');
-            
-            if (filteredArbs.length === 0) {
-                grid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;"><i class="fas fa-inbox"></i><p>No arbitrage opportunities found</p></div>';
-                return;
+            const arbGrid = document.getElementById('arbitragesGrid');
+            if (filteredArbs.length === 0) { arbGrid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;"><i class="fas fa-inbox"></i><p>No arbitrage opportunities found</p></div>'; }
+            else {
+                arbGrid.innerHTML = filteredArbs.map(arb => {
+                    const stake = Math.round(100 / (1 + arb.profit / 100));
+                    const roundedStake = Math.round(stake / 10) * 10;
+                    return `
+                        <div class="card">
+                            <div class="card-header"><div class="card-title">${arb.match}</div><div class="card-badge">${arb.type}</div></div>
+                            <div class="card-profit">${arb.profit.toFixed(2)}%</div>
+                            <div class="card-details"><strong>Sport:</strong> ${arb.sport}<br><strong>Market:</strong> ${arb.market}<br><strong>Odds:</strong> ${arb.odds.map(o => o.toFixed(2)).join(' / ')}</div>
+                            <div class="card-stake"><small>Exact Stake: ₹${stake.toFixed(0)}</small><div class="card-stake-bold">₹${roundedStake}</div></div>
+                            <div class="card-buttons"><button class="card-button" onclick="copyToCalc(${arb.odds.join(', ')})">Calc</button><button class="card-button" onclick="copyToClipboard('${arb.match}')">Copy</button></div>
+                        </div>
+                    `;
+                }).join('');
             }
             
-            grid.innerHTML = filteredArbs.map(arb => {
-                const stake = Math.round(100 / (1 + arb.profit / 100));
-                const roundedStake = Math.round(stake / 10) * 10;
-                
-                return `
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-title">${arb.match}</div>
-                            <div class="card-badge">${arb.type}</div>
+            const evGrid = document.getElementById('valuebetsGrid');
+            if (filteredEvs.length === 0) { evGrid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;"><i class="fas fa-inbox"></i><p>No value bets found</p></div>'; }
+            else {
+                evGrid.innerHTML = filteredEvs.map(ev => {
+                    const roundedStake = Math.round(ev.kelly_stake / 10) * 10;
+                    return `
+                        <div class="card">
+                            <div class="card-header"><div class="card-title">${ev.match}</div><div class="card-badge">${ev.outcome}</div></div>
+                            <div class="card-profit">+${ev.ev.toFixed(2)}%</div>
+                            <div class="card-details"><strong>Sport:</strong> ${ev.sport}<br><strong>Bookmaker:</strong> ${ev.bookmaker}<br><strong>Odds:</strong> ${ev.odds.toFixed(2)} (True: ${ev.true_odds.toFixed(2)})</div>
+                            <div class="card-stake"><small>Kelly Stake: ₹${ev.kelly_stake.toFixed(0)}</small><div class="card-stake-bold">₹${roundedStake}</div></div>
+                            <div class="card-buttons"><button class="card-button" onclick="copyToCalc(${ev.odds})">Calc</button><button class="card-button" onclick="copyToClipboard('${ev.match}')">Copy</button></div>
                         </div>
-                        <div class="card-profit">${arb.profit.toFixed(2)}%</div>
-                        <div class="card-details">
-                            <strong>Sport:</strong> ${arb.sport}<br>
-                            <strong>Market:</strong> ${arb.market}<br>
-                            <strong>Odds:</strong> ${arb.odds.map(o => o.toFixed(2)).join(' / ')}
-                        </div>
-                        <div class="card-stake">
-                            <small>Exact Stake: ₹${stake.toFixed(0)}</small>
-                            <div class="card-stake-bold">₹${roundedStake}</div>
-                        </div>
-                        <div class="card-buttons">
-                            <button class="card-button" onclick="copyToCalc(${arb.odds.join(', ')})">Calc</button>
-                            <button class="card-button" onclick="copyToClipboard('${arb.match}')">Copy</button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
-        
-        function renderValueBets() {
-            const grid = document.getElementById('valuebetsGrid');
-            
-            if (filteredEvs.length === 0) {
-                grid.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;"><i class="fas fa-inbox"></i><p>No value bets found</p></div>';
-                return;
+                    `;
+                }).join('');
             }
-            
-            grid.innerHTML = filteredEvs.map(ev => {
-                const roundedStake = Math.round(ev.kelly_stake / 10) * 10;
-                
-                return `
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-title">${ev.match}</div>
-                            <div class="card-badge">${ev.outcome}</div>
-                        </div>
-                        <div class="card-profit">+${ev.ev.toFixed(2)}%</div>
-                        <div class="card-details">
-                            <strong>Sport:</strong> ${ev.sport}<br>
-                            <strong>Bookmaker:</strong> ${ev.bookmaker}<br>
-                            <strong>Odds:</strong> ${ev.odds.toFixed(2)} (True: ${ev.true_odds.toFixed(2)})
-                        </div>
-                        <div class="card-stake">
-                            <small>Kelly Stake: ₹${ev.kelly_stake.toFixed(0)}</small>
-                            <div class="card-stake-bold">₹${roundedStake}</div>
-                        </div>
-                        <div class="card-buttons">
-                            <button class="card-button" onclick="copyToCalc(${ev.odds})">Calc</button>
-                            <button class="card-button" onclick="copyToClipboard('${ev.match}')">Copy</button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
         }
         
-        function toggleFilterPanel() {
-            document.getElementById('filterPanel').classList.toggle('active');
-        }
-        
-        function toggleCalculator() {
-            document.getElementById('calculator').classList.toggle('active');
-        }
+        function toggleFilterPanel() { document.getElementById('filterPanel').classList.toggle('active'); }
+        function toggleCalculator() { document.getElementById('calculator').classList.toggle('active'); }
         
         function switchTab(tab) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            
             event.target.closest('.tab').classList.add('active');
             document.getElementById(tab).classList.add('active');
         }
         
         function copyToCalc(...odds) {
             const inputs = document.querySelectorAll('.calc-input');
-            odds.forEach((odd, i) => {
-                if (inputs[i]) inputs[i].value = odd;
-            });
+            odds.forEach((odd, i) => { if (inputs[i]) inputs[i].value = odd; });
             toggleCalculator();
         }
         
@@ -845,19 +251,10 @@
             const odds1 = parseFloat(document.getElementById('odds1').value);
             const odds2 = parseFloat(document.getElementById('odds2').value);
             const odds3 = parseFloat(document.getElementById('odds3').value) || 0;
+            if (!odds1 || !odds2) return alert('Please enter at least 2 odds');
             
-            if (!odds1 || !odds2) {
-                alert('Please enter at least 2 odds');
-                return;
-            }
-            
-            let totalProb, profit;
-            
-            if (odds3 > 0) {
-                totalProb = (1/odds1) + (1/odds2) + (1/odds3);
-            } else {
-                totalProb = (1/odds1) + (1/odds2);
-            }
+            let totalProb = (odds3 > 0) ? (1/odds1) + (1/odds2) + (1/odds3) : (1/odds1) + (1/odds2);
+            let profit;
             
             if (totalProb < 1) {
                 profit = ((1 / totalProb) - 1) * 100;
@@ -866,15 +263,10 @@
                 profit = (1 - totalProb) * 100;
                 document.getElementById('calcResult').innerHTML = `<strong>✗ No Arbitrage</strong><br>Margin: ${profit.toFixed(2)}%`;
             }
-            
             document.getElementById('calcResult').style.display = 'block';
         }
         
-        function copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(() => {
-                alert('Copied: ' + text);
-            });
-        }
+        function copyToClipboard(text) { navigator.clipboard.writeText(text).then(() => alert('Copied: ' + text)); }
     </script>
 </body>
 </html>
