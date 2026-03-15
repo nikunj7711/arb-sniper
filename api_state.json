@@ -1,1 +1,8 @@
-{}
+{
+  "last_run": null,
+  "api_requests_remaining": 500,
+  "api_requests_used": 0,
+  "last_error": null,
+  "arbs_found": 0,
+  "evs_found": 0
+}
