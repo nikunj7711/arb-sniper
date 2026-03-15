@@ -1,12 +1,10 @@
-name: Arb Sniper Bot
+name: Arbitrage Scanner
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  
-  workflow_dispatch: 
-
-permissions:
-  contents: write
+    # Run every 30 minutes
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -14,31 +12,92 @@ env:
 jobs:
   scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0  
+          fetch-depth: 1
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
+          cache: 'pip'
 
-      - name: Install Dependencies
-        run: pip install requests
-
-      - name: Execute Cloud Scan & Publish
-        env:
-          ODDS_API_KEYS: ${{ secrets.ODDS_API_KEYS }}
-          DASHBOARD_PASS: ${{ secrets.DASHBOARD_PASS }}
-        run: python arb_sniper.py
-
-      - name: Save Data to GitHub
+      - name: Install dependencies
         run: |
-          git config --global user.name "Arb Sniper Bot"
-          git config --global user.email "bot@arbsniper.com"
-          git add index.html api_state.json alert_cache.json || true
-          export TZ="Asia/Kolkata"
-          git commit -m "Auto-Scan Completed [$(date '+%Y-%m-%d %I:%M %p IST')]" || exit 0
-          git pull --rebase origin main
-          git push origin main
+          python -m pip install --upgrade pip
+          pip install requests cryptography
+
+      - name: Run arbitrage scanner
+        env:
+          DASHBOARD_PASS: ${{ secrets.DASHBOARD_PASS || 'admin123' }}
+        run: |
+          python arb_sniper.py
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "Arbitrage Scanner Bot"
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if git diff --quiet index.html api_state.json; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push changes
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          git pull --rebase origin main || true
+          git add index.html api_state.json
+          
+          # Format commit message with IST timestamp
+          IST_TIME=$(TZ='Asia/Kolkata' date '+%Y-%m-%d %H:%M:%S IST')
+          git commit -m "🤖 Auto-update: Arbitrage scan results [$IST_TIME]" || true
+          
+          # Push with retry logic
+          for i in {1..3}; do
+            if git push origin main; then
+              echo "✓ Push successful"
+              exit 0
+            else
+              echo "Push attempt $i failed, retrying..."
+              sleep 5
+              git pull --rebase origin main || true
+            fi
+          done
+          
+          echo "⚠ Push failed after 3 attempts"
+          exit 1
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-results
+          path: |
+            index.html
+            api_state.json
+          retention-days: 7
+
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## 📊 Arbitrage Scanner Run" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Timestamp:** $(TZ='Asia/Kolkata' date '+%Y-%m-%d %H:%M:%S IST')" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f api_state.json ]; then
+            echo "### API State" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+            cat api_state.json >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
