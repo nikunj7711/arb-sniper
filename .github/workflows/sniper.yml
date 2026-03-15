@@ -1,65 +1,143 @@
-name: Arb Sniper Bot
+name: ⚡ Arb Sniper — Auto Scan
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  
-  workflow_dispatch: 
+    # Runs every 30 minutes
+    - cron: "0,30 * * * *"
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Manual trigger reason"
+        required: false
+        default: "Manual run"
 
-# 🛠️ FIX 1: This explicitly gives the bot permission to push the HTML to your repo (Fixes the 403 Error)
 permissions:
   contents: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONUNBUFFERED: "1"
+  TZ: "Asia/Kolkata"
 
 jobs:
   scan:
+    name: 🎯 Run Arbitrage Scanner
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  
+    timeout-minutes: 20
 
-      - name: Set up Python
+    steps:
+      # ── 1. Checkout ─────────────────────────────────────────
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # ── 2. Python Setup ──────────────────────────────────────
+      - name: 🐍 Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11' # Updated to match your logs
+          python-version: "3.12"
+          cache: "pip"
 
-      - name: Install Dependencies
-        run: pip install requests
-
-      - name: Execute Cloud Scan & Publish
-        env:
-          ODDS_API_KEYS: ${{ secrets.ODDS_API_KEYS }}
-          DASHBOARD_PASS: ${{ secrets.DASHBOARD_PASS }}
-        run: python arb_sniper.py
-
-      - name: Save Data to GitHub
+      # ── 3. Install Dependencies ──────────────────────────────
+      - name: 📦 Install dependencies
         run: |
-          git config --global user.name "Arb Sniper Bot"
-          git config --global user.email "bot@arbsniper.com"
-          
-          # 🛠️ FIX 2: Correct Order of Operations
-          
-          # Step A: ADD AND COMMIT FIRST
-          git add index.html api_state.json || true
-          IST_TIME=$(TZ='Asia/Kolkata' date '+%Y-%m-%d %I:%M %p IST')
-          git commit -m "🤖 Auto-update: Arbitrage scan results [$IST_TIME]" || true
-          
-          # Step B: PULL REBASE SECOND (Now it's safe because files are committed)
-          git pull --rebase origin main || true
-          
-          # Step C: PUSH WITH RETRY
-          for i in {1..3}; do
-            if git push origin main; then
-              echo "✓ Push successful"
-              exit 0
-            else
-              echo "Push attempt $i failed, retrying..."
-              sleep 5
-              git pull --rebase origin main || true
-            fi
-          done
-          
-          echo "⚠ Push failed after 3 attempts"
-          exit 1
+          python -m pip install --upgrade pip
+          pip install requests
+
+      # ── 4. Restore api_state.json if cached ─────────────────
+      - name: 📂 Restore API state cache
+        uses: actions/cache@v4
+        with:
+          path: api_state.json
+          key: api-state-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            api-state-${{ runner.os }}-
+
+      # ── 5. Run the Scanner ───────────────────────────────────
+      - name: ⚡ Run Arb Sniper
+        env:
+          DASHBOARD_PASS: ${{ secrets.DASHBOARD_PASS }}
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  ARB SNIPER v3.0 — Scanning global sports markets..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          python arb_sniper.py
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  Scan complete. Preparing to commit dashboard..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      # ── 6. Verify Output ─────────────────────────────────────
+      - name: ✅ Verify generated files
+        run: |
+          if [ ! -f index.html ]; then
+            echo "❌ ERROR: index.html was not generated!" && exit 1
+          fi
+          echo "✅ index.html: $(wc -c < index.html) bytes"
+          if [ -f api_state.json ]; then
+            echo "✅ api_state.json:"
+            cat api_state.json
+          fi
+
+      # ── 7. Commit & Push ─────────────────────────────────────
+      - name: 📤 Commit dashboard to main
+        run: |
+          git config --global user.name  "Arb Sniper Bot"
+          git config --global user.email "arb-sniper@github-actions.bot"
+
+          # Stage the generated files
+          git add index.html api_state.json
+
+          # Check if there are changes to commit
+          if git diff --cached --quiet; then
+            echo "ℹ️  No changes detected — skipping commit."
+            exit 0
+          fi
+
+          # Generate IST timestamp for commit message
+          IST_TIME=$(TZ='Asia/Kolkata' date '+%d %b %Y %I:%M %p IST')
+          ARBS_COUNT=$(python -c "
+          import json, sys
+          try:
+            import re
+            with open('index.html') as f:
+              content = f.read()
+            m = re.search(r'const ALL_ARBS = (\[.*?\]);', content, re.DOTALL)
+            arbs = json.loads(m.group(1)) if m else []
+            evs_m = re.search(r'const ALL_EVS = (\[.*?\]);', content, re.DOTALL)
+            evs = json.loads(evs_m.group(1)) if evs_m else []
+            print(f'{len(arbs)} arbs | {len(evs)} EVs')
+          except Exception as e:
+            print('? arbs')
+          " 2>/dev/null || echo "? arbs")
+
+          COMMIT_MSG="⚡ Arb Sniper | ${IST_TIME} | ${ARBS_COUNT}"
+          echo "Commit message: ${COMMIT_MSG}"
+
+          # Pull latest to avoid conflicts
+          git pull --rebase origin main
+
+          git commit -m "${COMMIT_MSG}"
+          git push origin main
+
+      # ── 8. Summary ───────────────────────────────────────────
+      - name: 📊 Job Summary
+        if: always()
+        run: |
+          echo "## ⚡ Arb Sniper Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Run Time (IST)** | $(TZ='Asia/Kolkata' date '+%d %b %Y %I:%M %p') |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Trigger** | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
+          if [ -f api_state.json ]; then
+            REMAINING=$(python -c "import json; d=json.load(open('api_state.json')); print(d.get('remaining_requests','?'))")
+            echo "| **API Requests Remaining** | ${REMAINING} |" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -f index.html ]; then
+            SIZE=$(wc -c < index.html)
+            echo "| **Dashboard Size** | ${SIZE} bytes |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Status** | ✅ Dashboard generated successfully |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Status** | ❌ Dashboard generation failed |" >> $GITHUB_STEP_SUMMARY
+          fi
