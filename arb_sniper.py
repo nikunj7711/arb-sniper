@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                    ARB SNIPER v3.5 — SECURE MOBILE EDITION                   ║
-║    Global Sports Arbitrage | EV Scanner | BC.Game Feed | API Telemetry       ║
+║                    ARB SNIPER v4.0 — SECURE MOBILE EDITION                   ║
+║    Global Sports Arbitrage | Multi-Key Engine | Calculator | Stealth BC      ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
-import os, json, math, time, hashlib, requests, logging, itertools
+import os, json, math, time, hashlib, requests, logging, itertools, threading
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from difflib import SequenceMatcher
@@ -16,10 +16,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 log = logging.getLogger("ArbSniper")
 
 # ─── Constants & Security ──────────────────────────────────────────────────────
-# 🛠️ ULTIMATE SECURITY: Pull from environment, never hardcode!
 _raw_keys = os.environ.get("ODDS_API_KEYS", "")
 API_KEYS = [k.strip() for k in _raw_keys.split(',') if k.strip()]
-ODDS_API_KEY = API_KEYS[0] if API_KEYS else "MISSING_KEY"
 
 ODDS_BASE       = "https://api.the-odds-api.com/v4"
 BCGAME_URL      = "https://api-k-c7818b61-623.sptpub.com/api/v4/prematch/brand/2103509236163162112/en/0"
@@ -31,7 +29,7 @@ DASHBOARD_PASS  = os.environ.get("DASHBOARD_PASS", "arb2026")
 KELLY_FRACTION  = 0.30
 MIN_ARB_PROFIT  = 0.001   # 0.1%
 MIN_EV_EDGE     = 0.005   # 0.5%
-BANK_SIZE       = 10000   # Default bank in ₹
+BANK_SIZE       = 10000   
 
 ALLOWED_BOOKS = {
     "pinnacle", "onexbet", "bet365", "unibet", "betway", "stake",
@@ -41,18 +39,18 @@ ALLOWED_BOOKS = {
 
 SPORTS_LIST = [
     "soccer_epl","soccer_spain_la_liga","soccer_germany_bundesliga","soccer_italy_serie_a",
-    "soccer_france_ligue_one","soccer_uefa_champs_league","soccer_uefa_europa_league",
-    "basketball_nba","basketball_euroleague","icehockey_nhl","tennis_atp_french_open",
-    "tennis_wta_french_open","mma_mixed_martial_arts","americanfootball_nfl",
-    "cricket_ipl","cricket_international_championship","boxing_boxing","baseball_mlb"
+    "soccer_france_ligue_one","soccer_uefa_champs_league", "basketball_nba", "basketball_euroleague",
+    "icehockey_nhl", "tennis_atp", "tennis_wta", "mma_mixed_martial_arts", "cricket_t20"
 ]
 
 MARKETS = ["h2h", "totals", "spreads"]
 REGIONS  = "eu,uk,us,au"
 
+api_lock = threading.Lock()
+
 # ─── State Management ──────────────────────────────────────────────────────────
 def load_state():
-    defaults = {"remaining_requests": 500, "used_today": 0, "last_reset": str(datetime.utcnow().date())}
+    defaults = {"active_index": 0, "remaining_requests": 500, "used_today": 0, "last_reset": str(datetime.utcnow().date())}
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE) as f:
@@ -67,47 +65,75 @@ def save_state(state):
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
 
+# ─── API Key Rotation Engine ───────────────────────────────────────────────────
+def get_active_key(state: dict):
+    with api_lock:
+        idx = state.get("active_index", 0)
+        if idx >= len(API_KEYS):
+            return None, idx
+        return API_KEYS[idx], idx
+
+def rotate_key(failed_idx: int, state: dict):
+    with api_lock:
+        current_idx = state.get("active_index", 0)
+        if current_idx == failed_idx:
+            state["active_index"] = current_idx + 1
+            save_state(state)
+            log.info(f"🔄 RATE LIMIT HIT: Rotated from Key #{failed_idx + 1} to Key #{failed_idx + 2}")
+        return state.get("active_index", 0) < len(API_KEYS)
+
 # ─── The Odds API ──────────────────────────────────────────────────────────────
 def fetch_sport_odds(sport: str, market: str, state: dict) -> list:
-    if state.get("remaining_requests", 0) < 5:
-        return []
-    url = f"{ODDS_BASE}/sports/{sport}/odds"
-    params = {
-        "apiKey": ODDS_API_KEY,
-        "regions": REGIONS,
-        "markets": market,
-        "oddsFormat": "decimal",
-        "dateFormat": "iso"
-    }
-    try:
-        r = requests.get(url, params=params, timeout=15)
-        if "X-Requests-Remaining" in r.headers:
-            state["remaining_requests"] = int(r.headers["X-Requests-Remaining"])
-        if "X-Requests-Used" in r.headers:
-            state["used_today"] = int(r.headers["X-Requests-Used"])
-            
-        if r.status_code != 200:
+    while True:
+        key, idx = get_active_key(state)
+        if not key:
+            log.error("❌ All 19 API keys exhausted!")
             return []
             
-        data = r.json()
-        filtered = []
-        for event in data:
-            bms = [b for b in event.get("bookmakers", []) if b["key"] in ALLOWED_BOOKS]
-            if bms:
-                event["bookmakers"] = bms
-                filtered.append(event)
-        return filtered
-    except Exception as e:
-        return []
+        url = f"{ODDS_BASE}/sports/{sport}/odds"
+        params = {"apiKey": key, "regions": REGIONS, "markets": market, "oddsFormat": "decimal"}
+        
+        try:
+            r = requests.get(url, params=params, timeout=15)
+            
+            if "X-Requests-Remaining" in r.headers:
+                state["remaining_requests"] = int(r.headers["X-Requests-Remaining"])
+            if "X-Requests-Used" in r.headers:
+                state["used_today"] = int(r.headers["X-Requests-Used"])
+                
+            if r.status_code == 200:
+                data = r.json()
+                filtered = []
+                for event in data:
+                    bms = [b for b in event.get("bookmakers", []) if b["key"] in ALLOWED_BOOKS]
+                    if bms:
+                        event["bookmakers"] = bms
+                        filtered.append(event)
+                return filtered
+                
+            elif r.status_code in [401, 429]:
+                # 🛠️ THE FIX: Rotate key and try again!
+                if rotate_key(idx, state):
+                    continue
+                else:
+                    return []
+            else:
+                log.warning(f"⚠️ API Error {r.status_code} on {sport}")
+                return []
+                
+        except Exception as e:
+            log.error(f"Fetch error for {sport}: {e}")
+            return []
 
 def fetch_all_odds(state: dict) -> list:
-    if ODDS_API_KEY == "MISSING_KEY":
-        log.error("API Key missing! Skipping Odds API fetch.")
+    if not API_KEYS:
+        log.error("API Keys missing! Skipping Odds API fetch.")
         return []
         
     all_events = []
     tasks = [(s, m) for s in SPORTS_LIST for m in MARKETS]
-    log.info(f"Fetching {len(tasks)} sport/market combos concurrently...")
+    log.info(f"Fetching {len(tasks)} sport/market combos concurrently using Key #{state.get('active_index', 0) + 1}...")
+    
     with ThreadPoolExecutor(max_workers=8) as ex:
         futures = {ex.submit(fetch_sport_odds, s, m, state): (s, m) for s, m in tasks}
         for fut in as_completed(futures):
@@ -116,9 +142,18 @@ def fetch_all_odds(state: dict) -> list:
 
 # ─── BC.Game Scraper ───────────────────────────────────────────────────────────
 def fetch_bcgame_events() -> list:
+    # 🛠️ THE FIX: Stealth headers to bypass GitHub Actions IP bans
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Origin': 'https://bc.game',
+        'Referer': 'https://bc.game/'
+    }
+    
     try:
-        r = requests.get(BCGAME_URL, timeout=20)
+        r = requests.get(BCGAME_URL, headers=headers, timeout=20)
         if r.status_code != 200:
+            log.warning(f"BC.Game returned HTTP {r.status_code}. They might be blocking GitHub.")
             return []
         raw = r.json()
         events_raw = []
@@ -168,6 +203,7 @@ def fetch_bcgame_events() -> list:
         log.info(f"BC.Game: {len(converted)} raw events parsed.")
         return converted
     except Exception as e:
+        log.error(f"BC.Game fetch failed: {e}")
         return []
 
 def similarity(a: str, b: str) -> float:
@@ -290,13 +326,14 @@ def scan_ev_bets(events: list) -> list:
     return ev_bets
 
 # ─── Dashboard HTML Generator ──────────────────────────────────────────────────
-# ─── Dashboard HTML Generator ──────────────────────────────────────────────────
-def generate_html(arbs: list, evs: list, raw_bc: list, state: dict, api_key: str) -> str:
+def generate_html(arbs: list, evs: list, raw_bc: list, state: dict) -> str:
     ist_now = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p IST")
     pass_hash = hashlib.sha256(DASHBOARD_PASS.encode()).hexdigest()
     
-    # 🔒 Mask the API Key for Security
-    masked_key = f"{api_key[:4]}••••••••••••{api_key[-4:]}" if len(api_key) > 10 else "NOT_CONFIGURED"
+    # 🔒 Get the active key safely
+    active_idx = state.get("active_index", 0)
+    current_key = API_KEYS[active_idx] if active_idx < len(API_KEYS) else "DEPLETED"
+    masked_key = f"{current_key[:4]}••••••••••••{current_key[-4:]}" if len(current_key) > 10 else "DEPLETED"
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -354,6 +391,14 @@ def generate_html(arbs: list, evs: list, raw_bc: list, state: dict, api_key: str
   .api-stat-row:last-child{{border:none;}}
   .api-val{{font-weight:bold;color:var(--txt);}}
   
+  /* Calculator Styles */
+  .calc-input-group {{margin-bottom: 12px;}}
+  .calc-input-group label {{display:block; font-size:11px; color:var(--txt3); margin-bottom:4px;}}
+  .calc-input {{width:100%; background:var(--bg0); border:1px solid var(--border); color:var(--txt); padding:12px; border-radius:6px; font-family:var(--font); outline:none;}}
+  .calc-input:focus {{border-color:var(--accent);}}
+  .calc-btn {{width:100%; background:var(--accent); color:#000; font-weight:bold; border:none; padding:12px; border-radius:6px; margin-top:10px; cursor:pointer;}}
+  .calc-res {{background:var(--bg0); border:1px solid var(--border); border-radius:6px; padding:15px; margin-top:15px; display:none;}}
+
   .empty-state{{text-align:center;padding:50px 20px;color:var(--txt3);grid-column:1/-1;}}
 </style>
 </head>
@@ -370,7 +415,7 @@ def generate_html(arbs: list, evs: list, raw_bc: list, state: dict, api_key: str
 
 <div id="app">
   <div class="topbar">
-    <div class="logo"><i class="fas fa-crosshairs"></i> SNIPER v3.5</div>
+    <div class="logo"><i class="fas fa-crosshairs"></i> SNIPER v4.0</div>
     <div style="display:flex; gap:12px; align-items:center;">
       <div style="font-size:11px;color:var(--txt3)"><i class="fas fa-clock"></i> {ist_now}</div>
       <button onclick="logout()" style="background:none; border:none; color:var(--red); font-size:16px; cursor:pointer;" title="Logout"><i class="fas fa-right-from-bracket"></i></button>
@@ -381,6 +426,7 @@ def generate_html(arbs: list, evs: list, raw_bc: list, state: dict, api_key: str
     <button class="main-tab active" onclick="switchTab('arb')"><i class="fas fa-percent"></i> Arbs (<span id="count-arb">0</span>)</button>
     <button class="main-tab" onclick="switchTab('ev')"><i class="fas fa-chart-line"></i> +EV (<span id="count-ev">0</span>)</button>
     <button class="main-tab" onclick="switchTab('bc')"><i class="fas fa-gamepad"></i> BC.Game</button>
+    <button class="main-tab" onclick="switchTab('calc')"><i class="fas fa-calculator"></i> Calculator</button>
     <button class="main-tab" onclick="switchTab('api')"><i class="fas fa-key"></i> System API</button>
   </div>
 
@@ -397,11 +443,25 @@ def generate_html(arbs: list, evs: list, raw_bc: list, state: dict, api_key: str
     <div class="cards-grid" id="grid-bc"></div>
   </div>
 
+  <div id="tab-calc" class="tab-content">
+    <div class="cards-grid">
+      <div class="card">
+        <h3 style="margin-bottom:15px; color:var(--accent);"><i class="fas fa-calculator"></i> 2-Way / 3-Way Arb Calc</h3>
+        <div class="calc-input-group"><label>Total Investment (₹)</label><input type="number" id="calc-bank" class="calc-input" value="10000" /></div>
+        <div class="calc-input-group"><label>Odd 1</label><input type="number" id="calc-o1" class="calc-input" placeholder="e.g. 2.10" /></div>
+        <div class="calc-input-group"><label>Odd 2</label><input type="number" id="calc-o2" class="calc-input" placeholder="e.g. 2.05" /></div>
+        <div class="calc-input-group"><label>Odd 3 (Leave blank for 2-Way)</label><input type="number" id="calc-o3" class="calc-input" placeholder="e.g. 3.40 (Optional)" /></div>
+        <button class="calc-btn" onclick="runCalc()"><i class="fas fa-play"></i> Calculate Profit</button>
+        <div id="calc-res" class="calc-res"></div>
+      </div>
+    </div>
+  </div>
+
   <div id="tab-api" class="tab-content">
     <div class="cards-grid">
       <div class="card api-card">
         <h3 style="margin-bottom:15px;font-family:'Syne';"><i class="fas fa-server"></i> The Odds API Telemetry</h3>
-        <div class="api-stat-row"><span>Active API Key</span> <span class="api-val" style="font-family:monospace;color:var(--accent2);">{masked_key}</span></div>
+        <div class="api-stat-row"><span>Active API Key (Index #{active_idx + 1})</span> <span class="api-val" style="font-family:monospace;color:var(--accent2);">{masked_key}</span></div>
         <div class="api-stat-row"><span>Quota Remaining</span> <span class="api-val" style="color:var(--green);font-size:16px;">{state.get('remaining_requests', 0)}</span></div>
         <div class="api-stat-row"><span>Requests Used Today</span> <span class="api-val" style="color:var(--yellow);">{state.get('used_today', 0)}</span></div>
         <div class="api-stat-row"><span>Last Sync Time</span> <span class="api-val">{ist_now}</span></div>
@@ -416,7 +476,6 @@ const ARBS = {json.dumps(arbs)};
 const EVS = {json.dumps(evs)};
 const BC_RAW = {json.dumps(raw_bc)};
 
-// 🛠️ THE FIX: Check Browser Memory on Load!
 if (localStorage.getItem('sniper_auth') === PASS_HASH) {{
   document.getElementById('lockscreen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
@@ -426,7 +485,6 @@ if (localStorage.getItem('sniper_auth') === PASS_HASH) {{
 function checkPass() {{
   const val = document.getElementById('lock-input').value;
   if (CryptoJS.SHA256(val).toString() === PASS_HASH) {{
-    // 🛠️ THE FIX: Save to Browser Memory!
     localStorage.setItem('sniper_auth', PASS_HASH);
     document.getElementById('lockscreen').style.display='none';
     document.getElementById('app').style.display='block';
@@ -451,6 +509,36 @@ function switchTab(tabId) {{
 }}
 
 function fmtDate(d) {{ try {{ return new Date(d).toLocaleString('en-IN',{{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}}); }} catch(e){{return d}} }}
+
+function runCalc() {{
+  const b = parseFloat(document.getElementById('calc-bank').value) || 10000;
+  const o1 = parseFloat(document.getElementById('calc-o1').value) || 0;
+  const o2 = parseFloat(document.getElementById('calc-o2').value) || 0;
+  const o3 = parseFloat(document.getElementById('calc-o3').value) || 0;
+  
+  if (o1 <= 0 || o2 <= 0) return alert("Enter at least Odd 1 and Odd 2.");
+  
+  let totalImpl = (1/o1) + (1/o2);
+  if(o3 > 0) totalImpl += (1/o3);
+  
+  const profitPct = (1/totalImpl - 1) * 100;
+  const profitAmt = b * (1/totalImpl - 1);
+  
+  let resHTML = `<div class="api-stat-row"><span>Total Implied %</span><span class="api-val">${{(totalImpl*100).toFixed(2)}}%</span></div>`;
+  resHTML += `<div class="api-stat-row"><span>Stake 1 (@${{o1}})</span><span class="api-val">₹${{((1/o1)/totalImpl * b).toFixed(2)}}</span></div>`;
+  resHTML += `<div class="api-stat-row"><span>Stake 2 (@${{o2}})</span><span class="api-val">₹${{((1/o2)/totalImpl * b).toFixed(2)}}</span></div>`;
+  if(o3 > 0) resHTML += `<div class="api-stat-row"><span>Stake 3 (@${{o3}})</span><span class="api-val">₹${{((1/o3)/totalImpl * b).toFixed(2)}}</span></div>`;
+  
+  if (totalImpl < 1) {{
+    resHTML += `<div class="api-stat-row" style="border:none;margin-top:10px;"><span style="color:var(--green);font-weight:bold;">ARB FOUND!</span><span style="color:var(--green);font-weight:bold;font-size:16px;">+₹${{profitAmt.toFixed(2)}} (+${{profitPct.toFixed(2)}}%)</span></div>`;
+  }} else {{
+    resHTML += `<div class="api-stat-row" style="border:none;margin-top:10px;"><span style="color:var(--red);font-weight:bold;">NO ARB (Negative)</span><span style="color:var(--red);font-weight:bold;font-size:16px;">${{profitPct.toFixed(2)}}%</span></div>`;
+  }}
+  
+  const resBox = document.getElementById('calc-res');
+  resBox.innerHTML = resHTML;
+  resBox.style.display = 'block';
+}}
 
 function renderData() {{
   document.getElementById('count-arb').textContent = ARBS.length;
@@ -503,13 +591,13 @@ function renderData() {{
 
 # ─── Main Orchestrator ─────────────────────────────────────────────────────────
 def main():
-    log.info("╔══ ARB SNIPER v3.5 — Starting Run ══╗")
+    log.info("╔══ ARB SNIPER v4.0 — Starting Run ══╗")
     state = load_state()
     
     odds_events = fetch_all_odds(state)
     
     bc_events = fetch_bcgame_events()
-    raw_bc_copy = list(bc_events) # Keep a clean copy for the raw dashboard tab
+    raw_bc_copy = list(bc_events)
     all_events = merge_bcgame(odds_events, bc_events)
     
     save_state(state)
@@ -517,7 +605,7 @@ def main():
     arbs = scan_arbitrage(all_events)
     evs  = scan_ev_bets(all_events)
 
-    html = generate_html(arbs, evs, raw_bc_copy, state, ODDS_API_KEY)
+    html = generate_html(arbs, evs, raw_bc_copy, state)
     with open(OUTPUT_HTML, "w", encoding="utf-8") as f:
         f.write(html)
         
