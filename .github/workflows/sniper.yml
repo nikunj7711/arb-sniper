@@ -1,4 +1,4 @@
-name: ⚡ Arb Sniper v5.0 — Auto Scan
+name: ⚡ Arb Sniper v7.1 — Auto Scan
 
 on:
   schedule:
@@ -22,7 +22,7 @@ env:
 
 jobs:
   scan:
-    name: 🎯 Run Elite Quant Engine
+    name: 🎯 Run Elite Quant Engine v7.1
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -44,7 +44,7 @@ jobs:
       - name: 📦 Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests
+          pip install requests cloudscraper
 
       # ── 4. Restore api_state.json if cached ─────────────────
       - name: 📂 Restore API state cache
@@ -56,17 +56,18 @@ jobs:
             api-state-${{ runner.os }}-
 
       # ── 5. Run the Scanner ───────────────────────────────────
-      - name: ⚡ Run Arb Sniper v5.0
+      - name: ⚡ Run Arb Sniper v7.1
         env:
           DASHBOARD_PASS: ${{ secrets.DASHBOARD_PASS }}
           ODDS_API_KEYS: ${{ secrets.ODDS_API_KEYS }}
+          SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}
         run: |
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "  ARB SNIPER v5.0 — Scanning global sports markets..."
+          echo "  ARB SNIPER v7.1 — Scanning global sports markets..."
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           python arb_sniper.py
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "  Scan complete. Preparing to commit 8-Theme Dashboard..."
+          echo "  Scan complete. Preparing to commit Dashboard..."
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       # ── 6. Verify Output ─────────────────────────────────────
@@ -99,8 +100,8 @@ jobs:
           # Generate IST timestamp for commit message
           IST_TIME=$(TZ='Asia/Kolkata' date '+%d %b %Y %I:%M %p IST')
           
-          # Simplified commit message to avoid regex crashing
-          COMMIT_MSG="⚡ Arb Sniper v5.0 | ${IST_TIME} | UI Updated"
+          # Simplified commit message
+          COMMIT_MSG="⚡ Arb Sniper v7.1 | ${IST_TIME} | UI Updated"
           echo "Commit message: ${COMMIT_MSG}"
 
           # 1. Commit the files FIRST
@@ -128,7 +129,7 @@ jobs:
       - name: 📊 Job Summary
         if: always()
         run: |
-          echo "## ⚡ Arb Sniper v5.0 Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## ⚡ Arb Sniper v7.1 Run Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
