@@ -287,6 +287,9 @@ def generate_html(arbs: list, evs: list, raw_bc: list, state: dict, key_status: 
     IST = timezone(timedelta(hours=5, minutes=30))
     ist_now = datetime.now(IST).strftime("%d %b %Y, %I:%M:%S %p IST")
     
+    # CALCULATE QUOTA HERE BEFORE PASSING TO HTML
+    total_quota = sum(k["remaining"] for k in key_status)
+
     arbs_j = json.dumps(arbs, ensure_ascii=False)
     evs_j  = json.dumps(evs,  ensure_ascii=False)
     bc_j   = json.dumps(raw_bc, ensure_ascii=False)
