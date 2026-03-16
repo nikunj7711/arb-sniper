@@ -376,378 +376,367 @@ def fetch_all_odds(state: dict, sports_list: list) -> list:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# BC.GAME SCRAPER — DUAL CLOUDFLARE BYPASS
-# Layer 1: cloudscraper (free, mimics Chrome TLS fingerprint)
-# Layer 2: ScraperAPI residential proxy (1000 free req/month)
+# BC.GAME SCRAPER — CONFIRMED SCHEMA v8.0
+#
+# API architecture (confirmed by live testing):
+#   GET /en/0
+#     → {top_events_versions:[int], rest_events_versions:[int,...], status:{...}}
+#   GET /en/{chunk_id}   (chunk_id = large timestamp int from versions lists)
+#     → {sports:{}, categories:{}, tournaments:{}, events:{}}
+#
+# Event schema (ev["desc"] holds all metadata):
+#   desc.type        : "match" | "tournament" | "stage"
+#   desc.competitors : [{name, qualifier?, sport_id}]
+#   desc.scheduled   : Unix timestamp in SECONDS
+#   desc.sport       : sport_id string
+#   desc.tournament  : tournament_id string
+#
+# Market schema (ev["markets"]):
+#   "11"  + line="" or "0"  → H2H Match Winner
+#   "223" + line="hcp=X"    → Handicap / Spread
+#   "202" + line="setnr=X"  → Set/Game Totals (Over/Under)
+#   "534"                   → Outright winner (skip)
+#
+# odds coefficient in sel_data["k"] (string, must float())
+# sel_ids = "tt:outcometext:..." strings (positional naming used)
+#
+# User-Agent: MUST be "insomnia/12.4.0" — browser UA returns 403 on chunks
 # ═════════════════════════════════════════════════════════════════════════════
 BC_DEBUG = {
-    "status":       "not_tried",
-    "disc_url":     "",
-    "disc_code":    0,
-    "disc_cats":    0,
-    "fetched_cats": 0,
-    "layer_used":   "",
-    "http_code":    0,
-    "size_bytes":   0,
-    "root_type":    "",
-    "root_keys":    "",
-    "extracted":    0,
-    "parsed":       0,
-    "raw_preview":  "",
+    "status":         "not_tried",
+    "chunks_total":   0,
+    "chunks_fetched": 0,
+    "events_raw":     0,
+    "matches_parsed": 0,
+    "outrights_skip": 0,
+    "no_teams_skip":  0,
+    "no_odds_skip":   0,
+    "raw_preview":    "",
 }
 
-
-def _deep_find_list(obj, keys: list):
-    """Recursively search obj for any key in `keys` whose value is a list."""
-    if isinstance(obj, dict):
-        for k in keys:
-            v = obj.get(k)
-            if isinstance(v, list) and v:
-                return v
-        for v in obj.values():
-            r = _deep_find_list(v, keys)
-            if r is not None:
-                return r
-    elif isinstance(obj, list):
-        for item in obj:
-            r = _deep_find_list(item, keys)
-            if r is not None:
-                return r
-    return None
+# BC.Game host — NOT behind Cloudflare, insomnia UA works directly
+_BC_HOST    = "api-k-c7818b61-623.sptpub.com"
+_BC_HEADERS = {"User-Agent": "insomnia/12.4.0", "Accept": "application/json"}
 
 
-def _extract_bc_events(raw) -> list:
-    """Try every known BC.Game response structure to extract event list."""
-    if isinstance(raw, list) and raw:
-        return raw
-    if isinstance(raw, dict):
-        for k in ["data", "events", "list", "items", "result",
-                  "content", "rows", "matches", "games", "sportEvents"]:
-            v = raw.get(k)
-            if isinstance(v, list) and v:
-                return v
-            if isinstance(v, dict):
-                for k2 in ["events", "list", "items", "matches", "games", "data"]:
-                    v2 = v.get(k2)
-                    if isinstance(v2, list) and v2:
-                        return v2
-        found = _deep_find_list(raw, ["events", "matches", "games",
-                                      "list", "items"])
-        if found:
-            return found
-    return []
+def _bc_fetch(path: str) -> dict | None:
+    """
+    Low-level fetch using http.client (stdlib only — no requests needed).
+    Handles gzip-compressed chunks automatically.
+    Falls back to ScraperAPI proxy if direct fetch fails.
+    """
+    import http.client, zlib, gzip, io
 
-
-def _parse_bc_event(ev: dict):
-    """Parse one BC.Game event dict into standard Odds API format."""
-    home = (ev.get("homeTeam") or ev.get("home") or ev.get("team1") or
-            ev.get("homeName") or ev.get("home_team") or ev.get("teamHome") or "")
-    away = (ev.get("awayTeam") or ev.get("away") or ev.get("team2") or
-            ev.get("awayName") or ev.get("away_team") or ev.get("teamAway") or "")
-    sport = (ev.get("sportName") or ev.get("sport") or ev.get("sportTitle") or
-             ev.get("category") or "Unknown")
-    start = (ev.get("startTime") or ev.get("startAt") or ev.get("time") or
-             ev.get("kickOff") or "")
-
-    outcomes = []
-    raw_mkts = (ev.get("markets") or ev.get("odds") or
-                ev.get("marketList") or ev.get("betTypes") or [])
-
-    if isinstance(raw_mkts, list):
-        for mkt in raw_mkts:
-            if not isinstance(mkt, dict):
-                continue
-            outs = (mkt.get("outcomes") or mkt.get("selections") or
-                    mkt.get("runners") or mkt.get("bets") or [])
-            for o in outs:
-                if not isinstance(o, dict):
-                    continue
-                name  = (o.get("name") or o.get("label") or
-                         o.get("selectionName") or "")
-                price = None
-                for pk in ["price", "odds", "odd", "value",
-                           "coefficient", "rate", "oddsValue"]:
-                    if pk in o:
-                        try:
-                            price = float(o[pk])
-                            break
-                        except (ValueError, TypeError):
-                            pass
-                if name and price and price > 1.01:
-                    outcomes.append({"name": name, "price": price})
-    elif isinstance(raw_mkts, dict):
-        for k, v in raw_mkts.items():
-            try:
-                price = float(v)
-                if price > 1.01:
-                    outcomes.append({"name": k, "price": price})
-            except (ValueError, TypeError):
-                pass
-
-    if not home or not away or not outcomes:
+    def _parse(raw: bytes) -> dict | None:
+        try:
+            return json.loads(raw.decode("utf-8"))
+        except UnicodeDecodeError:
+            pass
+        try:
+            return json.loads(zlib.decompress(raw, 16 + zlib.MAX_WBITS).decode("utf-8"))
+        except Exception:
+            pass
+        try:
+            return json.loads(gzip.GzipFile(fileobj=io.BytesIO(raw)).read().decode("utf-8"))
+        except Exception:
+            pass
         return None
 
-    return {
-        "id":            f"bcgame_{abs(hash(home + away + str(start)))}",
-        "sport_title":   sport,
-        "home_team":     home,
-        "away_team":     away,
-        "commence_time": str(start),
-        "bookmakers": [{
-            "key":         "bcgame",
-            "title":       "BC.Game",
-            "last_update": datetime.now(timezone.utc).isoformat(),
-            "markets":     [{"key": "h2h", "outcomes": outcomes}],
-        }],
-    }
-
-
-def _bc_raw_get(url: str) -> dict | None:
-    """
-    Single HTTP GET against the sptpub.com API using the user-confirmed
-    approach: plain requests with the Insomnia/browser UA that works
-    without Cloudflare bypass (sptpub.com is NOT behind Cloudflare).
-    Falls back to ScraperAPI proxy if the direct call fails.
-    """
-    direct_headers = {
-        "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                           "AppleWebKit/537.36 (KHTML, like Gecko) "
-                           "Chrome/124.0.0.0 Safari/537.36",
-        "Accept":          "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Origin":          "https://bc.game",
-        "Referer":         "https://bc.game/",
-        "Cache-Control":   "no-cache",
-    }
-    # ── Attempt 1: direct (sptpub.com is not Cloudflare-protected) ────────────
+    # ── Direct (confirmed working — sptpub.com has no Cloudflare) ─────────────
     try:
-        r = requests.get(url, headers=direct_headers, timeout=20)
-        if r.status_code == 200:
-            return r.json()
-        log.debug(f"BC direct HTTP {r.status_code} for {url[-40:]}")
+        conn = http.client.HTTPSConnection(_BC_HOST, timeout=20)
+        conn.request("GET", path, "", _BC_HEADERS)
+        res = conn.getresponse()
+        raw = res.read()
+        if res.status == 200:
+            parsed = _parse(raw)
+            if parsed is not None:
+                return parsed
+        log.debug(f"BC direct HTTP {res.status} for {path[-40:]}")
     except Exception as e:
         log.debug(f"BC direct exception: {e}")
 
-    # ── Attempt 2: cloudscraper (handles any incidental CF challenges) ─────────
-    try:
-        scraper = _cloudscraper.create_scraper(
-            browser={"browser": "chrome", "platform": "windows", "mobile": False}
-        )
-        scraper.headers.update(direct_headers)
-        r = scraper.get(url, timeout=25)
-        if r.status_code == 200:
-            return r.json()
-        log.debug(f"BC cloudscraper HTTP {r.status_code} for {url[-40:]}")
-    except Exception as e:
-        log.debug(f"BC cloudscraper exception: {e}")
-
-    # ── Attempt 3: ScraperAPI residential proxy ────────────────────────────────
+    # ── ScraperAPI fallback (if SCRAPERAPI_KEY is set) ─────────────────────────
     if SCRAPERAPI_KEY:
         try:
             proxy = (f"http://scraperapi:{SCRAPERAPI_KEY}"
                      f"@proxy-server.scraperapi.com:8001")
             r = requests.get(
-                url,
+                f"https://{_BC_HOST}{path}",
                 proxies={"http": proxy, "https": proxy},
-                verify=False,
-                timeout=45,
-                headers=direct_headers,
+                headers=_BC_HEADERS,
+                verify=False, timeout=45,
             )
             if r.status_code == 200:
-                return r.json()
-            log.debug(f"BC ScraperAPI HTTP {r.status_code} for {url[-40:]}")
+                parsed = _parse(r.content)
+                if parsed is not None:
+                    return parsed
         except Exception as e:
             log.debug(f"BC ScraperAPI exception: {e}")
 
     return None
 
 
-def _is_bc_status_response(raw: dict) -> bool:
+def _bc_sport_name(sport_id: str, all_sports: dict) -> str:
+    return all_sports.get(str(sport_id), {}).get("name", f"sport_{sport_id}")
+
+
+def _bc_league_name(tourn_id: str, all_tourns: dict) -> str:
+    return all_tourns.get(str(tourn_id), {}).get("name", "")
+
+
+def _bc_parse_teams(desc: dict) -> tuple[str, str]:
+    """Extract home/away names from desc.competitors list."""
+    comps = desc.get("competitors", [])
+    home = away = ""
+    for c in comps:
+        q = str(c.get("qualifier", c.get("q", ""))).lower()
+        n = c.get("name", "")
+        if q in ("home", "1", "h"):   home = n
+        elif q in ("away", "2", "a"): away = n
+    # Positional fallback for 2-team events with no qualifier
+    if (not home or not away) and len(comps) == 2:
+        home = comps[0].get("name", "")
+        away = comps[1].get("name", "")
+    return home, away
+
+
+def _bc_parse_h2h(markets: dict) -> list:
     """
-    Returns True if this is the new BC.Game discovery/status response.
-    Signature: top-level "status" key containing a dict of hex_id → int.
-    Example: {"epoch":..., "status": {"b79acebc": 1344, "c6f69642": 7296}}
+    Market "11" with empty or "0" line key = H2H Match Winner.
+    2 outcomes → [Home, Away]      (no-draw: tennis, basketball, etc.)
+    3 outcomes → [Home, Draw, Away] (soccer, etc.)
+    sel_ids are tt:outcometext:... strings — use positional naming.
     """
-    if not isinstance(raw, dict):
-        return False
-    status = raw.get("status")
-    if not isinstance(status, dict) or not status:
-        return False
-    # Check that at least one key looks like a hex string
-    first_key = next(iter(status))
-    try:
-        int(first_key, 16)
-        return True
-    except ValueError:
-        return False
+    if "11" not in markets:
+        return []
+    for line_key, sels in markets["11"].items():
+        if line_key not in ("", "0"):
+            continue
+        if not isinstance(sels, dict):
+            continue
+        prices = []
+        for sel_data in sels.values():
+            if not isinstance(sel_data, dict):
+                continue
+            try:
+                p = float(sel_data.get("k", 0))
+                if p > 1.01:
+                    prices.append(round(p, 3))
+            except (ValueError, TypeError):
+                pass
+        if len(prices) == 2:
+            return [{"name": "Home", "price": prices[0]},
+                    {"name": "Away", "price": prices[1]}]
+        if len(prices) == 3:
+            return [{"name": "Home", "price": prices[0]},
+                    {"name": "Draw", "price": prices[1]},
+                    {"name": "Away", "price": prices[2]}]
+    return []
+
+
+def _bc_parse_handicap(markets: dict) -> list:
+    """
+    Market "223" + line "hcp=X" → Handicap/Spread.
+    Returns list of outcome dicts (best line only).
+    """
+    if "223" not in markets:
+        return []
+    results = []
+    for line_key, sels in markets["223"].items():
+        if not line_key.startswith("hcp="):
+            continue
+        if not isinstance(sels, dict):
+            continue
+        hcp = line_key.replace("hcp=", "")
+        prices = []
+        for sel_data in sels.values():
+            if not isinstance(sel_data, dict):
+                continue
+            try:
+                p = float(sel_data.get("k", 0))
+                if p > 1.01:
+                    prices.append(round(p, 3))
+            except (ValueError, TypeError):
+                pass
+        if len(prices) == 2:
+            results.append({
+                "name":  f"Home {hcp}",
+                "price": prices[0],
+                "point": float(hcp) if hcp.lstrip("-").replace(".","").isdigit() else 0,
+            })
+            results.append({
+                "name":  f"Away {hcp}",
+                "price": prices[1],
+                "point": -float(hcp) if hcp.lstrip("-").replace(".","").isdigit() else 0,
+            })
+    return results[:4]   # max 2 lines × 2 sides
+
+
+def _bc_parse_totals(markets: dict) -> list:
+    """
+    Market "202" + any line → Set/Game Totals (Over/Under).
+    """
+    if "202" not in markets:
+        return []
+    results = []
+    for line_key, sels in markets["202"].items():
+        if not isinstance(sels, dict):
+            continue
+        line_label = line_key.replace("setnr=", "") if "setnr=" in line_key else line_key
+        prices = []
+        for sel_data in sels.values():
+            if not isinstance(sel_data, dict):
+                continue
+            try:
+                p = float(sel_data.get("k", 0))
+                if p > 1.01:
+                    prices.append(round(p, 3))
+            except (ValueError, TypeError):
+                pass
+        if len(prices) == 2:
+            results.append({"name": f"Over {line_label}",  "price": prices[0]})
+            results.append({"name": f"Under {line_label}", "price": prices[1]})
+    return results[:4]   # max 2 lines × 2 sides
 
 
 def fetch_bcgame_events() -> list:
     """
-    BC.Game sptpub API — two-step discovery + fetch.
+    Fetch BC.Game pre-match events using confirmed two-step architecture.
 
-    The API changed in 2025 from returning events directly to a two-step format:
-      Step 1  GET /en/0
-              → {"status": {"hex_category_id": version_number, ...}}
-                This lists all active sport/league categories.
-
-      Step 2  GET /en/{decimal_id}   (hex ID converted to decimal int)
-              → {"status": {"sub_hex_id": version, ...}, ... }
-                Some responses are sub-categories; others contain actual events.
-
-    We discovered this because the user confirmed:
-      /en/3547312178630  → returns valid JSON (a sub-category status dict)
-    And their Insomnia test showed the simple User-Agent request works
-    without any Cloudflare bypass on sptpub.com.
-
-    Strategy:
-      1. Fetch discovery (/en/0) → extract category hex IDs from status dict
-      2. Convert each hex ID → decimal (URL path format)
-      3. Fetch top BCGAME_MAX_CAT categories concurrently
-      4. Parse events from every response using _extract_bc_events
-      5. Recursively handle sub-status responses (one level deep)
+    Step 1: GET /en/0  → manifest with chunk IDs in top/rest_events_versions
+    Step 2: GET /en/{chunk_id} for each chunk → stitch relational tables
+    Step 3: Parse each event using confirmed desc + markets schema
     """
     global BC_DEBUG
 
-    all_converted: list = []
+    brand_id = "2103509236163162112"
+    base     = f"/api/v4/prematch/brand/{brand_id}/en"
 
-    # ── STEP 1: Discovery ──────────────────────────────────────────────────────
-    log.info(f"BC.Game Step 1: discovery → {BCGAME_DISC}")
-    BC_DEBUG["disc_url"] = BCGAME_DISC
-
-    disc_raw = _bc_raw_get(BCGAME_DISC)
-
-    if disc_raw is None:
-        BC_DEBUG["status"]      = "disc_failed"
-        BC_DEBUG["raw_preview"] = (
-            "Discovery endpoint returned nothing. "
-            "The sptpub.com URL may have changed. "
-            "Check the URL in BCGAME_BASE constant."
-        )
-        log.warning("BC.Game discovery failed — no response from any layer.")
+    # ── Step 1: Manifest ───────────────────────────────────────────────────────
+    log.info("BC.Game: fetching manifest /en/0 ...")
+    manifest = _bc_fetch(f"{base}/0")
+    if not manifest:
+        BC_DEBUG["status"]      = "manifest_failed"
+        BC_DEBUG["raw_preview"] = "Manifest /en/0 returned nothing."
+        log.warning("BC.Game: manifest fetch failed")
         return []
 
-    BC_DEBUG["disc_code"]  = 200
-    BC_DEBUG["root_type"]  = type(disc_raw).__name__
-    BC_DEBUG["root_keys"]  = str(list(disc_raw.keys())[:8]) if isinstance(disc_raw, dict) else "list"
-    BC_DEBUG["raw_preview"] = json.dumps(disc_raw)[:800]
+    top_ids  = manifest.get("top_events_versions",  [])
+    rest_ids = manifest.get("rest_events_versions", [])
+    all_ids  = top_ids + rest_ids
+    BC_DEBUG["chunks_total"] = len(all_ids)
+    BC_DEBUG["raw_preview"]  = (f"top={top_ids[:2]}  rest={rest_ids[:3]}  "
+                                f"total={len(all_ids)} chunks")
+    log.info(f"BC.Game manifest: {len(top_ids)} top + {len(rest_ids)} rest "
+             f"= {len(all_ids)} chunks")
 
-    # ── STEP 2: Extract category IDs from status dict ─────────────────────────
-    if _is_bc_status_response(disc_raw):
-        cat_hex_ids = list(disc_raw["status"].keys())
-        # Sort by value descending — higher version numbers = more active
-        cat_hex_ids.sort(key=lambda k: disc_raw["status"].get(k, 0), reverse=True)
-        log.info(f"BC.Game: {len(cat_hex_ids)} categories discovered, "
-                 f"fetching top {BCGAME_MAX_CAT}")
-        BC_DEBUG["disc_cats"] = len(cat_hex_ids)
-
-        # Convert hex IDs to decimal for URL path
-        # e.g. "b79acebc" → 3080626876 → /en/3080626876
-        cat_ids_to_fetch = []
-        for hex_id in cat_hex_ids[:BCGAME_MAX_CAT]:
-            try:
-                dec_id = int(hex_id, 16)
-                cat_ids_to_fetch.append((hex_id, dec_id))
-            except ValueError:
-                log.debug(f"BC.Game: skipping non-hex key: {hex_id}")
-
-    else:
-        # Old format: discovery endpoint returned events directly
-        log.info("BC.Game: discovery returned events directly (old format)")
-        raw_evs = _extract_bc_events(disc_raw)
-        for ev in raw_evs[:400]:
-            parsed = _parse_bc_event(ev)
-            if parsed:
-                all_converted.append(parsed)
-        if all_converted:
-            BC_DEBUG["status"]    = "ok_direct"
-            BC_DEBUG["extracted"] = len(raw_evs)
-            BC_DEBUG["parsed"]    = len(all_converted)
-            BC_DEBUG["layer_used"] = "direct"
-            log.info(f"BC.Game ✅ {len(all_converted)} events (direct format)")
-            return all_converted
-        # No events in direct format either — bail
-        BC_DEBUG["status"] = "no_events_direct"
+    if not all_ids:
+        BC_DEBUG["status"] = "no_chunk_ids"
         return []
 
-    # ── STEP 3: Fetch each category concurrently ───────────────────────────────
-    def _fetch_category(hex_id: str, dec_id: int) -> list:
-        """Fetch one category URL and return list of parsed events."""
-        url = f"{BCGAME_BASE}/{dec_id}"
-        raw = _bc_raw_get(url)
-        if raw is None:
-            return []
+    # ── Step 2: Fetch all chunks and stitch ────────────────────────────────────
+    all_sports = {}; all_cats = {}; all_tourns = {}; all_events = {}
+    fetched = 0
 
-        events_found = []
+    for chunk_id in all_ids:
+        chunk = _bc_fetch(f"{base}/{chunk_id}")
+        if not chunk:
+            continue
+        all_sports.update(chunk.get("sports",      {}))
+        all_cats.update(  chunk.get("categories",  {}))
+        all_tourns.update(chunk.get("tournaments", {}))
+        all_events.update(chunk.get("events",      {}))
+        fetched += 1
+        log.debug(f"BC chunk {chunk_id}: +{len(chunk.get('events',{}))} events")
 
-        if _is_bc_status_response(raw):
-            # This category is itself a status dict → fetch its sub-categories
-            sub_ids = list(raw["status"].keys())[:10]  # max 10 sub-cats per parent
-            for sub_hex in sub_ids:
-                try:
-                    sub_dec = int(sub_hex, 16)
-                    sub_url = f"{BCGAME_BASE}/{sub_dec}"
-                    sub_raw = _bc_raw_get(sub_url)
-                    if sub_raw and not _is_bc_status_response(sub_raw):
-                        for ev in _extract_bc_events(sub_raw)[:50]:
-                            p = _parse_bc_event(ev)
-                            if p:
-                                events_found.append(p)
-                except (ValueError, Exception):
-                    continue
-        else:
-            # Direct events response
-            for ev in _extract_bc_events(raw)[:50]:
-                p = _parse_bc_event(ev)
-                if p:
-                    events_found.append(p)
+    BC_DEBUG["chunks_fetched"] = fetched
+    BC_DEBUG["events_raw"]     = len(all_events)
+    log.info(f"BC.Game stitched: {len(all_sports)} sports  "
+             f"{len(all_tourns)} leagues  {len(all_events)} events")
 
-        return events_found
+    if not all_events:
+        BC_DEBUG["status"] = "no_events_in_chunks"
+        return []
 
-    log.info(f"BC.Game Step 2: fetching {len(cat_ids_to_fetch)} categories...")
-    fetched_count = 0
+    # ── Step 3: Parse events ───────────────────────────────────────────────────
+    converted = []
+    skip_out = skip_teams = skip_odds = 0
 
-    with ThreadPoolExecutor(max_workers=5) as ex:
-        fut_map = {
-            ex.submit(_fetch_category, hex_id, dec_id): (hex_id, dec_id)
-            for hex_id, dec_id in cat_ids_to_fetch
-        }
-        for fut in as_completed(fut_map):
-            try:
-                result = fut.result()
-                all_converted.extend(result)
-                fetched_count += 1
-            except Exception as e:
-                log.debug(f"BC.Game category fetch error: {e}")
+    for ev_id, ev in all_events.items():
+        desc    = ev.get("desc", {})
+        ev_type = desc.get("type", "match")
 
-    # Deduplicate by event ID
-    seen_ids: set = set()
-    deduped = []
-    for ev in all_converted:
-        if ev["id"] not in seen_ids:
-            seen_ids.add(ev["id"])
-            deduped.append(ev)
+        # Skip outrights (tournament/stage winner markets)
+        if ev_type not in ("match", "game", ""):
+            skip_out += 1
+            continue
 
-    BC_DEBUG["fetched_cats"] = fetched_count
-    BC_DEBUG["extracted"]    = len(all_converted)
-    BC_DEBUG["parsed"]       = len(deduped)
-    BC_DEBUG["layer_used"]   = "multi_step"
+        home, away = _bc_parse_teams(desc)
+        if not home or not away:
+            skip_teams += 1
+            continue
 
-    if deduped:
-        BC_DEBUG["status"] = f"ok_multi_{len(deduped)}_events"
-        log.info(f"BC.Game ✅ {len(deduped)} unique events from "
-                 f"{fetched_count} categories")
-    else:
-        BC_DEBUG["status"] = "ok_but_no_parseable_events"
-        BC_DEBUG["raw_preview"] = (
-            "Discovery succeeded and categories were fetched, but no events "
-            "could be parsed. The event schema inside each category may differ "
-            "from the expected format. Check raw_preview above for the "
-            "discovery response structure and update _parse_bc_event() if needed."
-        )
-        log.warning("BC.Game: categories fetched but no events parsed")
+        markets  = ev.get("markets", {})
+        h2h      = _bc_parse_h2h(markets)
+        handicap = _bc_parse_handicap(markets)
+        totals   = _bc_parse_totals(markets)
 
-    return deduped[:300]
+        # Build all_outcomes — used for merge with Odds API events
+        all_outcomes = h2h or []
+        if not all_outcomes:
+            skip_odds += 1
+            continue
+
+        sid   = desc.get("sport",      "")
+        tid   = desc.get("tournament", "")
+        ts    = desc.get("scheduled",  "")
+        sport = _bc_sport_name(sid, all_sports)
+        lg    = _bc_league_name(tid, all_tourns)
+
+        # Format start time (scheduled is in SECONDS, not ms)
+        try:
+            ts_val = float(ts)
+            start  = datetime.fromtimestamp(ts_val, tz=timezone.utc).isoformat()
+        except Exception:
+            start = str(ts)
+
+        # Build bookmaker entry in standard Odds API format
+        mkt_list = []
+        if h2h:
+            mkt_list.append({"key": "h2h", "outcomes": h2h})
+        if handicap:
+            mkt_list.append({"key": "spreads", "outcomes": handicap})
+        if totals:
+            mkt_list.append({"key": "totals", "outcomes": totals})
+
+        converted.append({
+            "id":            f"bcgame_{ev_id}",
+            "sport_title":   sport,
+            "sport_key":     f"bcgame_{sport.lower().replace(' ', '_')}",
+            "home_team":     home,
+            "away_team":     away,
+            "commence_time": start,
+            "bookmakers": [{
+                "key":         "bc_game",
+                "title":       "BC.Game",
+                "last_update": datetime.now(timezone.utc).isoformat(),
+                "markets":     mkt_list,
+            }],
+        })
+
+    BC_DEBUG["matches_parsed"] = len(converted)
+    BC_DEBUG["outrights_skip"] = skip_out
+    BC_DEBUG["no_teams_skip"]  = skip_teams
+    BC_DEBUG["no_odds_skip"]   = skip_odds
+    BC_DEBUG["status"]         = f"ok_{len(converted)}_matches" if converted else "ok_but_no_h2h"
+
+    log.info(f"BC.Game ✅ {len(converted)} matches  "
+             f"(skipped: {skip_out} outrights, {skip_teams} no-teams, "
+             f"{skip_odds} no-h2h-odds)")
+    return converted
+
+
 def similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, a.lower().strip(), b.lower().strip()).ratio()
 
@@ -1804,16 +1793,15 @@ function rKeys(){{
 // RENDER DEBUG
 function rDbg(){{
   const rows=[
-    ['Status',           DBG.status,      DBG.status.startsWith('ok')?'ok':DBG.status.includes('fail')||DBG.status.includes('error')||DBG.status.includes('block')||DBG.status.includes('timeout')?'err':''],
-    ['Layer Used',       DBG.layer_used||'—',  DBG.layer_used?'ok':''],
-    ['Discovery URL',    DBG.disc_url||'—',    ''],
-    ['Discovery HTTP',   String(DBG.disc_code||0), DBG.disc_code===200?'ok':DBG.disc_code>0?'err':''],
-    ['Categories Found', String(DBG.disc_cats||0),  (DBG.disc_cats||0)>0?'ok':DBG.disc_cats===0&&DBG.disc_code===200?'err':''],
-    ['Categories Fetched',String(DBG.fetched_cats||0),(DBG.fetched_cats||0)>0?'ok':''],
-    ['Events Extracted', String(DBG.extracted||0),''],
-    ['Events Parsed',    String(DBG.parsed||0), (DBG.parsed||0)>0?'ok':(DBG.parsed===0&&(DBG.extracted||0)>0)?'err':''],
-    ['Root Type',        DBG.root_type||'—',   ''],
-    ['Root Keys',        DBG.root_keys||'—',   ''],
+    ['Status',           DBG.status||'—',       DBG.status&&DBG.status.startsWith('ok')?'ok':DBG.status&&(DBG.status.includes('fail')||DBG.status.includes('error'))?'err':''],
+    ['Chunks Total',     String(DBG.chunks_total||0),  (DBG.chunks_total||0)>0?'ok':''],
+    ['Chunks Fetched',   String(DBG.chunks_fetched||0),(DBG.chunks_fetched||0)>0?'ok':(DBG.chunks_fetched===0&&(DBG.chunks_total||0)>0)?'err':''],
+    ['Events (raw)',     String(DBG.events_raw||0),    (DBG.events_raw||0)>0?'ok':''],
+    ['Matches Parsed',   String(DBG.matches_parsed||0),(DBG.matches_parsed||0)>0?'ok':(DBG.matches_parsed===0&&(DBG.events_raw||0)>0)?'err':''],
+    ['Outrights Skipped',String(DBG.outrights_skip||0),''],
+    ['No-Teams Skipped', String(DBG.no_teams_skip||0), ''],
+    ['No-H2H Skipped',   String(DBG.no_odds_skip||0),  ''],
+    ['Raw Preview',      DBG.raw_preview||'—',  ''],
   ];
   document.getElementById('dbg-rows').innerHTML=rows.map(([k,v,c])=>`<div class="dbgrow"><span class="dbgk">${{k}}</span><span class="dbgv ${{c}}">${{v||'—'}}</span></div>`).join('');
   document.getElementById('raw-preview').textContent=DBG.raw_preview||'No data captured';
