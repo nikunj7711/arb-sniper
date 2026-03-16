@@ -1,9 +1,9 @@
 {
-  "remaining_requests": 7500,
+  "remaining_requests": 6712,
   "used_today": 502,
   "last_reset": "2026-03-15",
-  "total_events_scanned": 1774,
-  "last_arb_count": 10,
+  "total_events_scanned": 1780,
+  "last_arb_count": 11,
   "last_ev_count": 500,
   "sports_scanned": 86,
   "active_index": 19,
