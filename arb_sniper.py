@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                    ARB SNIPER v8.0 — INDIA EDITION               ║
+║                    ARB SNIPER v8.0 — INDIA EDITION
+║  Two-Step BC.Game API | India Books | localStorage Bankroll | Clear Markets               ║
 ║  Dynamic Sport Discovery | All Markets | Fixed Arb Engine | Dual CF Bypass  ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
@@ -74,11 +75,13 @@ KELLY_FRACTION = 0.30   # 30% fractional Kelly
 DEFAULT_BANK   = 10000  # Rs — overridden live by dashboard input
 
 # ── BC.GAME ENDPOINTS ─────────────────────────────────────────────────────────
-# Dead endpoint removed: https://bc.game/api/sport/event/list?type=prematch (404)
-BCGAME_URLS = [
-    "https://api-k-c7818b61-623.sptpub.com/api/v4/prematch/brand/2103509236163162112/en/0",
-    "https://bc.game/api/sport/prematch/list",
-]
+# BC.Game sptpub API — two-step format (confirmed working as of 2026):
+#   Step 1: GET /en/0       → status dict: {"status": {"hex_id": version, ...}}
+#   Step 2: GET /en/{id}    → actual events for that sport/league category
+# The hex IDs in status are converted to decimal for the URL path.
+BCGAME_BASE    = "https://api-k-c7818b61-623.sptpub.com/api/v4/prematch/brand/2103509236163162112/en"
+BCGAME_DISC    = f"{BCGAME_BASE}/0"       # discovery endpoint
+BCGAME_MAX_CAT = 30                        # max categories to fetch per run
 
 # ── BOOKMAKERS — INDIA-ACCESSIBLE ONLY ───────────────────────────────────────
 # Only offshore/crypto books accessible from India. US (DraftKings, FanDuel)
@@ -378,9 +381,19 @@ def fetch_all_odds(state: dict, sports_list: list) -> list:
 # Layer 2: ScraperAPI residential proxy (1000 free req/month)
 # ═════════════════════════════════════════════════════════════════════════════
 BC_DEBUG = {
-    "status": "not_tried", "url": "", "http_code": 0, "size_bytes": 0,
-    "root_type": "", "root_keys": "", "extracted": 0, "parsed": 0,
-    "raw_preview": "", "layer_used": "",
+    "status":       "not_tried",
+    "disc_url":     "",
+    "disc_code":    0,
+    "disc_cats":    0,
+    "fetched_cats": 0,
+    "layer_used":   "",
+    "http_code":    0,
+    "size_bytes":   0,
+    "root_type":    "",
+    "root_keys":    "",
+    "extracted":    0,
+    "parsed":       0,
+    "raw_preview":  "",
 }
 
 
@@ -489,161 +502,252 @@ def _parse_bc_event(ev: dict):
     }
 
 
+def _bc_raw_get(url: str) -> dict | None:
+    """
+    Single HTTP GET against the sptpub.com API using the user-confirmed
+    approach: plain requests with the Insomnia/browser UA that works
+    without Cloudflare bypass (sptpub.com is NOT behind Cloudflare).
+    Falls back to ScraperAPI proxy if the direct call fails.
+    """
+    direct_headers = {
+        "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                           "AppleWebKit/537.36 (KHTML, like Gecko) "
+                           "Chrome/124.0.0.0 Safari/537.36",
+        "Accept":          "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Origin":          "https://bc.game",
+        "Referer":         "https://bc.game/",
+        "Cache-Control":   "no-cache",
+    }
+    # ── Attempt 1: direct (sptpub.com is not Cloudflare-protected) ────────────
+    try:
+        r = requests.get(url, headers=direct_headers, timeout=20)
+        if r.status_code == 200:
+            return r.json()
+        log.debug(f"BC direct HTTP {r.status_code} for {url[-40:]}")
+    except Exception as e:
+        log.debug(f"BC direct exception: {e}")
+
+    # ── Attempt 2: cloudscraper (handles any incidental CF challenges) ─────────
+    try:
+        scraper = _cloudscraper.create_scraper(
+            browser={"browser": "chrome", "platform": "windows", "mobile": False}
+        )
+        scraper.headers.update(direct_headers)
+        r = scraper.get(url, timeout=25)
+        if r.status_code == 200:
+            return r.json()
+        log.debug(f"BC cloudscraper HTTP {r.status_code} for {url[-40:]}")
+    except Exception as e:
+        log.debug(f"BC cloudscraper exception: {e}")
+
+    # ── Attempt 3: ScraperAPI residential proxy ────────────────────────────────
+    if SCRAPERAPI_KEY:
+        try:
+            proxy = (f"http://scraperapi:{SCRAPERAPI_KEY}"
+                     f"@proxy-server.scraperapi.com:8001")
+            r = requests.get(
+                url,
+                proxies={"http": proxy, "https": proxy},
+                verify=False,
+                timeout=45,
+                headers=direct_headers,
+            )
+            if r.status_code == 200:
+                return r.json()
+            log.debug(f"BC ScraperAPI HTTP {r.status_code} for {url[-40:]}")
+        except Exception as e:
+            log.debug(f"BC ScraperAPI exception: {e}")
+
+    return None
+
+
+def _is_bc_status_response(raw: dict) -> bool:
+    """
+    Returns True if this is the new BC.Game discovery/status response.
+    Signature: top-level "status" key containing a dict of hex_id → int.
+    Example: {"epoch":..., "status": {"b79acebc": 1344, "c6f69642": 7296}}
+    """
+    if not isinstance(raw, dict):
+        return False
+    status = raw.get("status")
+    if not isinstance(status, dict) or not status:
+        return False
+    # Check that at least one key looks like a hex string
+    first_key = next(iter(status))
+    try:
+        int(first_key, 16)
+        return True
+    except ValueError:
+        return False
+
+
 def fetch_bcgame_events() -> list:
     """
-    Two-layer Cloudflare bypass:
-      Layer 1 — cloudscraper   : free, mimics Chrome TLS, no API key needed
-      Layer 2 — ScraperAPI     : residential IPs, 1000 free/month
-                                 Set SCRAPERAPI_KEY in GitHub secrets.
+    BC.Game sptpub API — two-step discovery + fetch.
+
+    The API changed in 2025 from returning events directly to a two-step format:
+      Step 1  GET /en/0
+              → {"status": {"hex_category_id": version_number, ...}}
+                This lists all active sport/league categories.
+
+      Step 2  GET /en/{decimal_id}   (hex ID converted to decimal int)
+              → {"status": {"sub_hex_id": version, ...}, ... }
+                Some responses are sub-categories; others contain actual events.
+
+    We discovered this because the user confirmed:
+      /en/3547312178630  → returns valid JSON (a sub-category status dict)
+    And their Insomnia test showed the simple User-Agent request works
+    without any Cloudflare bypass on sptpub.com.
+
+    Strategy:
+      1. Fetch discovery (/en/0) → extract category hex IDs from status dict
+      2. Convert each hex ID → decimal (URL path format)
+      3. Fetch top BCGAME_MAX_CAT categories concurrently
+      4. Parse events from every response using _extract_bc_events
+      5. Recursively handle sub-status responses (one level deep)
     """
     global BC_DEBUG
 
-    def _parse_response(r, layer: str, url: str):
-        """Process an HTTP response → list of events or None."""
-        BC_DEBUG["http_code"]   = r.status_code
-        BC_DEBUG["size_bytes"]  = len(r.content)
-        BC_DEBUG["layer_used"]  = layer
-        log.info(f"BC.Game [{layer}] HTTP {r.status_code} "
-                 f"{len(r.content)}B {url[:60]}")
+    all_converted: list = []
 
-        if r.status_code in (403, 503):
-            BC_DEBUG["status"] = f"cf_blocked_{r.status_code}_{layer}"
-            BC_DEBUG["raw_preview"] = (
-                f"Cloudflare blocked via {layer} (HTTP {r.status_code}).\n"
-                + ("→ Add SCRAPERAPI_KEY to GitHub secrets to fix."
-                   if layer == "L1_cloudscraper"
-                   else "→ Both layers blocked. Check ScraperAPI quota.")
-            )
-            return None
+    # ── STEP 1: Discovery ──────────────────────────────────────────────────────
+    log.info(f"BC.Game Step 1: discovery → {BCGAME_DISC}")
+    BC_DEBUG["disc_url"] = BCGAME_DISC
 
-        if r.status_code == 404:
-            BC_DEBUG["status"] = f"404_{layer}"
-            BC_DEBUG["raw_preview"] = f"404 via {layer} — trying next URL."
-            return None
+    disc_raw = _bc_raw_get(BCGAME_DISC)
 
-        if r.status_code != 200:
-            BC_DEBUG["status"] = f"http_{r.status_code}_{layer}"
-            return None
+    if disc_raw is None:
+        BC_DEBUG["status"]      = "disc_failed"
+        BC_DEBUG["raw_preview"] = (
+            "Discovery endpoint returned nothing. "
+            "The sptpub.com URL may have changed. "
+            "Check the URL in BCGAME_BASE constant."
+        )
+        log.warning("BC.Game discovery failed — no response from any layer.")
+        return []
 
-        try:
-            raw = r.json()
-        except Exception as e:
-            BC_DEBUG["status"]      = f"json_error_{layer}"
-            BC_DEBUG["raw_preview"] = r.text[:500]
-            log.error(f"BC.Game JSON parse error ({layer}): {e}")
-            return None
+    BC_DEBUG["disc_code"]  = 200
+    BC_DEBUG["root_type"]  = type(disc_raw).__name__
+    BC_DEBUG["root_keys"]  = str(list(disc_raw.keys())[:8]) if isinstance(disc_raw, dict) else "list"
+    BC_DEBUG["raw_preview"] = json.dumps(disc_raw)[:800]
 
-        BC_DEBUG["root_type"]   = type(raw).__name__
-        BC_DEBUG["root_keys"]   = (str(list(raw.keys())[:10])
-                                   if isinstance(raw, dict)
-                                   else f"list[{len(raw)}]")
-        BC_DEBUG["raw_preview"] = json.dumps(raw)[:800] if raw else "empty"
+    # ── STEP 2: Extract category IDs from status dict ─────────────────────────
+    if _is_bc_status_response(disc_raw):
+        cat_hex_ids = list(disc_raw["status"].keys())
+        # Sort by value descending — higher version numbers = more active
+        cat_hex_ids.sort(key=lambda k: disc_raw["status"].get(k, 0), reverse=True)
+        log.info(f"BC.Game: {len(cat_hex_ids)} categories discovered, "
+                 f"fetching top {BCGAME_MAX_CAT}")
+        BC_DEBUG["disc_cats"] = len(cat_hex_ids)
 
-        raw_evs = _extract_bc_events(raw)
-        BC_DEBUG["extracted"] = len(raw_evs)
-        log.info(f"BC.Game extracted {len(raw_evs)} raw events via {layer}")
+        # Convert hex IDs to decimal for URL path
+        # e.g. "b79acebc" → 3080626876 → /en/3080626876
+        cat_ids_to_fetch = []
+        for hex_id in cat_hex_ids[:BCGAME_MAX_CAT]:
+            try:
+                dec_id = int(hex_id, 16)
+                cat_ids_to_fetch.append((hex_id, dec_id))
+            except ValueError:
+                log.debug(f"BC.Game: skipping non-hex key: {hex_id}")
 
-        if not raw_evs:
-            BC_DEBUG["status"] = f"extracted_zero_{layer}"
-            return None
-
-        converted = []
+    else:
+        # Old format: discovery endpoint returned events directly
+        log.info("BC.Game: discovery returned events directly (old format)")
+        raw_evs = _extract_bc_events(disc_raw)
         for ev in raw_evs[:400]:
             parsed = _parse_bc_event(ev)
             if parsed:
-                converted.append(parsed)
+                all_converted.append(parsed)
+        if all_converted:
+            BC_DEBUG["status"]    = "ok_direct"
+            BC_DEBUG["extracted"] = len(raw_evs)
+            BC_DEBUG["parsed"]    = len(all_converted)
+            BC_DEBUG["layer_used"] = "direct"
+            log.info(f"BC.Game ✅ {len(all_converted)} events (direct format)")
+            return all_converted
+        # No events in direct format either — bail
+        BC_DEBUG["status"] = "no_events_direct"
+        return []
 
-        BC_DEBUG["parsed"] = len(converted)
+    # ── STEP 3: Fetch each category concurrently ───────────────────────────────
+    def _fetch_category(hex_id: str, dec_id: int) -> list:
+        """Fetch one category URL and return list of parsed events."""
+        url = f"{BCGAME_BASE}/{dec_id}"
+        raw = _bc_raw_get(url)
+        if raw is None:
+            return []
 
-        if converted:
-            BC_DEBUG["status"] = f"ok_{layer}"
-            log.info(f"BC.Game ✅ {len(converted)} events via {layer}")
-            return converted
+        events_found = []
 
-        BC_DEBUG["status"] = f"parsed_zero_{layer}"
-        return None
-
-    for url in BCGAME_URLS:
-        BC_DEBUG["url"] = url
-        log.info(f"BC.Game trying: {url}")
-
-        # ── LAYER 1: cloudscraper ──────────────────────────────────────────
-        try:
-            log.info("BC.Game → Layer 1 (cloudscraper)...")
-            scraper = _cloudscraper.create_scraper(
-                browser={"browser": "chrome", "platform": "windows",
-                         "mobile": False}
-            )
-            scraper.headers.update({
-                "Accept":          "application/json, text/plain, */*",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Origin":          "https://bc.game",
-                "Referer":         "https://bc.game/",
-                "Cache-Control":   "no-cache",
-            })
-            r      = scraper.get(url, timeout=30)
-            result = _parse_response(r, "L1_cloudscraper", url)
-            if result:
-                return result
-            log.info("BC.Game Layer 1 failed — trying Layer 2...")
-        except Exception as e:
-            BC_DEBUG["status"]      = "L1_exception"
-            BC_DEBUG["raw_preview"] = str(e)
-            log.warning(f"BC.Game cloudscraper exception: {e}")
-
-        # ── LAYER 2: ScraperAPI residential proxy ──────────────────────────
-        if SCRAPERAPI_KEY:
-            try:
-                log.info("BC.Game → Layer 2 (ScraperAPI)...")
-                proxy  = (f"http://scraperapi:{SCRAPERAPI_KEY}"
-                          f"@proxy-server.scraperapi.com:8001")
-                r = requests.get(
-                    url,
-                    proxies={"http": proxy, "https": proxy},
-                    verify=False,      # ScraperAPI intercepts SSL — expected
-                    timeout=60,
-                    headers={
-                        "Accept":          "application/json, text/plain, */*",
-                        "Accept-Language": "en-US,en;q=0.9",
-                        "Origin":          "https://bc.game",
-                        "Referer":         "https://bc.game/",
-                    },
-                )
-                result = _parse_response(r, "L2_scraperapi", url)
-                if result:
-                    return result
-            except requests.exceptions.Timeout:
-                BC_DEBUG["status"]      = "L2_timeout"
-                BC_DEBUG["raw_preview"] = ("ScraperAPI timed out. "
-                                           "Check your dashboard quota.")
-                log.warning("BC.Game ScraperAPI timeout (60s)")
-            except Exception as e:
-                BC_DEBUG["status"]      = "L2_exception"
-                BC_DEBUG["raw_preview"] = str(e)
-                log.error(f"BC.Game ScraperAPI exception: {e}")
+        if _is_bc_status_response(raw):
+            # This category is itself a status dict → fetch its sub-categories
+            sub_ids = list(raw["status"].keys())[:10]  # max 10 sub-cats per parent
+            for sub_hex in sub_ids:
+                try:
+                    sub_dec = int(sub_hex, 16)
+                    sub_url = f"{BCGAME_BASE}/{sub_dec}"
+                    sub_raw = _bc_raw_get(sub_url)
+                    if sub_raw and not _is_bc_status_response(sub_raw):
+                        for ev in _extract_bc_events(sub_raw)[:50]:
+                            p = _parse_bc_event(ev)
+                            if p:
+                                events_found.append(p)
+                except (ValueError, Exception):
+                    continue
         else:
-            log.info("BC.Game Layer 2 skipped — SCRAPERAPI_KEY not set")
-            if "cf_blocked" in BC_DEBUG.get("status", ""):
-                BC_DEBUG["raw_preview"] = (
-                    "Cloudflare is blocking GitHub Actions IPs.\n\n"
-                    "HOW TO FIX (2 minutes):\n"
-                    "1. Sign up FREE at scraperapi.com (no credit card needed)\n"
-                    "2. Copy your API key from the dashboard\n"
-                    "3. Go to: GitHub repo → Settings → Secrets → Actions\n"
-                    "4. Click 'New repository secret'\n"
-                    "   Name:  SCRAPERAPI_KEY\n"
-                    "   Value: your_key_here\n"
-                    "5. Re-run the workflow — BC.Game will work immediately.\n\n"
-                    "Free tier: 1,000 calls/month. Running every 30 min\n"
-                    "uses ~1,440 calls — upgrade to $49/mo if needed."
-                )
+            # Direct events response
+            for ev in _extract_bc_events(raw)[:50]:
+                p = _parse_bc_event(ev)
+                if p:
+                    events_found.append(p)
 
-        log.info(f"BC.Game both layers failed for {url} — trying next URL...")
+        return events_found
 
-    log.warning("BC.Game: all URLs failed. Returning [].")
-    return []
+    log.info(f"BC.Game Step 2: fetching {len(cat_ids_to_fetch)} categories...")
+    fetched_count = 0
 
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        fut_map = {
+            ex.submit(_fetch_category, hex_id, dec_id): (hex_id, dec_id)
+            for hex_id, dec_id in cat_ids_to_fetch
+        }
+        for fut in as_completed(fut_map):
+            try:
+                result = fut.result()
+                all_converted.extend(result)
+                fetched_count += 1
+            except Exception as e:
+                log.debug(f"BC.Game category fetch error: {e}")
 
+    # Deduplicate by event ID
+    seen_ids: set = set()
+    deduped = []
+    for ev in all_converted:
+        if ev["id"] not in seen_ids:
+            seen_ids.add(ev["id"])
+            deduped.append(ev)
+
+    BC_DEBUG["fetched_cats"] = fetched_count
+    BC_DEBUG["extracted"]    = len(all_converted)
+    BC_DEBUG["parsed"]       = len(deduped)
+    BC_DEBUG["layer_used"]   = "multi_step"
+
+    if deduped:
+        BC_DEBUG["status"] = f"ok_multi_{len(deduped)}_events"
+        log.info(f"BC.Game ✅ {len(deduped)} unique events from "
+                 f"{fetched_count} categories")
+    else:
+        BC_DEBUG["status"] = "ok_but_no_parseable_events"
+        BC_DEBUG["raw_preview"] = (
+            "Discovery succeeded and categories were fetched, but no events "
+            "could be parsed. The event schema inside each category may differ "
+            "from the expected format. Check raw_preview above for the "
+            "discovery response structure and update _parse_bc_event() if needed."
+        )
+        log.warning("BC.Game: categories fetched but no events parsed")
+
+    return deduped[:300]
 def similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, a.lower().strip(), b.lower().strip()).ratio()
 
@@ -1700,15 +1804,16 @@ function rKeys(){{
 // RENDER DEBUG
 function rDbg(){{
   const rows=[
-    ['Status',       DBG.status,      DBG.status.startsWith('ok')?'ok':DBG.status.includes('error')||DBG.status.includes('http_4')||DBG.status.includes('block')||DBG.status.includes('timeout')?'err':''],
-    ['Layer Used',   DBG.layer_used,  DBG.layer_used?'ok':''],
-    ['URL Tried',    DBG.url,         ''],
-    ['HTTP Code',    String(DBG.http_code), DBG.http_code===200?'ok':DBG.http_code>0?'err':''],
-    ['Size',         DBG.size_bytes+' bytes',''],
-    ['Root Type',    DBG.root_type,   ''],
-    ['Root Keys',    DBG.root_keys,   ''],
-    ['Extracted',    String(DBG.extracted),''],
-    ['Parsed',       String(DBG.parsed), DBG.parsed>0?'ok':DBG.parsed===0&&DBG.extracted>0?'err':''],
+    ['Status',           DBG.status,      DBG.status.startsWith('ok')?'ok':DBG.status.includes('fail')||DBG.status.includes('error')||DBG.status.includes('block')||DBG.status.includes('timeout')?'err':''],
+    ['Layer Used',       DBG.layer_used||'—',  DBG.layer_used?'ok':''],
+    ['Discovery URL',    DBG.disc_url||'—',    ''],
+    ['Discovery HTTP',   String(DBG.disc_code||0), DBG.disc_code===200?'ok':DBG.disc_code>0?'err':''],
+    ['Categories Found', String(DBG.disc_cats||0),  (DBG.disc_cats||0)>0?'ok':DBG.disc_cats===0&&DBG.disc_code===200?'err':''],
+    ['Categories Fetched',String(DBG.fetched_cats||0),(DBG.fetched_cats||0)>0?'ok':''],
+    ['Events Extracted', String(DBG.extracted||0),''],
+    ['Events Parsed',    String(DBG.parsed||0), (DBG.parsed||0)>0?'ok':(DBG.parsed===0&&(DBG.extracted||0)>0)?'err':''],
+    ['Root Type',        DBG.root_type||'—',   ''],
+    ['Root Keys',        DBG.root_keys||'—',   ''],
   ];
   document.getElementById('dbg-rows').innerHTML=rows.map(([k,v,c])=>`<div class="dbgrow"><span class="dbgk">${{k}}</span><span class="dbgv ${{c}}">${{v||'—'}}</span></div>`).join('');
   document.getElementById('raw-preview').textContent=DBG.raw_preview||'No data captured';
