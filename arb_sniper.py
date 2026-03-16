@@ -483,33 +483,50 @@ def _bc_fetch(path: str) -> dict | None:
     except Exception as e:
         log.debug(f"BC L2 exception: {e}")
 
-    # ── Layer 3: ScraperAPI residential proxy ──────────────────────────────────
-    # Required on GitHub Actions — datacenter IPs are blocked by sptpub.com
+    # ── Layer 3: ScraperAPI — API mode with keep_headers=true ────────────────
+    # Proxy mode strips custom User-Agent; API mode preserves it end-to-end.
+    # sptpub.com REQUIRES "insomnia/12.4.0" UA — any other UA returns 403.
+    # keep_headers=true passes our exact _BC_HEADERS to the target server.
+    # autoparse=false returns raw response (we handle JSON ourselves).
     if SCRAPERAPI_KEY:
         try:
-            proxy = (f"http://scraperapi:{SCRAPERAPI_KEY}"
-                     f"@proxy-server.scraperapi.com:8001")
+            api_url = (
+                "https://api.scraperapi.com/"
+                f"?api_key={SCRAPERAPI_KEY}"
+                f"&url={urllib.parse.quote(full_url, safe='')}"
+                "&keep_headers=true"
+                "&autoparse=false"
+                "&render=false"
+                "&country_code=de"      # EU residential IP
+            )
             r = requests.get(
-                full_url,
-                proxies={"http": proxy, "https": proxy},
-                headers=_BC_HEADERS,
-                verify=False,
+                api_url,
+                headers=_BC_HEADERS,   # forwarded to sptpub.com via keep_headers
                 timeout=60,
             )
+            log.info(f"BC L3 ScraperAPI HTTP {r.status_code} "
+                     f"size={len(r.content)}B path={path[-40:]}")
             if r.status_code == 200:
                 parsed = _parse(r.content)
                 if parsed is not None:
-                    log.info(f"BC L3 (ScraperAPI) OK: {path[-40:]}")
+                    log.info(f"BC L3 (ScraperAPI API mode) OK: {path[-40:]}")
                     return parsed
-                log.debug(f"BC L3 parse failed: {path[-40:]}")
+                # If parse failed, log what we got
+                log.warning(f"BC L3 parse failed — preview: {r.text[:200]}")
+            elif r.status_code == 403:
+                log.warning("BC L3 ScraperAPI 403 — UA may still be stripped. "
+                            "Check ScraperAPI plan supports keep_headers.")
+            elif r.status_code == 429:
+                log.warning("BC L3 ScraperAPI 429 — monthly quota exhausted.")
             else:
-                log.warning(f"BC L3 HTTP {r.status_code}: {path[-40:]}")
+                log.warning(f"BC L3 ScraperAPI HTTP {r.status_code}")
         except Exception as e:
             log.warning(f"BC L3 ScraperAPI exception: {e}")
     else:
-        log.debug("BC L3 skipped — SCRAPERAPI_KEY not set")
+        log.warning("BC L3 skipped — SCRAPERAPI_KEY not set. "
+                    "Add it as a GitHub secret to enable BC.Game on Actions.")
 
-    log.warning(f"BC all layers failed for {path[-40:]}")
+    log.warning(f"BC all 3 layers failed for {path[-40:]}")
     return None
 
 
@@ -1900,6 +1917,31 @@ def main():
     state = load_state()
     log.info(f"State loaded | Quota: {state['remaining_requests']} | "
              f"Keys: {len(ROTATOR.keys)}")
+
+    # ── BC.Game pre-flight diagnostic ─────────────────────────────────────────
+    # Logs exactly what ScraperAPI returns for the manifest so we can debug
+    # without needing a full run. Costs 1 ScraperAPI credit per run.
+    if SCRAPERAPI_KEY:
+        _bc_preflight_url = (
+            "https://api.scraperapi.com/"
+            f"?api_key={SCRAPERAPI_KEY}"
+            f"&url={urllib.parse.quote('https://api-k-c7818b61-623.sptpub.com/api/v4/prematch/brand/2103509236163162112/en/0', safe='')}"
+            "&keep_headers=true&autoparse=false&render=false&country_code=de"
+        )
+        try:
+            _pfr = requests.get(
+                _bc_preflight_url,
+                headers={"User-Agent": "insomnia/12.4.0", "Accept": "application/json"},
+                timeout=30,
+            )
+            log.info(f"BC preflight: HTTP {_pfr.status_code} "
+                     f"size={len(_pfr.content)}B "
+                     f"ct={_pfr.headers.get('Content-Type','?')}")
+            log.info(f"BC preflight preview: {_pfr.text[:300]}")
+        except Exception as _e:
+            log.warning(f"BC preflight exception: {_e}")
+    else:
+        log.info("BC preflight skipped — no SCRAPERAPI_KEY")
 
     # 1. Discover ALL currently in-season sports dynamically
     sports_list = fetch_all_sports()
