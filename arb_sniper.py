@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                    ARB SNIPER v7.0 — MAXIMUM COVERAGE EDITION               ║
+║                    ARB SNIPER v8.0 — INDIA EDITION               ║
 ║  Dynamic Sport Discovery | All Markets | Fixed Arb Engine | Dual CF Bypass  ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
@@ -74,34 +74,28 @@ KELLY_FRACTION = 0.30   # 30% fractional Kelly
 DEFAULT_BANK   = 10000  # Rs — overridden live by dashboard input
 
 # ── BC.GAME ENDPOINTS ─────────────────────────────────────────────────────────
+# Dead endpoint removed: https://bc.game/api/sport/event/list?type=prematch (404)
 BCGAME_URLS = [
     "https://api-k-c7818b61-623.sptpub.com/api/v4/prematch/brand/2103509236163162112/en/0",
     "https://bc.game/api/sport/prematch/list",
-    "https://bc.game/api/sport/event/list?type=prematch",
 ]
 
-# ── BOOKMAKERS TO INCLUDE ─────────────────────────────────────────────────────
-# We filter locally (never pass to API) to avoid empty responses.
-# More books = more cross-book price differences = more arb opportunities.
+# ── BOOKMAKERS — INDIA-ACCESSIBLE ONLY ───────────────────────────────────────
+# Only offshore/crypto books accessible from India. US (DraftKings, FanDuel)
+# and AU (TAB, Neds) books removed — they are useless to Indian users.
+# Pinnacle is ESSENTIAL as the sharp reference for true-odds (EV) calculation.
 ALLOWED_BOOKS = {
-    # Sharp / reference books (used for true odds baseline)
-    "pinnacle",
-    # European sharps & exchanges
-    "betfair", "betfair_ex_eu", "betfair_ex_uk", "matchbook",
-    # Major internationals
-    "bet365", "unibet", "betway", "marathonbet", "bwin",
-    "williamhill", "ladbrokes", "coral", "skybet", "paddy_power",
-    # Eastern European / Asian
-    "onexbet", "parimatch", "dafabet", "1xbit",
-    # Crypto books
-    "stake", "bc_game",
-    # US books
-    "draftkings", "fanduel", "betmgm", "caesars", "pointsbet",
-    "barstool", "wynnbet", "superbook", "betonlineag", "bovada",
-    # Australian
-    "tab", "sportsbet", "neds", "bluebet",
-    # Others
-    "unibet_eu", "unibet_uk", "unibet_au",
+    "pinnacle",       # Sharp reference — required for EV baseline
+    "stake",          # Crypto book, widely used in India
+    "bc_game",        # Crypto book, India-accessible
+    "onexbet",        # 1xBet — extremely popular in India
+    "parimatch",      # India-accessible
+    "dafabet",        # Targets Asian/Indian market specifically
+    "betway",         # Accepts Indian players
+    "bet365",         # Most popular in India (VPN-accessible)
+    "marathonbet",    # India-accessible
+    "betfair",        # Exchange — best prices for arbing
+    "matchbook",      # Exchange — sharp market prices
 }
 
 # ── MARKETS TO SCAN ───────────────────────────────────────────────────────────
@@ -1392,7 +1386,7 @@ input[type=range]{{accent-color:var(--cyan);width:80px;cursor:pointer}}
   <div class="lbox">
     <div class="lock-icon"><i class="fas fa-crosshairs"></i></div>
     <div class="lock-title">ARB SNIPER</div>
-    <div class="lock-sub">v7.0 — Maximum Coverage</div>
+    <div class="lock-sub">v8.0 — India Edition</div>
     <input id="linput" type="password" placeholder="••••••••" autocomplete="current-password"/>
     <button id="lbtn" onclick="unlock()"><i class="fas fa-unlock-alt"></i>&nbsp;UNLOCK</button>
     <div id="lerr"><i class="fas fa-triangle-exclamation"></i>&nbsp;Invalid password</div>
@@ -1403,7 +1397,7 @@ input[type=range]{{accent-color:var(--cyan);width:80px;cursor:pointer}}
 <div id="app">
 
   <div class="topbar">
-    <div class="logo"><i class="fas fa-crosshairs"></i> ARB SNIPER v7.0</div>
+    <div class="logo"><i class="fas fa-crosshairs"></i> ARB SNIPER v8.0</div>
     <div class="topbar-r">
       <div class="lpill"><div class="ldot"></div><span class="ltext">LIVE</span></div>
       <span class="ttxt">{ist_now}</span>
@@ -1444,7 +1438,7 @@ input[type=range]{{accent-color:var(--cyan);width:80px;cursor:pointer}}
     <div class="fbar">
       <input class="fi" id="aq" placeholder="Search match, sport..." oninput="fArb()"/>
       <select class="fs" id="aw" onchange="fArb()"><option value="">All Ways</option><option value="2">2-Way</option><option value="3">3-Way</option></select>
-      <select class="fs" id="am" onchange="fArb()"><option value="">All Markets</option><option value="H2H">H2H</option><option value="TOTALS">Totals</option><option value="SPREADS">Spreads</option></select>
+      <select class="fs" id="am" onchange="fArb()"><option value="">All Markets</option><option value="H2H">H2H (Match Winner)</option><option value="TOTALS">TOTALS (Over/Under)</option><option value="SPREADS">SPREADS (Handicap)</option></select>
       <select class="fs" id="as" onchange="fArb()"><option value="">All Sports</option></select>
       <div class="fpill">Min<input type="range" id="amin" min="0" max="5" step="0.05" value="0" oninput="document.getElementById('aminv').textContent=(+this.value).toFixed(2)+'%';fArb()"/><span id="aminv">0.00%</span></div>
     </div>
@@ -1556,13 +1550,17 @@ input[type=range]{{accent-color:var(--cyan);width:80px;cursor:pointer}}
 
 <script>
 const ARBS=({arbs_j});const EVS=({evs_j});const BC=({bc_j});const KEYS=({keys_j});const DBG=({debug_j});const PH="{ph}";
-let BANK={DEFAULT_BANK},calcW=2,curEV=EVS;
+let BANK=parseFloat(localStorage.getItem('arb_bank'))||{DEFAULT_BANK},calcW=2,curEV=EVS;
 
-const BS={{pinnacle:'PIN',bet365:'B365',betway:'BW',draftkings:'DK',fanduel:'FD',betmgm:'MGM',unibet:'UNI',stake:'STK',marathonbet:'MAR',parimatch:'PAR',betfair:'BF',dafabet:'DAF',bovada:'BOV',onexbet:'1XB',bcgame:'BCG',matchbook:'MBK',williamhill:'WH',ladbrokes:'LAD',bwin:'BWN',caesars:'CZR',pointsbet:'PBT'}};
+const BS={{pinnacle:'PIN',bet365:'B365',betway:'BW',stake:'STK',marathonbet:'MAR',parimatch:'PAR',betfair:'BF',dafabet:'DAF',onexbet:'1XB',bc_game:'BCG',matchbook:'MBK'}};
 const bs=k=>BS[k]||(k||'').toUpperCase().slice(0,4);
 const fd=d=>{{try{{return new Date(d).toLocaleString('en-IN',{{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}});}}catch{{return String(d)}}}};
 const si=s=>{{s=(s||'').toLowerCase();if(s.includes('soccer')||s.includes('football'))return'fa-futbol';if(s.includes('basket'))return'fa-basketball';if(s.includes('hockey'))return'fa-hockey-puck';if(s.includes('tennis'))return'fa-table-tennis-paddle-ball';if(s.includes('mma')||s.includes('box'))return'fa-hand-fist';if(s.includes('cricket'))return'fa-cricket-bat-ball';if(s.includes('baseball'))return'fa-baseball';if(s.includes('golf'))return'fa-golf-ball-tee';if(s.includes('nfl')||s.includes('american'))return'fa-football';if(s.includes('rugby'))return'fa-football';return'fa-trophy';}};
 const kly=(e,o,b)=>{{const bv=o-1;if(bv<=0)return 0;const p=1/(o/(1+e)),kf=(bv*p-(1-p))/bv;return kf<=0?0:Math.round(.3*kf*b/10)*10;}};
+// Market display label — converts raw market key to human-readable label
+const mktLabel=m=>{{const mp={{H2H:'H2H (Match Winner)',TOTALS:'TOTALS (Over/Under)',SPREADS:'SPREADS (Handicap)',h2h:'H2H (Match Winner)',totals:'TOTALS (Over/Under)',spreads:'SPREADS (Handicap)'}};return mp[m]||m;}};
+// Scale an arb stake (originally computed for Rs1000) to user's actual bankroll
+const scaleStk=(rawStk,bank)=>Math.round((rawStk/1000)*bank/10)*10;
 
 // AUTH
 if(localStorage.getItem('sa')===PH)boot();
@@ -1574,11 +1572,24 @@ function boot(){{document.getElementById('lock').style.display='none';document.g
 // TABS
 function swTab(id,b){{document.querySelectorAll('.tc').forEach(t=>t.classList.remove('act'));document.querySelectorAll('.tab').forEach(t=>t.classList.remove('act'));document.getElementById('tc-'+id).classList.add('act');if(b)b.classList.add('act');}}
 
-// BANKROLL
-function onBank(){{BANK=parseFloat(document.getElementById('bankroll').value)||10000;document.getElementById('kb').value=BANK;rEV(curEV);}}
+// BANKROLL — persisted in localStorage so user never has to re-enter it
+function onBank(){{
+  BANK=parseFloat(document.getElementById('bankroll').value)||10000;
+  localStorage.setItem('arb_bank',String(BANK));
+  document.getElementById('kb').value=BANK;
+  rEV(curEV);
+  rArb(ARBS.filter(_=>true));  // re-render arb cards with new bank-scaled stakes
+}}
 
 // INIT
 function init(){{
+  // Restore saved bankroll from localStorage and apply to input + kb field
+  const savedBank=parseFloat(localStorage.getItem('arb_bank'));
+  if(savedBank&&savedBank>0){{
+    BANK=savedBank;
+    document.getElementById('bankroll').value=savedBank;
+    document.getElementById('kb').value=savedBank;
+  }}
   const aS=[...new Set(ARBS.map(a=>a.sport))].sort();
   const eS=[...new Set(EVS.map(e=>e.sport))].sort();
   const eB=[...new Set(EVS.map(e=>e.book_key))].sort();
@@ -1602,19 +1613,42 @@ function fArb(){{const q=document.getElementById('aq').value.toLowerCase(),wy=do
 function fEv(){{const q=document.getElementById('eq').value.toLowerCase(),bk=document.getElementById('eb').value,sp=document.getElementById('es').value,mn=+document.getElementById('emin').value||0;const d=EVS.filter(v=>(!bk||v.book_key===bk)&&(!sp||v.sport===sp)&&v.edge_pct>=mn&&(!q||v.match.toLowerCase().includes(q)||(v.book_key||'').includes(q)));curEV=d;rEV(d);}}
 function fBc(){{const q=document.getElementById('bq').value.toLowerCase(),sp=document.getElementById('bsp').value;rBc(BC.filter(b=>(!sp||b.sport_title===sp)&&(!q||(b.home_team+' '+b.away_team).toLowerCase().includes(q))));}}
 
-// RENDER ARBS
+// RENDER ARBS — stakes scaled to user's bankroll, clear market labels
 function rArb(data){{
   const g=document.getElementById('g-arb');document.getElementById('c-arb').textContent=data.length;
   if(!data.length){{g.innerHTML='<div class="empty"><i class="fas fa-magnifying-glass"></i>No arbitrage opportunities found.<small>Adjust filters or check API quota in the API Keys tab.</small></div>';return;}}
   g.innerHTML=data.map(a=>{{
-    const rows=a.outcomes.map(o=>`<tr><td><span class="btag">${{bs(o.book_key)}}</span>&nbsp;<span style="color:var(--txt2)">${{o.name}}</span></td><td><span class="oval">${{o.odds}}</span></td><td><span class="stkx">exact ₹${{o.stake}}</span><span class="stkm">₹${{o.stake_rounded}}</span></td></tr>`).join('');
+    // Scale stakes from the Python-computed Rs1000 base to the user's actual bank
+    const rows=a.outcomes.map(o=>{{
+      const liveStk=scaleStk(o.stake,BANK);
+      const exactStk=((o.stake/1000)*BANK).toFixed(2);
+      return `<tr>
+        <td><span class="btag">${{bs(o.book_key)}}</span>&nbsp;<span style="color:var(--txt2)">${{o.name}}</span></td>
+        <td><span class="oval">${{o.odds}}</span></td>
+        <td><span class="stkx">exact ₹${{exactStk}}</span><span class="stkm">₹${{liveStk}}</span></td>
+      </tr>`;
+    }}).join('');
     const oa=JSON.stringify(a.outcomes.map(o=>o.odds));
+    const profitOnBank=((a.profit_pct/100)*BANK).toFixed(2);
     return `<div class="card"><div class="cbar"></div><div class="cinn">
-      <div class="ch"><span class="cbdg"><i class="fas fa-percent"></i>&nbsp;${{a.ways}}-WAY&nbsp;·&nbsp;${{a.market}}</span><span class="cpft">+${{a.profit_pct}}%</span></div>
+      <div class="ch">
+        <span class="cbdg"><i class="fas fa-percent"></i>&nbsp;${{a.ways}}-WAY&nbsp;·&nbsp;${{mktLabel(a.market)}}</span>
+        <span class="cpft">+${{a.profit_pct}}%</span>
+      </div>
       <div class="cmatch"><i class="fas ${{si(a.sport)}}" style="margin-right:6px;opacity:.6"></i>${{a.match}}</div>
-      <div class="cmeta"><span><i class="fas fa-clock"></i>&nbsp;${{fd(a.commence)}}</span><span style="opacity:.5">${{a.sport.replace(/_/g,' ')}}</span></div>
-      <table class="ctbl"><thead><tr><th>Outcome/Book</th><th>Odds</th><th>Stake/₹1K</th></tr></thead><tbody>${{rows}}</tbody></table>
-    </div><div class="cfoot"><span class="cfl"><i class="fas fa-coins"></i>&nbsp;Profit ₹${{a.profit_amt}} on ₹1,000</span><button class="cbtn" onclick='openQC(${{oa}},${{a.ways}})'><i class="fas fa-calculator"></i>&nbsp;Calc</button></div></div>`;
+      <div class="cmeta">
+        <span><i class="fas fa-clock"></i>&nbsp;${{fd(a.commence)}}</span>
+        <span style="opacity:.5">${{a.sport.replace(/_/g,' ')}}</span>
+      </div>
+      <table class="ctbl">
+        <thead><tr><th>Outcome / Book</th><th>Odds</th><th>Stake (Your Bank)</th></tr></thead>
+        <tbody>${{rows}}</tbody>
+      </table>
+    </div>
+    <div class="cfoot">
+      <span class="cfl"><i class="fas fa-coins"></i>&nbsp;Profit ₹${{profitOnBank}} on ₹${{BANK.toLocaleString('en-IN')}}</span>
+      <button class="cbtn" onclick='openQC(${{oa}},${{a.ways}})'><i class="fas fa-calculator"></i>&nbsp;Calc</button>
+    </div></div>`;
   }}).join('');
 }}
 
@@ -1625,7 +1659,7 @@ function rEV(data){{
   g.innerHTML=data.map(v=>{{
     const lk=kly(v.edge_pct/100,v.offered_odds,BANK);
     return `<div class="card"><div class="cbar ev"></div><div class="cinn">
-      <div class="ch"><span class="cbdg ev"><i class="fas fa-chart-line"></i>&nbsp;+EV&nbsp;·&nbsp;${{v.market}}</span><span class="cpft ev">+${{v.edge_pct}}%</span></div>
+      <div class="ch"><span class="cbdg ev"><i class="fas fa-chart-line"></i>&nbsp;+EV&nbsp;·&nbsp;${{mktLabel(v.market)}}</span><span class="cpft ev">+${{v.edge_pct}}%</span></div>
       <div class="cmatch"><i class="fas ${{si(v.sport)}}" style="margin-right:6px;opacity:.6"></i>${{v.match}}</div>
       <div class="cmeta"><span><i class="fas fa-clock"></i>&nbsp;${{fd(v.commence)}}</span><span>${{v.sport.replace(/_/g,' ')}}</span></div>
       <table class="ctbl">
@@ -1724,7 +1758,7 @@ function d2f(d){{const t=1e-5;let h1=1,h2=0,k1=0,k2=1,b=d-1;for(let i=0;i<40;i++
 # ═════════════════════════════════════════════════════════════════════════════
 def main():
     log.info("╔══════════════════════════════════════════════════╗")
-    log.info("║      ARB SNIPER v7.0 — Maximum Coverage          ║")
+    log.info("║      ARB SNIPER v8.0 — Maximum Coverage          ║")
     log.info("╚══════════════════════════════════════════════════╝")
 
     state = load_state()
