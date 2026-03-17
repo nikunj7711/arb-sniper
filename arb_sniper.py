@@ -2,25 +2,10 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                    ARB SNIPER v8.0 — INDIA EDITION
-║  Two-Step BC.Game API | India Books | localStorage Bankroll | Clear Markets               ║
-║  Dynamic Sport Discovery | All Markets | Fixed Arb Engine | Dual CF Bypass  ║
+║                    ARB SNIPER v8.0 — ENTERPRISE NODE EDITION
+║  Two-Step BC.Game API | India Books | localStorage Bankroll | Clear Markets  ║
+║  Dynamic Sport Discovery | All Markets | Fixed Arb Engine | Auto-Billing     ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
-
-WHAT'S NEW IN v7.0:
-  • Dynamic sport list — fetches ALL in-season sports from The Odds API
-    automatically instead of a hardcoded list. Catches every sport that has
-    active odds right now (soccer, NBA, NHL, tennis, cricket, MMA, golf, etc.)
-  • All 4 regions (eu, uk, us, au) fetched per sport for maximum bookmaker
-    coverage — more books = more arb opportunities
-  • Bookmaker list expanded to 20+ books including all major exchanges
-  • Fixed arb engine (v6.1 fixes carried forward):
-      - Bug 1: 3-way arbs need >= 2 books (not == 3)
-      - Bug 2: strict 2-way/3-way branching — no fake Soccer arbs
-      - Anti-palp: rejects arbs > 15% profit (stale/error lines)
-  • Dual BC.Game bypass: cloudscraper (Layer 1) + ScraperAPI proxy (Layer 2)
-  • Live bankroll input — Kelly stakes update instantly in browser
-  • BC Debug tab shows exactly what happened at each URL + layer
 """
 
 import os
@@ -58,94 +43,54 @@ log = logging.getLogger("ArbSniper")
 warnings.filterwarnings("ignore", message="Unverified HTTPS request")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CONSTANTS
+# CONSTANTS & CONFIGURATIONS
 # ─────────────────────────────────────────────────────────────────────────────
 ODDS_BASE      = "https://api.the-odds-api.com/v4"
 NTFY_URL       = "https://ntfy.sh/nikunj_arb_alerts_2026"
 STATE_FILE     = "api_state.json"
 OUTPUT_HTML    = "index.html"
-DASHBOARD_PASS = os.environ.get("DASHBOARD_PASS", "arb2026")
 SCRAPERAPI_KEY = os.environ.get("SCRAPERAPI_KEY", "").strip()
 
+# ── MONETIZATION & GATEWAY CONFIG ─────────────────────────────────────────────
+YOUR_UPI_ID  = "Furiousfighter06-1@okhdfcbank"
+YOUR_NAME    = "Furious Fighter"
+FIREBASE_URL = "https://payment-engine-e3bff-default-rtdb.asia-southeast1.firebasedatabase.app"
+SUB_PRICE    = 500  # Base subscription price for 30 days (INR)
+
 # ── ARBITRAGE THRESHOLDS ──────────────────────────────────────────────────────
-MIN_ARB_PROFIT = 0.05   # 0.05% minimum — catch even razor-thin arbs
-MAX_ARB_PROFIT = 15.0   # Anti-palp cap — above 15% is almost certainly an error
-MIN_EV_EDGE    = 0.005  # 0.5% edge required to flag as +EV
+MIN_ARB_PROFIT = 0.05   # 0.05% minimum
+MAX_ARB_PROFIT = 15.0   # Anti-palp cap
+MIN_EV_EDGE    = 0.005  # 0.5% edge required
 KELLY_FRACTION = 0.30   # 30% fractional Kelly
 DEFAULT_BANK   = 10000  # Rs — overridden live by dashboard input
 
 # ── BC.GAME ENDPOINTS ─────────────────────────────────────────────────────────
-# BC.Game sptpub API — two-step format (confirmed working as of 2026):
-#   Step 1: GET /en/0       → status dict: {"status": {"hex_id": version, ...}}
-#   Step 2: GET /en/{id}    → actual events for that sport/league category
-# The hex IDs in status are converted to decimal for the URL path.
 BCGAME_BASE    = "https://api-k-c7818b61-623.sptpub.com/api/v4/prematch/brand/2103509236163162112/en"
-BCGAME_DISC    = f"{BCGAME_BASE}/0"       # discovery endpoint
-BCGAME_MAX_CAT = 30                        # max categories to fetch per run
+BCGAME_DISC    = f"{BCGAME_BASE}/0"       
+BCGAME_MAX_CAT = 30                        
 
 # ── BOOKMAKERS — INDIA-ACCESSIBLE ONLY ───────────────────────────────────────
-# Only offshore/crypto books accessible from India. US (DraftKings, FanDuel)
-# and AU (TAB, Neds) books removed — they are useless to Indian users.
-# Pinnacle is ESSENTIAL as the sharp reference for true-odds (EV) calculation.
 ALLOWED_BOOKS = {
-    "pinnacle",       # Sharp reference — required for EV baseline
-    "stake",          # Crypto book, widely used in India
-    "bc_game",        # Crypto book, India-accessible
-    "onexbet",        # 1xBet — extremely popular in India
-    "parimatch",      # India-accessible
-    "dafabet",        # Targets Asian/Indian market specifically
-    "betway",         # Accepts Indian players
-    "bet365",         # Most popular in India (VPN-accessible)
-    "marathonbet",    # India-accessible
-    "betfair",        # Exchange — best prices for arbing
-    "matchbook",      # Exchange — sharp market prices
+    "pinnacle", "stake", "bc_game", "onexbet", "parimatch", 
+    "dafabet", "betway", "bet365", "marathonbet", "betfair", "matchbook",
 }
 
-# ── MARKETS TO SCAN ───────────────────────────────────────────────────────────
-# h2h = match winner, totals = over/under, spreads = handicap
 MARKETS = ["h2h", "totals", "spreads"]
-
-# ── REGIONS ───────────────────────────────────────────────────────────────────
-# Fetch all 4 regions so we get the widest bookmaker coverage.
-# eu=European books, uk=UK books, us=US books, au=Australian books
 REGIONS = "eu,uk,us,au"
 
-# ── SPORTS ALWAYS INCLUDED ────────────────────────────────────────────────────
-# Keep this list focused. Each sport × 3 markets = 3 API calls per run.
-# At 30-min intervals: 30 sports × 3 × 48 runs = 4,320 calls/day.
-# 38 keys × 500 = 19,000 quota → ~4 days of coverage before any key exhausts.
-# Rule of thumb: every extra sport costs 144 API calls/day.
 ALWAYS_INCLUDE_SPORTS = {
-    # Top soccer leagues (most arb opportunities)
     "soccer_epl", "soccer_spain_la_liga", "soccer_germany_bundesliga",
     "soccer_italy_serie_a", "soccer_france_ligue_one",
     "soccer_uefa_champs_league", "soccer_uefa_europa_league",
-    # Basketball
     "basketball_nba", "basketball_euroleague",
-    # Hockey
-    "icehockey_nhl",
-    # Combat sports
-    "mma_mixed_martial_arts",
-    # Cricket (India-relevant)
+    "icehockey_nhl", "mma_mixed_martial_arts",
     "cricket_ipl", "cricket_test_match", "cricket_odi",
-    # Tennis (active slams only — changes with season)
     "tennis_atp_french_open", "tennis_wta_french_open",
-    # American football (when in season)
     "americanfootball_nfl",
 }
 
-# ── CREDITS PER RUN ───────────────────────────────────────────────────────────
-# Using /sports/upcoming/odds: exactly 3 credits per run (one per market).
-# Monthly budget: 38 keys × 500 = 19,000 credits/month
-# At 48 runs/day × 30 days = 1,440 runs/month × 3 = 4,320 credits needed
-# This fits comfortably within budget. Key #1 lasts 500÷(3×48)=3.5 days,
-# then key #2 takes over automatically — 38 keys = 133 days of continuous ops.
-
-
 # ═════════════════════════════════════════════════════════════════════════════
 # KEY ROTATION MANAGER
-# Thread-safe: always picks the key with the most remaining quota.
-# With 19 keys you have up to 19 × 500 = 9,500 API calls available per day.
 # ═════════════════════════════════════════════════════════════════════════════
 class KeyRotator:
     def __init__(self):
@@ -156,13 +101,10 @@ class KeyRotator:
         self._lock  = threading.Lock()
         self._quota = {k: 500 for k in self.keys}
         self._used  = {k: 0   for k in self.keys}
-        log.info(f"KeyRotator: {len(self.keys)} keys | "
-                 f"{self.total_remaining()} total quota")
 
     def get(self) -> str:
         with self._lock:
-            if not self.keys:
-                return "MISSING_KEY"
+            if not self.keys: return "MISSING_KEY"
             return max(self.keys, key=lambda k: self._quota.get(k, 0))
 
     def update(self, key: str, remaining: int, used: int = 0):
@@ -173,15 +115,12 @@ class KeyRotator:
     def mark_exhausted(self, key: str):
         with self._lock:
             self._quota[key] = 0
-            log.warning(f"Key ...{key[-6:]} marked exhausted.")
 
     def total_remaining(self) -> int:
-        with self._lock:
-            return max(0, sum(self._quota.values()))
+        with self._lock: return max(0, sum(self._quota.values()))
 
     def total_used(self) -> int:
-        with self._lock:
-            return sum(self._used.values())
+        with self._lock: return sum(self._used.values())
 
     def status(self) -> list:
         with self._lock:
@@ -190,13 +129,12 @@ class KeyRotator:
                     "key":       f"{k[:4]}...{k[-4:]}",
                     "remaining": self._quota.get(k, 0),
                     "used":      self._used.get(k, 0),
+                    "active":    k == max(self.keys, key=lambda x: self._quota.get(x, 0)) if self.keys else False
                 }
                 for k in self.keys
             ]
 
-
 ROTATOR = KeyRotator()
-
 
 # ═════════════════════════════════════════════════════════════════════════════
 # STATE MANAGEMENT
@@ -217,67 +155,35 @@ def load_state() -> dict:
                 saved = json.load(f)
             if isinstance(saved, dict):
                 defaults.update(saved)
-        except Exception:
-            pass
+        except Exception: pass
     return defaults
-
 
 def save_state(state: dict):
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
 
-
 # ═════════════════════════════════════════════════════════════════════════════
 # DYNAMIC SPORT DISCOVERY
-# Fetches ALL currently in-season sports from The Odds API.
-# This is the key to maximum coverage — no more missing sports.
 # ═════════════════════════════════════════════════════════════════════════════
 def fetch_all_sports() -> list:
-    """
-    Returns list of sport keys for logging/display purposes only.
-    The actual odds fetching uses /sports/upcoming/odds which covers
-    all in-season sports automatically — no per-sport list needed.
-    This function costs 0 API credits (free metadata endpoint).
-    """
     key = ROTATOR.get()
-    if key == "MISSING_KEY":
-        return sorted(ALWAYS_INCLUDE_SPORTS)
+    if key == "MISSING_KEY": return sorted(ALWAYS_INCLUDE_SPORTS)
     try:
-        r = requests.get(
-            f"{ODDS_BASE}/sports",
-            params={"apiKey": key, "all": "false"},
-            timeout=15
-        )
+        r = requests.get(f"{ODDS_BASE}/sports", params={"apiKey": key, "all": "false"}, timeout=15)
         if r.status_code == 200:
-            sports_data = r.json()
-            active = [s["key"] for s in sports_data
-                      if not s.get("has_outrights")]
-            log.info(f"Sports metadata: {len(active)} in-season sports found "
-                     f"(upcoming endpoint will cover all of them)")
+            active = [s["key"] for s in r.json() if not s.get("has_outrights")]
             return active
         return sorted(ALWAYS_INCLUDE_SPORTS)
-    except Exception as e:
-        log.error(f"Sports metadata fetch error: {e}")
+    except Exception:
         return sorted(ALWAYS_INCLUDE_SPORTS)
-
 
 # ═════════════════════════════════════════════════════════════════════════════
 # ODDS API — CONCURRENT FETCHER
-# Fetches EVERY sport × EVERY market combination in parallel.
-# Uses key rotation so multiple keys can run simultaneously.
 # ═════════════════════════════════════════════════════════════════════════════
 def _fetch_market(market: str) -> list:
-    """
-    Fetch ONE market across ALL sports using the /sports/upcoming/odds endpoint.
-    Cost: 1 API credit.  Returns events for every in-season sport at once.
-    This replaces fetching each sport individually (was N_sports credits).
-    """
     key = ROTATOR.get()
-    if key == "MISSING_KEY":
-        return []
-    if ROTATOR._quota.get(key, 0) <= 0:
-        log.warning(f"No quota left for market={market}")
-        return []
+    if key == "MISSING_KEY": return []
+    if ROTATOR._quota.get(key, 0) <= 0: return []
 
     url    = f"{ODDS_BASE}/sports/upcoming/odds"
     params = {
@@ -289,79 +195,36 @@ def _fetch_market(market: str) -> list:
     }
     try:
         r = requests.get(url, params=params, timeout=30)
-        remaining = int(r.headers.get("X-Requests-Remaining",
-                                      ROTATOR._quota.get(key, 0)))
+        remaining = int(r.headers.get("X-Requests-Remaining", ROTATOR._quota.get(key, 0)))
         used      = int(r.headers.get("X-Requests-Used", 0))
         ROTATOR.update(key, remaining, used)
 
         if r.status_code in (429, 401):
             ROTATOR.mark_exhausted(key)
             return []
-        if r.status_code == 422:
-            return []
-        if r.status_code != 200:
-            log.warning(f"HTTP {r.status_code} — upcoming/{market}")
-            return []
+        if r.status_code != 200: return []
 
         data = r.json()
-        if not isinstance(data, list):
-            return []
+        if not isinstance(data, list): return []
 
-        # Filter to India-accessible bookmakers only
         filtered = []
         for ev in data:
-            bms = [b for b in ev.get("bookmakers", [])
-                   if b.get("key") in ALLOWED_BOOKS]
+            bms = [b for b in ev.get("bookmakers", []) if b.get("key") in ALLOWED_BOOKS]
             if bms:
                 ev["bookmakers"] = bms
                 filtered.append(ev)
-
-        log.info(f"  upcoming/{market}: {len(filtered)} events | "
-                 f"key ...{key[-6:]} → {remaining} remaining")
         return filtered
 
-    except requests.exceptions.Timeout:
-        log.warning(f"Timeout: upcoming/{market}")
+    except Exception:
         return []
-    except Exception as e:
-        log.error(f"Error upcoming/{market}: {e}")
-        return []
-
 
 def fetch_all_odds(state: dict, sports_list: list) -> list:
-    """
-    Fetch all odds using the /sports/upcoming/odds endpoint.
-
-    QUOTA-EFFICIENT DESIGN:
-      Old approach: N_sports × 3 markets = e.g. 87 × 3 = 261 credits/run
-      New approach: 3 markets × 1 call each = 3 credits/run (87× cheaper)
-
-      /sports/upcoming/odds returns ALL in-season sports in a single call.
-      We make exactly 3 calls per run (one per market: h2h, totals, spreads).
-
-    Monthly budget with 38 keys × 500 credits = 19,000 credits/month:
-      3 credits/run × 48 runs/day × 30 days = 4,320 credits/month
-      That covers 4+ months on a single key before needing the next.
-    """
-    if not ROTATOR.keys:
-        log.error("No API keys. Set ODDS_API_KEYS in GitHub secrets.")
-        return []
-
-    total_remaining = ROTATOR.total_remaining()
-    if total_remaining <= 0:
-        log.error("All API keys exhausted. "
-                  "Free tier resets on the 1st of each month.")
+    if not ROTATOR.keys: return []
+    if ROTATOR.total_remaining() <= 0:
         state["quota_exhausted"] = True
         return []
 
-    log.info(f"Fetching upcoming odds | "
-             f"3 calls (one per market) | "
-             f"quota: {total_remaining} remaining | "
-             f"active key: {ROTATOR.active_key_label()}")
-
-    # Merge events from all 3 markets — keyed by event_id to deduplicate
     events_by_id: dict = {}
-
     for market in MARKETS:
         results = _fetch_market(market)
         for ev in results:
@@ -369,17 +232,13 @@ def fetch_all_odds(state: dict, sports_list: list) -> list:
             if ev_id not in events_by_id:
                 events_by_id[ev_id] = ev
             else:
-                # Merge bookmakers from this market into existing event
-                existing_bms = {bm["key"]: bm
-                                for bm in events_by_id[ev_id]["bookmakers"]}
+                existing_bms = {bm["key"]: bm for bm in events_by_id[ev_id]["bookmakers"]}
                 for bm in ev["bookmakers"]:
                     bk = bm["key"]
                     if bk not in existing_bms:
                         events_by_id[ev_id]["bookmakers"].append(bm)
                     else:
-                        # Add any new markets from this bookmaker
-                        existing_mkt_keys = {m["key"] for m in
-                                             existing_bms[bk].get("markets", [])}
+                        existing_mkt_keys = {m["key"] for m in existing_bms[bk].get("markets", [])}
                         for mkt in bm.get("markets", []):
                             if mkt["key"] not in existing_mkt_keys:
                                 existing_bms[bk]["markets"].append(mkt)
@@ -388,38 +247,10 @@ def fetch_all_odds(state: dict, sports_list: list) -> list:
     state["remaining_requests"]   = ROTATOR.total_remaining()
     state["total_events_scanned"] = len(all_events)
     state["sports_scanned"]       = len({ev.get("sport_key","") for ev in all_events})
-    log.info(f"Collected {len(all_events)} unique events across "
-             f"{state['sports_scanned']} sports | "
-             f"3 API credits used this run")
     return all_events
 
-
 # ═════════════════════════════════════════════════════════════════════════════
-# BC.GAME SCRAPER — CONFIRMED SCHEMA v8.0
-#
-# API architecture (confirmed by live testing):
-#   GET /en/0
-#     → {top_events_versions:[int], rest_events_versions:[int,...], status:{...}}
-#   GET /en/{chunk_id}   (chunk_id = large timestamp int from versions lists)
-#     → {sports:{}, categories:{}, tournaments:{}, events:{}}
-#
-# Event schema (ev["desc"] holds all metadata):
-#   desc.type        : "match" | "tournament" | "stage"
-#   desc.competitors : [{name, qualifier?, sport_id}]
-#   desc.scheduled   : Unix timestamp in SECONDS
-#   desc.sport       : sport_id string
-#   desc.tournament  : tournament_id string
-#
-# Market schema (ev["markets"]):
-#   "11"  + line="" or "0"  → H2H Match Winner
-#   "223" + line="hcp=X"    → Handicap / Spread
-#   "202" + line="setnr=X"  → Set/Game Totals (Over/Under)
-#   "534"                   → Outright winner (skip)
-#
-# odds coefficient in sel_data["k"] (string, must float())
-# sel_ids = "tt:outcometext:..." strings (positional naming used)
-#
-# User-Agent: MUST be "insomnia/12.4.0" — browser UA returns 403 on chunks
+# BC.GAME SCRAPER
 # ═════════════════════════════════════════════════════════════════════════════
 BC_DEBUG = {
     "status":         "not_tried",
@@ -433,132 +264,47 @@ BC_DEBUG = {
     "raw_preview":    "",
 }
 
-# BC.Game host — NOT behind Cloudflare, insomnia UA works directly
 _BC_HOST    = "api-k-c7818b61-623.sptpub.com"
 _BC_HEADERS = {"User-Agent": "insomnia/12.4.0", "Accept": "application/json"}
 
-
 def _bc_fetch(path: str) -> dict | None:
-    """
-    Fetch one BC.Game API path with 3-layer fallback.
-    sptpub.com is NOT behind Cloudflare, but GitHub Actions IPs may be
-    blocked at the network level — ScraperAPI residential proxy bypasses this.
-
-    Layer 1: requests library direct (fastest, works from local + most servers)
-    Layer 2: http.client direct (stdlib fallback in case requests unavailable)
-    Layer 3: ScraperAPI residential proxy (works on GitHub Actions)
-    """
     import zlib, gzip, io
-
     full_url = f"https://{_BC_HOST}{path}"
 
     def _parse(raw: bytes) -> dict | None:
-        try:
-            return json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, ValueError):
-            pass
-        try:
-            return json.loads(zlib.decompress(raw, 16 + zlib.MAX_WBITS).decode("utf-8"))
-        except Exception:
-            pass
-        try:
-            return json.loads(gzip.GzipFile(fileobj=io.BytesIO(raw)).read().decode("utf-8"))
-        except Exception:
-            pass
+        try: return json.loads(raw.decode("utf-8"))
+        except Exception: pass
+        try: return json.loads(zlib.decompress(raw, 16 + zlib.MAX_WBITS).decode("utf-8"))
+        except Exception: pass
+        try: return json.loads(gzip.GzipFile(fileobj=io.BytesIO(raw)).read().decode("utf-8"))
+        except Exception: pass
         return None
 
-    # ── Layer 1: requests direct ───────────────────────────────────────────────
     try:
-        r = requests.get(
-            full_url,
-            headers=_BC_HEADERS,
-            timeout=20,
-            verify=True,
-        )
+        r = requests.get(full_url, headers=_BC_HEADERS, timeout=20, verify=True)
         if r.status_code == 200:
             parsed = _parse(r.content)
-            if parsed is not None:
-                log.debug(f"BC L1 OK: {path[-40:]}")
-                return parsed
-            log.debug(f"BC L1 parse failed: {path[-40:]}")
-        else:
-            log.debug(f"BC L1 HTTP {r.status_code}: {path[-40:]}")
-    except Exception as e:
-        log.debug(f"BC L1 exception: {e}")
+            if parsed: return parsed
+    except Exception: pass
 
-    # ── Layer 2: http.client direct (stdlib) ───────────────────────────────────
-    try:
-        import http.client
-        conn = http.client.HTTPSConnection(_BC_HOST, timeout=20)
-        conn.request("GET", path, "", _BC_HEADERS)
-        res = conn.getresponse()
-        raw = res.read()
-        if res.status == 200:
-            parsed = _parse(raw)
-            if parsed is not None:
-                log.debug(f"BC L2 OK: {path[-40:]}")
-                return parsed
-        log.debug(f"BC L2 HTTP {res.status}: {path[-40:]}")
-    except Exception as e:
-        log.debug(f"BC L2 exception: {e}")
-
-    # ── Layer 3: ScraperAPI — API mode with keep_headers=true ────────────────
-    # Proxy mode strips custom User-Agent; API mode preserves it end-to-end.
-    # sptpub.com REQUIRES "insomnia/12.4.0" UA — any other UA returns 403.
-    # keep_headers=true passes our exact _BC_HEADERS to the target server.
-    # autoparse=false returns raw response (we handle JSON ourselves).
     if SCRAPERAPI_KEY:
         try:
-            api_url = (
-                "https://api.scraperapi.com/"
-                f"?api_key={SCRAPERAPI_KEY}"
-                f"&url={urllib.parse.quote(full_url, safe='')}"
-                "&keep_headers=true"
-                "&autoparse=false"
-                "&render=false"
-                "&country_code=de"      # EU residential IP
-            )
-            r = requests.get(
-                api_url,
-                headers=_BC_HEADERS,   # forwarded to sptpub.com via keep_headers
-                timeout=60,
-            )
-            log.info(f"BC L3 ScraperAPI HTTP {r.status_code} "
-                     f"size={len(r.content)}B path={path[-40:]}")
+            api_url = (f"https://api.scraperapi.com/?api_key={SCRAPERAPI_KEY}&url={urllib.parse.quote(full_url, safe='')}&keep_headers=true&autoparse=false&render=false&country_code=de")
+            r = requests.get(api_url, headers=_BC_HEADERS, timeout=60)
             if r.status_code == 200:
                 parsed = _parse(r.content)
-                if parsed is not None:
-                    log.info(f"BC L3 (ScraperAPI API mode) OK: {path[-40:]}")
-                    return parsed
-                # If parse failed, log what we got
-                log.warning(f"BC L3 parse failed — preview: {r.text[:200]}")
-            elif r.status_code == 403:
-                log.warning("BC L3 ScraperAPI 403 — UA may still be stripped. "
-                            "Check ScraperAPI plan supports keep_headers.")
-            elif r.status_code == 429:
-                log.warning("BC L3 ScraperAPI 429 — monthly quota exhausted.")
-            else:
-                log.warning(f"BC L3 ScraperAPI HTTP {r.status_code}")
-        except Exception as e:
-            log.warning(f"BC L3 ScraperAPI exception: {e}")
-    else:
-        log.warning("BC L3 skipped — SCRAPERAPI_KEY not set. "
-                    "Add it as a GitHub secret to enable BC.Game on Actions.")
+                if parsed: return parsed
+        except Exception: pass
 
-    log.warning(f"BC all 3 layers failed for {path[-40:]}")
     return None
-
 
 def _bc_sport_name(sport_id: str, all_sports: dict) -> str:
     return all_sports.get(str(sport_id), {}).get("name", f"sport_{sport_id}")
 
-
 def _bc_league_name(tourn_id: str, all_tourns: dict) -> str:
     return all_tourns.get(str(tourn_id), {}).get("name", "")
 
-
 def _bc_parse_teams(desc: dict) -> tuple[str, str]:
-    """Extract home/away names from desc.competitors list."""
     comps = desc.get("competitors", [])
     home = away = ""
     for c in comps:
@@ -566,179 +312,100 @@ def _bc_parse_teams(desc: dict) -> tuple[str, str]:
         n = c.get("name", "")
         if q in ("home", "1", "h"):   home = n
         elif q in ("away", "2", "a"): away = n
-    # Positional fallback for 2-team events with no qualifier
     if (not home or not away) and len(comps) == 2:
         home = comps[0].get("name", "")
         away = comps[1].get("name", "")
     return home, away
 
-
 def _bc_parse_h2h(markets: dict) -> list:
-    """
-    Market "11" with empty or "0" line key = H2H Match Winner.
-    2 outcomes → [Home, Away]      (no-draw: tennis, basketball, etc.)
-    3 outcomes → [Home, Draw, Away] (soccer, etc.)
-    sel_ids are tt:outcometext:... strings — use positional naming.
-    """
-    if "11" not in markets:
-        return []
+    if "11" not in markets: return []
     for line_key, sels in markets["11"].items():
-        if line_key not in ("", "0"):
-            continue
-        if not isinstance(sels, dict):
-            continue
+        if line_key not in ("", "0"): continue
+        if not isinstance(sels, dict): continue
         prices = []
         for sel_data in sels.values():
-            if not isinstance(sel_data, dict):
-                continue
+            if not isinstance(sel_data, dict): continue
             try:
                 p = float(sel_data.get("k", 0))
-                if p > 1.01:
-                    prices.append(round(p, 3))
-            except (ValueError, TypeError):
-                pass
+                if p > 1.01: prices.append(round(p, 3))
+            except Exception: pass
         if len(prices) == 2:
-            return [{"name": "Home", "price": prices[0]},
-                    {"name": "Away", "price": prices[1]}]
+            return [{"name": "Home", "price": prices[0]}, {"name": "Away", "price": prices[1]}]
         if len(prices) == 3:
-            return [{"name": "Home", "price": prices[0]},
-                    {"name": "Draw", "price": prices[1]},
-                    {"name": "Away", "price": prices[2]}]
+            return [{"name": "Home", "price": prices[0]}, {"name": "Draw", "price": prices[1]}, {"name": "Away", "price": prices[2]}]
     return []
 
-
 def _bc_parse_handicap(markets: dict) -> list:
-    """
-    Market "223" + line "hcp=X" → Handicap/Spread.
-    Returns list of outcome dicts (best line only).
-    """
-    if "223" not in markets:
-        return []
+    if "223" not in markets: return []
     results = []
     for line_key, sels in markets["223"].items():
-        if not line_key.startswith("hcp="):
-            continue
-        if not isinstance(sels, dict):
-            continue
+        if not line_key.startswith("hcp="): continue
+        if not isinstance(sels, dict): continue
         hcp = line_key.replace("hcp=", "")
         prices = []
         for sel_data in sels.values():
-            if not isinstance(sel_data, dict):
-                continue
+            if not isinstance(sel_data, dict): continue
             try:
                 p = float(sel_data.get("k", 0))
-                if p > 1.01:
-                    prices.append(round(p, 3))
-            except (ValueError, TypeError):
-                pass
+                if p > 1.01: prices.append(round(p, 3))
+            except Exception: pass
         if len(prices) == 2:
-            results.append({
-                "name":  f"Home {hcp}",
-                "price": prices[0],
-                "point": float(hcp) if hcp.lstrip("-").replace(".","").isdigit() else 0,
-            })
-            results.append({
-                "name":  f"Away {hcp}",
-                "price": prices[1],
-                "point": -float(hcp) if hcp.lstrip("-").replace(".","").isdigit() else 0,
-            })
-    return results[:4]   # max 2 lines × 2 sides
-
+            results.append({"name": f"Home {hcp}", "price": prices[0], "point": float(hcp) if hcp.lstrip("-").replace(".","").isdigit() else 0})
+            results.append({"name": f"Away {hcp}", "price": prices[1], "point": -float(hcp) if hcp.lstrip("-").replace(".","").isdigit() else 0})
+    return results[:4]
 
 def _bc_parse_totals(markets: dict) -> list:
-    """
-    Market "202" + any line → Set/Game Totals (Over/Under).
-    """
-    if "202" not in markets:
-        return []
+    if "202" not in markets: return []
     results = []
     for line_key, sels in markets["202"].items():
-        if not isinstance(sels, dict):
-            continue
+        if not isinstance(sels, dict): continue
         line_label = line_key.replace("setnr=", "") if "setnr=" in line_key else line_key
         prices = []
         for sel_data in sels.values():
-            if not isinstance(sel_data, dict):
-                continue
+            if not isinstance(sel_data, dict): continue
             try:
                 p = float(sel_data.get("k", 0))
-                if p > 1.01:
-                    prices.append(round(p, 3))
-            except (ValueError, TypeError):
-                pass
+                if p > 1.01: prices.append(round(p, 3))
+            except Exception: pass
         if len(prices) == 2:
             results.append({"name": f"Over {line_label}",  "price": prices[0]})
             results.append({"name": f"Under {line_label}", "price": prices[1]})
-    return results[:4]   # max 2 lines × 2 sides
-
+    return results[:4]
 
 def fetch_bcgame_events() -> list:
-    """
-    Fetch BC.Game pre-match events using confirmed two-step architecture.
-
-    Step 1: GET /en/0  → manifest with chunk IDs in top/rest_events_versions
-    Step 2: GET /en/{chunk_id} for each chunk → stitch relational tables
-    Step 3: Parse each event using confirmed desc + markets schema
-    """
     global BC_DEBUG
-
     brand_id = "2103509236163162112"
     base     = f"/api/v4/prematch/brand/{brand_id}/en"
 
-    # ── Step 1: Manifest ───────────────────────────────────────────────────────
-    log.info("BC.Game: fetching manifest /en/0 ...")
     manifest = _bc_fetch(f"{base}/0")
     if not manifest:
         BC_DEBUG["status"] = "manifest_failed"
-        BC_DEBUG["raw_preview"] = (
-            "Manifest /en/0 returned nothing from all 3 layers.\n\n"
-            "MOST LIKELY CAUSE: GitHub Actions datacenter IP is blocked by sptpub.com.\n"
-            f"SCRAPERAPI_KEY set: {'YES' if SCRAPERAPI_KEY else 'NO — add it as a GitHub secret'}\n\n"
-            "If SCRAPERAPI_KEY is set and still failing, check your ScraperAPI "
-            "dashboard for quota usage. Free tier = 1,000 calls/month."
-        )
-        log.warning(f"BC.Game manifest fetch failed. "
-                    f"ScraperAPI key {'present' if SCRAPERAPI_KEY else 'MISSING'}.")
         return []
 
     top_ids  = manifest.get("top_events_versions",  [])
     rest_ids = manifest.get("rest_events_versions", [])
     all_ids  = top_ids + rest_ids
     BC_DEBUG["chunks_total"] = len(all_ids)
-    BC_DEBUG["raw_preview"]  = (f"top={top_ids[:2]}  rest={rest_ids[:3]}  "
-                                f"total={len(all_ids)} chunks")
-    log.info(f"BC.Game manifest: {len(top_ids)} top + {len(rest_ids)} rest "
-             f"= {len(all_ids)} chunks")
 
-    if not all_ids:
-        BC_DEBUG["status"] = "no_chunk_ids"
-        return []
+    if not all_ids: return []
 
-    # ── Step 2: Fetch all chunks and stitch ────────────────────────────────────
     all_sports = {}; all_cats = {}; all_tourns = {}; all_events = {}
     fetched = 0
 
     for chunk_id in all_ids:
         chunk = _bc_fetch(f"{base}/{chunk_id}")
-        if not chunk:
-            continue
+        if not chunk: continue
         all_sports.update(chunk.get("sports",      {}))
         all_cats.update(  chunk.get("categories",  {}))
         all_tourns.update(chunk.get("tournaments", {}))
         all_events.update(chunk.get("events",      {}))
         fetched += 1
-        log.debug(f"BC chunk {chunk_id}: +{len(chunk.get('events',{}))} events")
 
     BC_DEBUG["chunks_fetched"] = fetched
     BC_DEBUG["events_raw"]     = len(all_events)
-    log.info(f"BC.Game stitched: {len(all_sports)} sports  "
-             f"{len(all_tourns)} leagues  {len(all_events)} events")
 
-    if not all_events:
-        BC_DEBUG["status"] = "no_events_in_chunks"
-        return []
+    if not all_events: return []
 
-    # ── Step 3: Parse events ───────────────────────────────────────────────────
     converted = []
     skip_out = skip_teams = skip_odds = 0
 
@@ -746,7 +413,6 @@ def fetch_bcgame_events() -> list:
         desc    = ev.get("desc", {})
         ev_type = desc.get("type", "match")
 
-        # Skip outrights (tournament/stage winner markets)
         if ev_type not in ("match", "game", ""):
             skip_out += 1
             continue
@@ -761,7 +427,6 @@ def fetch_bcgame_events() -> list:
         handicap = _bc_parse_handicap(markets)
         totals   = _bc_parse_totals(markets)
 
-        # Build all_outcomes — used for merge with Odds API events
         all_outcomes = h2h or []
         if not all_outcomes:
             skip_odds += 1
@@ -773,21 +438,16 @@ def fetch_bcgame_events() -> list:
         sport = _bc_sport_name(sid, all_sports)
         lg    = _bc_league_name(tid, all_tourns)
 
-        # Format start time (scheduled is in SECONDS, not ms)
         try:
             ts_val = float(ts)
             start  = datetime.fromtimestamp(ts_val, tz=timezone.utc).isoformat()
         except Exception:
             start = str(ts)
 
-        # Build bookmaker entry in standard Odds API format
         mkt_list = []
-        if h2h:
-            mkt_list.append({"key": "h2h", "outcomes": h2h})
-        if handicap:
-            mkt_list.append({"key": "spreads", "outcomes": handicap})
-        if totals:
-            mkt_list.append({"key": "totals", "outcomes": totals})
+        if h2h: mkt_list.append({"key": "h2h", "outcomes": h2h})
+        if handicap: mkt_list.append({"key": "spreads", "outcomes": handicap})
+        if totals: mkt_list.append({"key": "totals", "outcomes": totals})
 
         converted.append({
             "id":            f"bcgame_{ev_id}",
@@ -805,30 +465,19 @@ def fetch_bcgame_events() -> list:
         })
 
     BC_DEBUG["matches_parsed"] = len(converted)
-    BC_DEBUG["outrights_skip"] = skip_out
-    BC_DEBUG["no_teams_skip"]  = skip_teams
-    BC_DEBUG["no_odds_skip"]   = skip_odds
     BC_DEBUG["status"]         = f"ok_{len(converted)}_matches" if converted else "ok_but_no_h2h"
-
-    log.info(f"BC.Game ✅ {len(converted)} matches  "
-             f"(skipped: {skip_out} outrights, {skip_teams} no-teams, "
-             f"{skip_odds} no-h2h-odds)")
     return converted
-
 
 def similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, a.lower().strip(), b.lower().strip()).ratio()
 
-
 def merge_bcgame(odds_events: list, bc_events: list) -> list:
-    """Fuzzy-merge BC.Game events into Odds API events by team name."""
     merged = 0
     for bc_ev in bc_events:
         bh, ba = bc_ev["home_team"], bc_ev["away_team"]
         best_ev, best_score = None, 0.0
         for ev in odds_events:
-            s = (similarity(bh, ev.get("home_team", "")) +
-                 similarity(ba, ev.get("away_team", ""))) / 2
+            s = (similarity(bh, ev.get("home_team", "")) + similarity(ba, ev.get("away_team", ""))) / 2
             if s > best_score:
                 best_score, best_ev = s, ev
         if best_score > 0.72 and best_ev:
@@ -836,122 +485,70 @@ def merge_bcgame(odds_events: list, bc_events: list) -> list:
             merged += 1
         else:
             odds_events.append(bc_ev)
-    log.info(f"BC.Game merge: {merged} integrated, "
-             f"{len(bc_events) - merged} standalone added.")
     return odds_events
-
 
 # ═════════════════════════════════════════════════════════════════════════════
 # QUANT MATH ENGINE
 # ═════════════════════════════════════════════════════════════════════════════
 def remove_vig(outcomes: list) -> dict:
-    """
-    Pinnacle multiplicative vig removal → {name: true_probability}.
-    Steps:
-      1. raw_prob = 1 / decimal_odds   (this includes the vig)
-      2. total    = sum(all raw_probs)  (> 1.0, the excess is the margin)
-      3. true_prob = raw_prob / total   (now sums to exactly 1.0)
-    """
     raw = {}
     for o in outcomes:
-        try:
-            raw[o["name"]] = 1.0 / float(o["price"])
-        except (ValueError, TypeError, KeyError):
-            pass
+        try: raw[o["name"]] = 1.0 / float(o["price"])
+        except Exception: pass
     total = sum(raw.values())
-    if total <= 0:
-        return {}
+    if total <= 0: return {}
     return {k: v / total for k, v in raw.items()}
 
-
 def kelly_stake(edge: float, odds: float, bank: float) -> float:
-    """30% fractional Kelly Criterion stake."""
     b = odds - 1.0
-    if b <= 0:
-        return 0.0
+    if b <= 0: return 0.0
     p  = 1.0 / (odds / (1.0 + edge))
     kf = (b * p - (1.0 - p)) / b
-    if kf <= 0:
-        return 0.0
+    if kf <= 0: return 0.0
     return round(KELLY_FRACTION * kf * bank, 2)
 
-
 def round10(x: float) -> float:
-    """Round stake to nearest Rs 10 for stealth placement."""
     return round(round(x / 10) * 10, 2)
 
-
 def calc_stakes(odds_list: list, total: float = 1000.0) -> list:
-    """Calculate individual leg stakes for a guaranteed-profit arb."""
     impl = sum(1.0 / o for o in odds_list)
-    if impl >= 1.0:
-        return [0.0] * len(odds_list)
+    if impl >= 1.0: return [0.0] * len(odds_list)
     return [(1.0 / o) / impl * total for o in odds_list]
 
-
 # ═════════════════════════════════════════════════════════════════════════════
-# ARBITRAGE SCANNER — FULLY FIXED ENGINE
-#
-# FIX 1: 3-way arbs need >= 2 distinct books (not == 3)
-# FIX 2: Strict branching — 2-way markets ONLY get 2-way logic,
-#         3-way markets ONLY get 3-way logic (no fake Soccer arbs)
-# FIX 3: Anti-palp cap at 15% — rejects stale/error lines
+# ARBITRAGE SCANNER
 # ═════════════════════════════════════════════════════════════════════════════
 def _best_price_per_book(bookmakers: list, market_key: str) -> dict:
-    """
-    Returns {outcome_name: {book_key: (price, title)}} for one market.
-    Outcome names are normalised for totals/spreads by appending abs(point).
-    Example: "Over" at point 2.5 becomes "Over_2.5"
-    This is critical to avoid pairing Over_2.5 with Under_3.0 as an "arb".
-    """
     best: dict = {}
     for bm in bookmakers:
         for mkt in bm.get("markets", []):
-            if mkt.get("key") != market_key:
-                continue
+            if mkt.get("key") != market_key: continue
             for o in mkt.get("outcomes", []):
                 raw_name = str(o.get("name", ""))
                 pt       = o.get("point")
-                try:
-                    price = float(o.get("price", 0))
-                except (ValueError, TypeError):
-                    continue
-                if price <= 1.01:
-                    continue
+                try: price = float(o.get("price", 0))
+                except Exception: continue
+                if price <= 1.01: continue
 
                 if pt is not None:
-                    try:
-                        name = f"{raw_name}_{abs(float(pt))}"
-                    except (ValueError, TypeError):
-                        name = raw_name
+                    try: name = f"{raw_name}_{abs(float(pt))}"
+                    except Exception: name = raw_name
                 else:
                     name = raw_name
 
                 bk  = bm.get("key", "?")
                 ttl = bm.get("title", "?")
-                if name not in best:
-                    best[name] = {}
+                if name not in best: best[name] = {}
                 if bk not in best[name] or price > best[name][bk][0]:
                     best[name][bk] = (price, ttl)
     return best
 
-
-def _build_arb_record(combo: list, mkey: str, sport: str,
-                      match: str, com: str):
-    """
-    combo = list of (outcome_name, price, book_title, book_key)
-    Returns arb dict if profitable and within anti-palp range, else None.
-    """
+def _build_arb_record(combo: list, mkey: str, sport: str, match: str, com: str):
     prices = [x[1] for x in combo]
     impl   = sum(1.0 / p for p in prices)
-    if impl >= 1.0:
-        return None
+    if impl >= 1.0: return None
     pct = (1.0 / impl - 1.0) * 100
-    if pct < MIN_ARB_PROFIT:
-        return None
-    if pct > MAX_ARB_PROFIT:
-        log.debug(f"Anti-palp: {pct:.2f}% rejected on {match}/{mkey}")
-        return None
+    if pct < MIN_ARB_PROFIT or pct > MAX_ARB_PROFIT: return None
     stakes = calc_stakes(prices)
     return {
         "ways":       len(combo),
@@ -971,159 +568,94 @@ def _build_arb_record(combo: list, mkey: str, sport: str,
         } for x, s in zip(combo, stakes)],
     }
 
-
 def _scan_h2h(best: dict, sport: str, match: str, com: str) -> list:
-    """
-    STRICT BRANCHING:
-    - 2 outcomes → tennis/mma/nba etc. → ONLY 2-way combinations
-    - 3 outcomes → soccer/rugby etc.  → ONLY 3-way combinations
-    - other count → skip
-
-    FIX 1: 3-way only needs >= 2 distinct books (was wrongly == 3)
-    FIX 2: 3-way market NEVER produces 2-way combos (was catastrophically wrong)
-    """
     arbs  = []
     names = list(best.keys())
 
     if len(names) == 2:
-        # ── Pure 2-way market (Tennis, MMA, NBA, etc.) ─────────────────────
         n1, n2 = names[0], names[1]
         bk1, bk2 = best[n1], best[n2]
         best_rec = None
         for bk_a, (p_a, t_a) in sorted(bk1.items(), key=lambda x: -x[1][0]):
             for bk_b, (p_b, t_b) in sorted(bk2.items(), key=lambda x: -x[1][0]):
-                if bk_a == bk_b:
-                    continue
-                rec = _build_arb_record(
-                    [(n1, p_a, t_a, bk_a), (n2, p_b, t_b, bk_b)],
-                    "h2h", sport, match, com
-                )
+                if bk_a == bk_b: continue
+                rec = _build_arb_record([(n1, p_a, t_a, bk_a), (n2, p_b, t_b, bk_b)], "h2h", sport, match, com)
                 if rec:
-                    if (best_rec is None or
-                            rec["profit_pct"] > best_rec["profit_pct"]):
+                    if (best_rec is None or rec["profit_pct"] > best_rec["profit_pct"]):
                         best_rec = rec
-                    break   # best_bk_b found for this bk_a
-        if best_rec:
-            arbs.append(best_rec)
+                    break
+        if best_rec: arbs.append(best_rec)
 
     elif len(names) == 3:
-        # ── 3-way market (Soccer, Rugby, etc.) ─────────────────────────────
-        # Try ALL cross-product book combinations for the 3 legs.
-        # Keep only the best profitable one.
         n1, n2, n3 = names[0], names[1], names[2]
         bk1, bk2, bk3 = best[n1], best[n2], best[n3]
         best_rec = None
         for bk_a, (p_a, t_a) in sorted(bk1.items(), key=lambda x: -x[1][0]):
             for bk_b, (p_b, t_b) in sorted(bk2.items(), key=lambda x: -x[1][0]):
-                for bk_c, (p_c, t_c) in sorted(bk3.items(),
-                                                key=lambda x: -x[1][0]):
-                    # FIX 1: >= 2 distinct books is enough (not 3)
-                    if len({bk_a, bk_b, bk_c}) < 2:
-                        continue
-                    rec = _build_arb_record(
-                        [(n1, p_a, t_a, bk_a),
-                         (n2, p_b, t_b, bk_b),
-                         (n3, p_c, t_c, bk_c)],
-                        "h2h", sport, match, com
-                    )
+                for bk_c, (p_c, t_c) in sorted(bk3.items(), key=lambda x: -x[1][0]):
+                    if len({bk_a, bk_b, bk_c}) < 2: continue
+                    rec = _build_arb_record([(n1, p_a, t_a, bk_a), (n2, p_b, t_b, bk_b), (n3, p_c, t_c, bk_c)], "h2h", sport, match, com)
                     if rec:
-                        if (best_rec is None or
-                                rec["profit_pct"] > best_rec["profit_pct"]):
+                        if (best_rec is None or rec["profit_pct"] > best_rec["profit_pct"]):
                             best_rec = rec
-        if best_rec:
-            arbs.append(best_rec)
-    # Any other outcome count → skip (ambiguous / partial market)
+        if best_rec: arbs.append(best_rec)
     return arbs
 
-
 def _scan_totals(best: dict, sport: str, match: str, com: str) -> list:
-    """
-    Totals: 'Over_2.5', 'Under_2.5', 'Over_3.0', ...
-    ONLY pair Over_X vs Under_X where X is IDENTICAL.
-    Pairing Over_2.5 vs Under_3.0 is NOT a valid arb — different lines.
-    """
     arbs   = []
-    points: dict = {}   # "2.5" → {"Over": {bk: (p, t)}, "Under": {bk: (p, t)}}
-
+    points = {}
     for name, bk_prices in best.items():
         parts = name.split("_")
-        if len(parts) < 2:
-            continue
-        side  = parts[0]              # "Over" or "Under"
-        point = "_".join(parts[1:])   # "2.5" or "224.5" etc.
+        if len(parts) < 2: continue
+        side  = parts[0]
+        point = "_".join(parts[1:])
         points.setdefault(point, {})
         points[point].setdefault(side, {})
         points[point][side].update(bk_prices)
 
     for point, sides in points.items():
-        if "Over" not in sides or "Under" not in sides:
-            continue
+        if "Over" not in sides or "Under" not in sides: continue
         over_bks  = sides["Over"]
         under_bks = sides["Under"]
         best_rec  = None
-        for bk_o, (p_o, t_o) in sorted(over_bks.items(),
-                                        key=lambda x: -x[1][0]):
-            for bk_u, (p_u, t_u) in sorted(under_bks.items(),
-                                            key=lambda x: -x[1][0]):
-                if bk_o == bk_u:
-                    continue
-                rec = _build_arb_record(
-                    [(f"Over {point}", p_o, t_o, bk_o),
-                     (f"Under {point}", p_u, t_u, bk_u)],
-                    "totals", sport, match, com
-                )
+        for bk_o, (p_o, t_o) in sorted(over_bks.items(), key=lambda x: -x[1][0]):
+            for bk_u, (p_u, t_u) in sorted(under_bks.items(), key=lambda x: -x[1][0]):
+                if bk_o == bk_u: continue
+                rec = _build_arb_record([(f"Over {point}", p_o, t_o, bk_o), (f"Under {point}", p_u, t_u, bk_u)], "totals", sport, match, com)
                 if rec:
-                    if (best_rec is None or
-                            rec["profit_pct"] > best_rec["profit_pct"]):
+                    if (best_rec is None or rec["profit_pct"] > best_rec["profit_pct"]):
                         best_rec = rec
                     break
-        if best_rec:
-            arbs.append(best_rec)
+        if best_rec: arbs.append(best_rec)
     return arbs
 
-
 def _scan_spreads(best: dict, sport: str, match: str, com: str) -> list:
-    """
-    Spreads: 'TeamA_1.5', 'TeamB_1.5' — same abs(point), opposite sides.
-    Group by point value → pair exactly 2 sides from different books.
-    """
     arbs         = []
-    point_groups: dict = {}   # "1.5" → [(name, {bk: (p, t)}), ...]
-
+    point_groups = {}
     for name, bk_prices in best.items():
         parts = name.split("_")
-        if len(parts) < 2:
-            continue
+        if len(parts) < 2: continue
         point = "_".join(parts[1:])
         point_groups.setdefault(point, []).append((name, bk_prices))
 
     for point, group in point_groups.items():
-        if len(group) != 2:
-            continue   # need exactly 2 opposing sides
+        if len(group) != 2: continue
         (n1, bk1), (n2, bk2) = group
         best_rec = None
         for bk_a, (p_a, t_a) in sorted(bk1.items(), key=lambda x: -x[1][0]):
             for bk_b, (p_b, t_b) in sorted(bk2.items(), key=lambda x: -x[1][0]):
-                if bk_a == bk_b:
-                    continue
-                rec = _build_arb_record(
-                    [(n1, p_a, t_a, bk_a), (n2, p_b, t_b, bk_b)],
-                    "spreads", sport, match, com
-                )
+                if bk_a == bk_b: continue
+                rec = _build_arb_record([(n1, p_a, t_a, bk_a), (n2, p_b, t_b, bk_b)], "spreads", sport, match, com)
                 if rec:
-                    if (best_rec is None or
-                            rec["profit_pct"] > best_rec["profit_pct"]):
+                    if (best_rec is None or rec["profit_pct"] > best_rec["profit_pct"]):
                         best_rec = rec
                     break
-        if best_rec:
-            arbs.append(best_rec)
+        if best_rec: arbs.append(best_rec)
     return arbs
 
-
 def scan_arbitrage(events: list) -> list:
-    seen: set  = set()
-    arbs: list = []
-
+    seen = set()
+    arbs = []
     for ev in events:
         home  = ev.get("home_team", "?")
         away  = ev.get("away_team", "?")
@@ -1133,30 +665,22 @@ def scan_arbitrage(events: list) -> list:
 
         for mkey in MARKETS:
             best = _best_price_per_book(ev.get("bookmakers", []), mkey)
-            if not best:
-                continue
+            if not best: continue
 
-            if mkey == "h2h":
-                candidates = _scan_h2h(best, sport, match, com)
-            elif mkey == "totals":
-                candidates = _scan_totals(best, sport, match, com)
-            elif mkey == "spreads":
-                candidates = _scan_spreads(best, sport, match, com)
-            else:
-                candidates = []
+            if mkey == "h2h":          candidates = _scan_h2h(best, sport, match, com)
+            elif mkey == "totals":     candidates = _scan_totals(best, sport, match, com)
+            elif mkey == "spreads":    candidates = _scan_spreads(best, sport, match, com)
+            else: candidates = []
 
             for c in candidates:
                 bk_set = frozenset(o["book_key"] for o in c["outcomes"])
                 key    = (match, mkey, bk_set)
-                if key in seen:
-                    continue
+                if key in seen: continue
                 seen.add(key)
                 arbs.append(c)
 
     arbs.sort(key=lambda x: x["profit_pct"], reverse=True)
-    log.info(f"Arbitrage: {len(arbs)} genuine opportunities found.")
-    return arbs[:300]   # cap at 300 to keep HTML manageable
-
+    return arbs[:300]
 
 # ═════════════════════════════════════════════════════════════════════════════
 # EV SCANNER
@@ -1170,37 +694,27 @@ def scan_ev_bets(events: list) -> list:
         com   = ev.get("commence_time", "")
 
         for mkey in MARKETS:
-            # Find Pinnacle lines (our reference for true odds)
             pin_out = None
             for bm in ev.get("bookmakers", []):
                 if bm.get("key") == "pinnacle":
                     for m in bm.get("markets", []):
                         if m.get("key") == mkey:
                             pin_out = m.get("outcomes", [])
-            if not pin_out or len(pin_out) < 2:
-                continue
+            if not pin_out or len(pin_out) < 2: continue
 
             true_probs = remove_vig(pin_out)
-            if not true_probs:
-                continue
+            if not true_probs: continue
 
-            # Compare every soft book against Pinnacle's de-vigged true odds
             for bm in ev.get("bookmakers", []):
-                if bm.get("key") == "pinnacle":
-                    continue
+                if bm.get("key") == "pinnacle": continue
                 for m in bm.get("markets", []):
-                    if m.get("key") != mkey:
-                        continue
+                    if m.get("key") != mkey: continue
                     for o in m.get("outcomes", []):
                         name = o.get("name", "")
-                        if name not in true_probs:
-                            continue
-                        try:
-                            price = float(o["price"])
-                        except (ValueError, TypeError, KeyError):
-                            continue
-                        if price <= 1.0:
-                            continue
+                        if name not in true_probs: continue
+                        try: price = float(o["price"])
+                        except Exception: continue
+                        if price <= 1.0: continue
 
                         tp   = true_probs[name]
                         to   = 1.0 / tp
@@ -1223,44 +737,26 @@ def scan_ev_bets(events: list) -> list:
                                 "kelly_stake":         ks,
                                 "kelly_stake_rounded": round10(ks),
                             })
-
     bets.sort(key=lambda x: x["edge_pct"], reverse=True)
-    log.info(f"EV scan: {len(bets)} value bets found.")
     return bets[:500]
-
 
 # ═════════════════════════════════════════════════════════════════════════════
 # PUSH NOTIFICATION
 # ═════════════════════════════════════════════════════════════════════════════
 def send_push(arbs: list, evs: list):
-    if not arbs and not evs:
-        return
+    if not arbs and not evs: return
     if arbs:
         t   = arbs[0]
-        msg = (f"ARB: {t['match']} | +{t['profit_pct']}% | "
-               f"{t['ways']}-way {t['market']} | {len(evs)} EV bets")
+        msg = f"ARB: {t['match']} | +{t['profit_pct']}% | {t['ways']}-way {t['market']} | {len(evs)} EV bets"
     else:
         t   = evs[0]
-        msg = (f"EV: {t['match']} | +{t['edge_pct']}% edge | "
-               f"{t['book']} | {len(evs)} total")
+        msg = f"EV: {t['match']} | +{t['edge_pct']}% edge | {t['book']} | {len(evs)} total"
     try:
-        r = requests.post(
-            NTFY_URL, data=msg.encode("utf-8"),
-            headers={
-                "Title":        "Arb Sniper Alert",
-                "Priority":     "high",
-                "Tags":         "zap,moneybag",
-                "Content-Type": "text/plain; charset=utf-8",
-            },
-            timeout=10,
-        )
-        log.info(f"Push: HTTP {r.status_code}")
-    except Exception as e:
-        log.error(f"Push failed: {e}")
-
+        requests.post(NTFY_URL, data=msg.encode("utf-8"), headers={"Title": "Arb Sniper Alert", "Priority": "high", "Tags": "zap,moneybag", "Content-Type": "text/plain; charset=utf-8"}, timeout=10)
+    except Exception: pass
 
 # ═════════════════════════════════════════════════════════════════════════════
-# HTML DASHBOARD GENERATOR — PREMIUM DARK UI
+# HTML DASHBOARD GENERATOR — PREMIUM DARK UI + FIREBASE GATEWAY
 # ═════════════════════════════════════════════════════════════════════════════
 def generate_html(arbs: list, evs: list, raw_bc: list,
                   state: dict, key_status: list,
@@ -1268,23 +764,21 @@ def generate_html(arbs: list, evs: list, raw_bc: list,
 
     IST     = timezone(timedelta(hours=5, minutes=30))
     ist_now = datetime.now(IST).strftime("%d %b %Y, %I:%M:%S %p IST")
-    ph      = hashlib.sha256(DASHBOARD_PASS.encode()).hexdigest()
     total_q = sum(k["remaining"] for k in key_status)
 
-    arbs_j  = json.dumps(arbs,       ensure_ascii=False)
-    evs_j   = json.dumps(evs,        ensure_ascii=False)
-    bc_j    = json.dumps(raw_bc,     ensure_ascii=False)
+    arbs_j  = json.dumps(arbs,      ensure_ascii=False)
+    evs_j   = json.dumps(evs,       ensure_ascii=False)
+    bc_j    = json.dumps(raw_bc,    ensure_ascii=False)
     keys_j  = json.dumps(key_status, ensure_ascii=False)
-    debug_j = json.dumps(bc_debug,   ensure_ascii=False)
+    debug_j = json.dumps(bc_debug,  ensure_ascii=False)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
-<title>Arb Sniper v7.0 ⚡</title>
+<title>Arb Sniper v8.0 ⚡</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}}
@@ -1300,14 +794,14 @@ html,body{{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var
 ::-webkit-scrollbar{{width:3px;height:3px}}
 ::-webkit-scrollbar-thumb{{background:var(--bg4);border-radius:2px}}
 
-/* ── LOCK ──────────────────────────────────── */
+/* ── LOCK / SUBSCRIPTION PORTAL ──────────────────────────────────── */
 #lock{{
   position:fixed;inset:0;z-index:9999;background:var(--bg);
   display:flex;align-items:center;justify-content:center;
   background:radial-gradient(ellipse 80% 60% at 50% 40%,rgba(34,211,238,0.06) 0%,transparent 65%);
 }}
 .lbox{{
-  width:90%;max-width:340px;background:var(--bg2);border:1px solid var(--border2);
+  width:90%;max-width:360px;background:var(--bg2);border:1px solid var(--border2);
   border-radius:20px;padding:36px 32px;
   display:flex;flex-direction:column;align-items:center;gap:18px;
   box-shadow:0 0 60px rgba(34,211,238,0.06),0 24px 80px rgba(0,0,0,0.6);
@@ -1323,13 +817,13 @@ html,body{{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var
 @keyframes iconPulse{{0%,100%{{box-shadow:0 0 0 0 rgba(34,211,238,.2)}}50%{{box-shadow:0 0 0 8px rgba(34,211,238,0)}}}}
 .lock-title{{font-family:var(--disp);font-size:20px;font-weight:800;letter-spacing:3px;color:var(--txt)}}
 .lock-sub{{font-size:10px;color:var(--txt3);letter-spacing:2px;text-transform:uppercase}}
-#linput{{
-  width:100%;padding:13px 16px;font-size:18px;text-align:center;letter-spacing:8px;
+#userIdInput{{
+  width:100%;padding:13px 16px;font-size:16px;text-align:center;letter-spacing:2px;
   background:var(--bg3);border:1px solid var(--border2);border-radius:10px;
   color:var(--txt);font-family:var(--mono);outline:none;
   transition:border-color .2s,box-shadow .2s;
 }}
-#linput:focus{{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(34,211,238,.12)}}
+#userIdInput:focus{{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(34,211,238,.12)}}
 #lbtn{{
   width:100%;padding:13px;font-size:12px;font-weight:700;letter-spacing:2px;
   cursor:pointer;border:none;font-family:var(--disp);
@@ -1337,7 +831,7 @@ html,body{{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var
   border-radius:10px;transition:opacity .2s,transform .15s;
 }}
 #lbtn:hover{{opacity:.88;transform:translateY(-1px)}}
-#lerr{{font-size:11px;color:var(--red);display:none;letter-spacing:.5px}}
+#lerr{{font-size:11px;color:var(--red);display:none;letter-spacing:.5px;text-align:center;}}
 
 /* ── APP ──────────────────────────────────── */
 #app{{display:none;width:100%;height:100vh;overflow-y:auto;background:var(--bg)}}
@@ -1531,15 +1025,13 @@ input[type=range]{{accent-color:var(--cyan);width:80px;cursor:pointer}}
 .qbg{{height:4px;border-radius:2px;background:var(--bg4);overflow:hidden;margin-top:4px}}
 .qfill{{height:100%;border-radius:2px;transition:width .6s ease}}
 
-/* ── DEBUG ───────────────────────────────── */
+/* ── DEBUG & MODAL ───────────────────────── */
 .dbgpanel{{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:14px;font-family:var(--mono);font-size:11px;color:var(--txt2);white-space:pre-wrap;word-break:break-all;max-height:260px;overflow-y:auto;line-height:1.6;margin-bottom:12px}}
 .dbgrow{{display:flex;gap:10px;padding:4px 0;border-bottom:1px solid var(--border)}}
 .dbgk{{color:var(--txt3);min-width:120px;flex-shrink:0}}
 .dbgv{{color:var(--cyan)}}
 .dbgv.ok{{color:var(--green)}}
 .dbgv.err{{color:var(--red)}}
-
-/* ── MODAL ───────────────────────────────── */
 .mbg{{position:fixed;inset:0;z-index:800;background:rgba(0,0,0,.72);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center}}
 .mbg.open{{display:flex}}
 .modal{{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:24px;width:92%;max-width:440px;max-height:90vh;overflow-y:auto;animation:modalIn .3s cubic-bezier(.16,1,.3,1)}}
@@ -1547,25 +1039,51 @@ input[type=range]{{accent-color:var(--cyan);width:80px;cursor:pointer}}
 .mhead{{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;font-size:14px;font-weight:700;color:var(--txt)}}
 .closex{{background:none;border:none;font-size:16px;cursor:pointer;color:var(--txt3);transition:color .2s}}
 .closex:hover{{color:var(--txt)}}
+.receipt-box{{background:#111;padding:18px;border-radius:6px;margin-bottom:20px;text-align:left;font-size:14px;border:1px solid #2a2a2a;}}
+.receipt-row{{display:flex;justify-content:space-between;margin-bottom:10px;color:#ddd;}}
+.direct-pay-btn{{display:block;background-color:#0056b3;color:white;text-decoration:none;padding:14px 20px;border-radius:6px;font-size:15px;font-weight:600;margin-top:15px;transition:background 0.3s;text-align:center;}}
+.direct-pay-btn:hover{{background-color:#004494;}}
+.loader{{border:3px solid #333;border-top:3px solid #4CAF50;border-radius:50%;width:24px;height:24px;animation:spin 1s linear infinite;margin:15px auto;}}
 
 @media(max-width:600px){{.grid{{grid-template-columns:1fr}}.ogrid{{grid-template-columns:1fr}}.topbar,.tc{{padding-left:14px;padding-right:14px}}}}
 </style>
 </head>
 <body>
 
-<!-- LOCK -->
 <div id="lock">
-  <div class="lbox">
+  <div class="lbox" id="login-box">
     <div class="lock-icon"><i class="fas fa-crosshairs"></i></div>
     <div class="lock-title">ARB SNIPER</div>
-    <div class="lock-sub">v8.0 — India Edition</div>
-    <input id="linput" type="password" placeholder="••••••••" autocomplete="current-password"/>
-    <button id="lbtn" onclick="unlock()"><i class="fas fa-unlock-alt"></i>&nbsp;UNLOCK</button>
-    <div id="lerr"><i class="fas fa-triangle-exclamation"></i>&nbsp;Invalid password</div>
+    <div class="lock-sub">v8.0 — Enterprise Node</div>
+    
+    <input id="userIdInput" type="text" placeholder="Enter Username" autocomplete="off"/>
+    <button id="lbtn" onclick="authenticateUser()"><i class="fas fa-right-to-bracket"></i>&nbsp;CONNECT NODE</button>
+    <div id="lerr"></div>
+  </div>
+
+  <div class="lbox" id="pay-box" style="display: none; padding: 24px;">
+    <div class="lock-title" style="font-size: 16px;">LICENSE REQUIRED</div>
+    <div class="lock-sub" style="margin-bottom: 15px;">30-Day Access Provisioning</div>
+    
+    <div class="receipt-box" style="width: 100%; margin-bottom: 15px;">
+        <div class="receipt-row"><span>License:</span><span>₹{SUB_PRICE}.00</span></div>
+        <div class="receipt-row" style="color:#888;font-size:13px;"><span>Network Fee:</span><span>₹<span id="subFee">0.00</span></span></div>
+        <div class="receipt-row" style="color:#4CAF50;font-weight:bold;margin-top:10px;padding-top:10px;border-top:1px dashed #444;"><span>Required:</span><span style="font-family: monospace; font-size: 16px;">₹<span id="subTotal">0.00</span></span></div>
+    </div>
+
+    <div style="padding: 10px; margin-bottom: 10px; background:#fff; border-radius:8px;">
+        <img id="subQrCode" src="" alt="Payment QR" style="width: 180px; height: 180px; display: block; margin:0 auto;">
+    </div>
+    
+    <a id="subDeepLink" href="#" class="direct-pay-btn" style="width: 100%; margin-top: 0;">Pay Directly via UPI</a>
+    
+    <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 15px;">
+        <div class="loader" style="width: 16px; height: 16px; margin: 0; border-width: 2px;"></div>
+        <span style="font-size: 11px; color: var(--txt3);">Awaiting network confirmation...</span>
+    </div>
   </div>
 </div>
 
-<!-- APP -->
 <div id="app">
 
   <div class="topbar">
@@ -1606,7 +1124,6 @@ input[type=range]{{accent-color:var(--cyan);width:80px;cursor:pointer}}
     <button class="tab"     id="tb-dbg"   onclick="swTab('dbg',this)">  <i class="fas fa-bug"></i>         BC Debug</button>
   </div>
 
-  <!-- ARB TAB -->
   <div id="tc-arb" class="tc act">
     <div class="fbar">
       <input class="fi" id="aq" placeholder="Search match, sport..." oninput="fArb()"/>
@@ -1618,7 +1135,6 @@ input[type=range]{{accent-color:var(--cyan);width:80px;cursor:pointer}}
     <div class="grid" id="g-arb"></div>
   </div>
 
-  <!-- EV TAB -->
   <div id="tc-ev" class="tc">
     <div class="fbar">
       <input class="fi" id="eq" placeholder="Search match or bookmaker..." oninput="fEv()"/>
@@ -1629,7 +1145,6 @@ input[type=range]{{accent-color:var(--cyan);width:80px;cursor:pointer}}
     <div class="grid" id="g-ev"></div>
   </div>
 
-  <!-- BC TAB -->
   <div id="tc-bc" class="tc">
     <div class="fbar">
       <input class="fi" id="bq" placeholder="Search BC.Game..." oninput="fBc()"/>
@@ -1638,7 +1153,6 @@ input[type=range]{{accent-color:var(--cyan);width:80px;cursor:pointer}}
     <div class="grid" id="g-bc"></div>
   </div>
 
-  <!-- CALCULATOR TAB -->
   <div id="tc-calc" class="tc">
     <div class="csec">
       <div class="cstit"><i class="fas fa-percent"></i> Arbitrage Calculator</div>
@@ -1679,7 +1193,6 @@ input[type=range]{{accent-color:var(--cyan);width:80px;cursor:pointer}}
     </div>
   </div>
 
-  <!-- API KEYS TAB -->
   <div id="tc-api" class="tc">
     <div class="csec" style="max-width:700px">
       <div class="cstit"><i class="fas fa-key"></i> API Key Telemetry — {len(key_status)} keys / {total_q} quota remaining</div>
@@ -1688,32 +1201,18 @@ input[type=range]{{accent-color:var(--cyan);width:80px;cursor:pointer}}
         <tbody id="ktbody"></tbody>
       </table>
     </div>
-    <div class="csec" style="max-width:700px">
-      <div class="cstit"><i class="fas fa-chart-bar"></i> Run Statistics</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:10px">
-        <div class="ss" style="min-width:unset"><div class="ssl">Last Sync</div><div style="font-size:11px;color:var(--txt);font-family:var(--mono);margin-top:3px">{ist_now}</div></div>
-        <div class="ss" style="min-width:unset"><div class="ssl">Sports Scanned</div><div class="ssv" style="color:var(--cyan)">{sports_count}</div></div>
-        <div class="ss" style="min-width:unset"><div class="ssl">Events Scanned</div><div class="ssv" style="color:var(--green)">{state.get('total_events_scanned',0)}</div></div>
-        <div class="ss" style="min-width:unset"><div class="ssl">Last Arbs</div><div class="ssv">{state.get('last_arb_count',0)}</div></div>
-        <div class="ss" style="min-width:unset"><div class="ssl">Last EVs</div><div class="ssv">{state.get('last_ev_count',0)}</div></div>
-        <div class="ss" style="min-width:unset"><div class="ssl">Total Quota Left</div><div class="ssv" style="color:var(--yellow)">{total_q}</div></div>
-      </div>
-    </div>
   </div>
 
-  <!-- BC DEBUG TAB -->
   <div id="tc-dbg" class="tc">
     <div class="csec" style="max-width:700px">
       <div class="cstit"><i class="fas fa-bug"></i> BC.Game Scraper Debug</div>
       <div id="dbg-rows"></div>
-      <div class="clbl" style="margin-top:14px;margin-bottom:6px">Raw JSON Preview (first 800 chars)</div>
+      <div class="clbl" style="margin-top:14px;margin-bottom:6px">Raw JSON Preview</div>
       <div class="dbgpanel" id="raw-preview"></div>
     </div>
   </div>
-
 </div>
 
-<!-- QUICK CALC MODAL -->
 <div class="mbg" id="qcm">
   <div class="modal">
     <div class="mhead"><span><i class="fas fa-calculator"></i>&nbsp;Quick Calc</span><button class="closex" onclick="closeM()"><i class="fas fa-xmark"></i></button></div>
@@ -1722,41 +1221,138 @@ input[type=range]{{accent-color:var(--cyan);width:80px;cursor:pointer}}
 </div>
 
 <script>
-const ARBS=({arbs_j});const EVS=({evs_j});const BC=({bc_j});const KEYS=({keys_j});const DBG=({debug_j});const PH="{ph}";
+const ARBS={arbs_j};const EVS={evs_j};const BC={bc_j};const KEYS={keys_j};const DBG={debug_j};
 let BANK=parseFloat(localStorage.getItem('arb_bank'))||{DEFAULT_BANK},calcW=2,curEV=EVS;
+
+// ── MONETIZATION & FIREBASE AUTHENTICATION LOGIC ──
+const YOUR_UPI_ID = "{YOUR_UPI_ID}";
+const YOUR_NAME = "{YOUR_NAME}";
+const FIREBASE_URL = "{FIREBASE_URL}";
+const SUB_PRICE = {SUB_PRICE};
+
+let currentUser = "";
+let autoCheckInterval;
+let safeAmountKey = "";
+
+if(localStorage.getItem('arb_session')){{
+    currentUser = localStorage.getItem('arb_session');
+    verifySubscription();
+}}
+
+async function authenticateUser() {{
+    const input = document.getElementById('userIdInput').value.trim().toLowerCase();
+    if(!input) return;
+    currentUser = input;
+    localStorage.setItem('arb_session', currentUser);
+    verifySubscription();
+}}
+
+document.getElementById('userIdInput').addEventListener('keydown', e => {{
+    if(e.key === 'Enter') authenticateUser();
+}});
+
+async function verifySubscription() {{
+    const errDiv = document.getElementById('lerr');
+    const btn = document.getElementById('lbtn');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> VERIFYING...';
+    
+    try {{
+        const res = await fetch(`${{FIREBASE_URL}}/users/${{currentUser}}.json`, {{ cache: "no-store" }});
+        const data = await res.json();
+        const now = new Date().getTime();
+
+        if (data && data.sub_expiry && data.sub_expiry > now) {{
+            document.getElementById('lock').style.display = 'none';
+            document.getElementById('app').style.display = 'block';
+            init(); 
+        }} else {{
+            triggerPaymentGateway();
+        }}
+    }} catch (error) {{
+        errDiv.innerText = "Network Error. Check connection.";
+        errDiv.style.display = 'block';
+        btn.innerHTML = '<i class="fas fa-right-to-bracket"></i> CONNECT NODE';
+    }}
+}}
+
+function triggerPaymentGateway() {{
+    document.getElementById('login-box').style.display = 'none';
+    document.getElementById('pay-box').style.display = 'flex';
+
+    const randomCents = Math.floor(Math.random() * 99) + 1; 
+    const feeAmount = randomCents / 100; 
+    const finalAmount = SUB_PRICE + feeAmount; 
+    
+    const targetAmountStr = finalAmount.toFixed(2); 
+    safeAmountKey = targetAmountStr.replace(".", "_"); 
+
+    document.getElementById("subFee").innerText = feeAmount.toFixed(2);
+    document.getElementById("subTotal").innerText = targetAmountStr;
+
+    const upiLink = `upi://pay?pa=${{YOUR_UPI_ID}}&pn=${{encodeURIComponent(YOUR_NAME)}}&am=${{targetAmountStr}}&cu=INR`;
+    document.getElementById("subQrCode").src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${{encodeURIComponent(upiLink)}}`;
+    document.getElementById("subDeepLink").href = upiLink;
+
+    autoCheckInterval = setInterval(checkSubPayment, 3000);
+}}
+
+async function checkSubPayment() {{
+    try {{
+        const response = await fetch(`${{FIREBASE_URL}}/payments/${{safeAmountKey}}.json`, {{ cache: "no-store" }});
+        const data = await response.json();
+
+        if (data && data.status === "CONFIRMED") {{
+            clearInterval(autoCheckInterval);
+
+            await fetch(`${{FIREBASE_URL}}/payments/${{safeAmountKey}}.json`, {{
+                method: 'PATCH',
+                body: JSON.stringify({{ status: "USED" }})
+            }});
+            if (data.utr) {{
+                await fetch(`${{FIREBASE_URL}}/utr_records/${{data.utr}}.json`, {{
+                    method: 'PATCH',
+                    body: JSON.stringify({{ status: "USED" }})
+                }});
+            }}
+
+            const newExpiry = new Date().getTime() + (30 * 24 * 60 * 60 * 1000); 
+            await fetch(`${{FIREBASE_URL}}/users/${{currentUser}}.json`, {{
+                method: 'PATCH',
+                body: JSON.stringify({{ sub_expiry: newExpiry }})
+            }});
+
+            alert("Payment Verified. License provisioned for 30 days.");
+            document.getElementById('lock').style.display = 'none';
+            document.getElementById('app').style.display = 'block';
+            init();
+        }}
+    }} catch (error) {{ }}
+}}
+
+function logout() {{
+    localStorage.removeItem('arb_session');
+    location.reload();
+}}
 
 const BS={{pinnacle:'PIN',bet365:'B365',betway:'BW',stake:'STK',marathonbet:'MAR',parimatch:'PAR',betfair:'BF',dafabet:'DAF',onexbet:'1XB',bc_game:'BCG',matchbook:'MBK'}};
 const bs=k=>BS[k]||(k||'').toUpperCase().slice(0,4);
 const fd=d=>{{try{{return new Date(d).toLocaleString('en-IN',{{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}});}}catch{{return String(d)}}}};
 const si=s=>{{s=(s||'').toLowerCase();if(s.includes('soccer')||s.includes('football'))return'fa-futbol';if(s.includes('basket'))return'fa-basketball';if(s.includes('hockey'))return'fa-hockey-puck';if(s.includes('tennis'))return'fa-table-tennis-paddle-ball';if(s.includes('mma')||s.includes('box'))return'fa-hand-fist';if(s.includes('cricket'))return'fa-cricket-bat-ball';if(s.includes('baseball'))return'fa-baseball';if(s.includes('golf'))return'fa-golf-ball-tee';if(s.includes('nfl')||s.includes('american'))return'fa-football';if(s.includes('rugby'))return'fa-football';return'fa-trophy';}};
 const kly=(e,o,b)=>{{const bv=o-1;if(bv<=0)return 0;const p=1/(o/(1+e)),kf=(bv*p-(1-p))/bv;return kf<=0?0:Math.round(.3*kf*b/10)*10;}};
-// Market display label — converts raw market key to human-readable label
 const mktLabel=m=>{{const mp={{H2H:'H2H (Match Winner)',TOTALS:'TOTALS (Over/Under)',SPREADS:'SPREADS (Handicap)',h2h:'H2H (Match Winner)',totals:'TOTALS (Over/Under)',spreads:'SPREADS (Handicap)'}};return mp[m]||m;}};
-// Scale an arb stake (originally computed for Rs1000) to user's actual bankroll
 const scaleStk=(rawStk,bank)=>Math.round((rawStk/1000)*bank/10)*10;
 
-// AUTH
-if(localStorage.getItem('sa')===PH)boot();
-function unlock(){{const h=CryptoJS.SHA256(document.getElementById('linput').value).toString();if(h===PH){{localStorage.setItem('sa',PH);boot();}}else{{const i=document.getElementById('linput');i.value='';document.getElementById('lerr').style.display='block';i.style.borderColor='var(--red)';setTimeout(()=>{{i.style.borderColor='';document.getElementById('lerr').style.display='none';}},2000);}};}}
-document.getElementById('linput').addEventListener('keydown',e=>{{if(e.key==='Enter')unlock();}});
-function logout(){{localStorage.removeItem('sa');location.reload();}}
-function boot(){{document.getElementById('lock').style.display='none';document.getElementById('app').style.display='block';init();}}
-
-// TABS
 function swTab(id,b){{document.querySelectorAll('.tc').forEach(t=>t.classList.remove('act'));document.querySelectorAll('.tab').forEach(t=>t.classList.remove('act'));document.getElementById('tc-'+id).classList.add('act');if(b)b.classList.add('act');}}
 
-// BANKROLL — persisted in localStorage so user never has to re-enter it
 function onBank(){{
   BANK=parseFloat(document.getElementById('bankroll').value)||10000;
   localStorage.setItem('arb_bank',String(BANK));
   document.getElementById('kb').value=BANK;
   rEV(curEV);
-  rArb(ARBS.filter(_=>true));  // re-render arb cards with new bank-scaled stakes
+  rArb(ARBS.filter(_=>true));
 }}
 
-// INIT
 function init(){{
-  // Restore saved bankroll from localStorage and apply to input + kb field
   const savedBank=parseFloat(localStorage.getItem('arb_bank'));
   if(savedBank&&savedBank>0){{
     BANK=savedBank;
@@ -1781,17 +1377,14 @@ function init(){{
   rArb(ARBS);rEV(EVS);rBc(BC);rKeys();rDbg();
 }}
 
-// FILTERS
 function fArb(){{const q=document.getElementById('aq').value.toLowerCase(),wy=document.getElementById('aw').value,mk=document.getElementById('am').value,sp=document.getElementById('as').value,mn=+document.getElementById('amin').value||0;rArb(ARBS.filter(a=>(!wy||String(a.ways)===wy)&&(!mk||a.market===mk)&&(!sp||a.sport===sp)&&a.profit_pct>=mn&&(!q||a.match.toLowerCase().includes(q)||a.sport.toLowerCase().includes(q))));}}
 function fEv(){{const q=document.getElementById('eq').value.toLowerCase(),bk=document.getElementById('eb').value,sp=document.getElementById('es').value,mn=+document.getElementById('emin').value||0;const d=EVS.filter(v=>(!bk||v.book_key===bk)&&(!sp||v.sport===sp)&&v.edge_pct>=mn&&(!q||v.match.toLowerCase().includes(q)||(v.book_key||'').includes(q)));curEV=d;rEV(d);}}
 function fBc(){{const q=document.getElementById('bq').value.toLowerCase(),sp=document.getElementById('bsp').value;rBc(BC.filter(b=>(!sp||b.sport_title===sp)&&(!q||(b.home_team+' '+b.away_team).toLowerCase().includes(q))));}}
 
-// RENDER ARBS — stakes scaled to user's bankroll, clear market labels
 function rArb(data){{
   const g=document.getElementById('g-arb');document.getElementById('c-arb').textContent=data.length;
   if(!data.length){{g.innerHTML='<div class="empty"><i class="fas fa-magnifying-glass"></i>No arbitrage opportunities found.<small>Adjust filters or check API quota in the API Keys tab.</small></div>';return;}}
   g.innerHTML=data.map(a=>{{
-    // Scale stakes from the Python-computed Rs1000 base to the user's actual bank
     const rows=a.outcomes.map(o=>{{
       const liveStk=scaleStk(o.stake,BANK);
       const exactStk=((o.stake/1000)*BANK).toFixed(2);
@@ -1825,7 +1418,6 @@ function rArb(data){{
   }}).join('');
 }}
 
-// RENDER EVS
 function rEV(data){{
   const g=document.getElementById('g-ev');document.getElementById('c-ev').textContent=data.length;
   if(!data.length){{g.innerHTML='<div class="empty"><i class="fas fa-chart-line"></i>No value bets found.<small>Pinnacle lines required as reference odds baseline.</small></div>';return;}}
@@ -1846,10 +1438,9 @@ function rEV(data){{
   }}).join('');
 }}
 
-// RENDER BC
 function rBc(data){{
   const g=document.getElementById('g-bc');document.getElementById('c-bc').textContent=data.length;
-  if(!data.length){{g.innerHTML='<div class="empty"><i class="fas fa-gamepad"></i>No BC.Game events.<small>Check the BC Debug tab — add SCRAPERAPI_KEY to GitHub secrets.</small></div>';return;}}
+  if(!data.length){{g.innerHTML='<div class="empty"><i class="fas fa-gamepad"></i>No BC.Game events.</div>';return;}}
   g.innerHTML=data.slice(0,120).map(b=>{{
     const outs=b.bookmakers[0].markets[0].outcomes;
     return `<div class="card"><div class="cbar bc"></div><div class="cinn">
@@ -1861,7 +1452,6 @@ function rBc(data){{
   }}).join('');
 }}
 
-// RENDER KEYS — active key highlighted in cyan
 function rKeys(){{
   document.getElementById('ktbody').innerHTML=KEYS.map((k,i)=>{{
     const pct=Math.max(0,Math.min(100,(k.remaining/500)*100));
@@ -1873,7 +1463,6 @@ function rKeys(){{
   }}).join('');
 }}
 
-// RENDER DEBUG
 function rDbg(){{
   const rows=[
     ['Status',           DBG.status||'—',       DBG.status&&DBG.status.startsWith('ok')?'ok':DBG.status&&(DBG.status.includes('fail')||DBG.status.includes('error'))?'err':''],
@@ -1884,13 +1473,11 @@ function rDbg(){{
     ['Outrights Skipped',String(DBG.outrights_skip||0),''],
     ['No-Teams Skipped', String(DBG.no_teams_skip||0), ''],
     ['No-H2H Skipped',   String(DBG.no_odds_skip||0),  ''],
-    ['Raw Preview',      DBG.raw_preview||'—',  ''],
   ];
   document.getElementById('dbg-rows').innerHTML=rows.map(([k,v,c])=>`<div class="dbgrow"><span class="dbgk">${{k}}</span><span class="dbgv ${{c}}">${{v||'—'}}</span></div>`).join('');
   document.getElementById('raw-preview').textContent=DBG.raw_preview||'No data captured';
 }}
 
-// QUICK CALC MODAL
 function openQC(oa,ways){{
   if(ways===2){{document.getElementById('c2o1').value=oa[0]||'';document.getElementById('c2o2').value=oa[1]||'';swCalc(2,document.getElementById('ct2'));}}
   else{{document.getElementById('c3o1').value=oa[0]||'';document.getElementById('c3o2').value=oa[1]||'';document.getElementById('c3o3').value=oa[2]||'';swCalc(3,document.getElementById('ct3'));}}
@@ -1901,7 +1488,6 @@ function openQC(oa,ways){{
 function closeM(){{document.getElementById('qcm').classList.remove('open');}}
 document.getElementById('qcm').addEventListener('click',e=>{{if(e.target===e.currentTarget)closeM();}});
 
-// CALCULATOR
 function swCalc(n,b){{calcW=n;document.querySelectorAll('.ctab').forEach(x=>x.classList.remove('act'));b.classList.add('act');document.getElementById('c2f').style.display=n===2?'block':'none';document.getElementById('c3f').style.display=n===3?'block':'none';document.getElementById('calc-res').style.display='none';}}
 function runCalc(){{
   let odds=[],stk=0;
@@ -1921,66 +1507,34 @@ function runKelly(){{
   document.getElementById('kelly-res').style.display='block';
 }}
 
-// ODDS CONVERTER
 let _cv=false;
 function cvt(from){{if(_cv)return;_cv=true;const sa=d=>{{document.getElementById('od').value=d.toFixed(3);document.getElementById('oa').value=d>=2?'+'+Math.round((d-1)*100):'-'+Math.round(100/(d-1));document.getElementById('oi').value=(100/d).toFixed(2);const[n,dv]=d2f(d);document.getElementById('of').value=n+'/'+dv;}};try{{if(from==='d'){{const v=+document.getElementById('od').value;if(v>1)sa(v);}}else if(from==='a'){{const a=+document.getElementById('oa').value,v=a>0?a/100+1:100/Math.abs(a)+1;if(v>1)sa(v);}}else if(from==='f'){{const p=document.getElementById('of').value.split('/'),v=p.length===2?+p[0]/+p[1]+1:0;if(v>1)sa(v);}}else if(from==='i'){{const i=+document.getElementById('oi').value,v=i>0&&i<100?100/i:0;if(v>1)sa(v);}}}}finally{{_cv=false;}}}}
 function d2f(d){{const t=1e-5;let h1=1,h2=0,k1=0,k2=1,b=d-1;for(let i=0;i<40;i++){{const a=Math.floor(b),ah=h1;h1=a*h1+h2;h2=ah;const ak=k1;k1=a*k1+k2;k2=ak;if(Math.abs(b-a)<t)break;b=1/(b-a);}}return[h1,k1];}}
 </script>
 </body></html>"""
 
-
 # ═════════════════════════════════════════════════════════════════════════════
 # MAIN ORCHESTRATOR
 # ═════════════════════════════════════════════════════════════════════════════
 def main():
     log.info("╔══════════════════════════════════════════════════╗")
-    log.info("║      ARB SNIPER v8.0 — Maximum Coverage          ║")
+    log.info("║       ARB SNIPER v8.0 — ENTERPRISE NODE          ║")
     log.info("╚══════════════════════════════════════════════════╝")
 
     state = load_state()
-    log.info(f"State loaded | Quota: {state['remaining_requests']} | "
-             f"Keys: {len(ROTATOR.keys)}")
+    log.info(f"State loaded | Quota: {state['remaining_requests']} | Keys: {len(ROTATOR.keys)}")
 
-    # ── BC.Game pre-flight diagnostic ─────────────────────────────────────────
-    # Logs exactly what ScraperAPI returns for the manifest so we can debug
-    # without needing a full run. Costs 1 ScraperAPI credit per run.
-    if SCRAPERAPI_KEY:
-        _bc_preflight_url = (
-            "https://api.scraperapi.com/"
-            f"?api_key={SCRAPERAPI_KEY}"
-            f"&url={urllib.parse.quote('https://api-k-c7818b61-623.sptpub.com/api/v4/prematch/brand/2103509236163162112/en/0', safe='')}"
-            "&keep_headers=true&autoparse=false&render=false&country_code=de"
-        )
-        try:
-            _pfr = requests.get(
-                _bc_preflight_url,
-                headers={"User-Agent": "insomnia/12.4.0", "Accept": "application/json"},
-                timeout=30,
-            )
-            log.info(f"BC preflight: HTTP {_pfr.status_code} "
-                     f"size={len(_pfr.content)}B "
-                     f"ct={_pfr.headers.get('Content-Type','?')}")
-            log.info(f"BC preflight preview: {_pfr.text[:300]}")
-        except Exception as _e:
-            log.warning(f"BC preflight exception: {_e}")
-    else:
-        log.info("BC preflight skipped — no SCRAPERAPI_KEY")
-
-    # 1. Discover ALL currently in-season sports dynamically
     sports_list = fetch_all_sports()
     log.info(f"Sports to scan: {len(sports_list)}")
 
-    # 2. Fetch odds for ALL sports × ALL markets concurrently
     odds_events = fetch_all_odds(state, sports_list)
 
-    # 3. BC.Game (two-layer Cloudflare bypass)
     bc_events   = fetch_bcgame_events()
     raw_bc_copy = list(bc_events)
     all_events  = merge_bcgame(odds_events, bc_events)
 
     save_state(state)
 
-    # 4. Scan for genuine arbitrage opportunities and +EV bets
     arbs = scan_arbitrage(all_events)
     evs  = scan_ev_bets(all_events)
 
@@ -1988,10 +1542,8 @@ def main():
     state["last_ev_count"]  = len(evs)
     save_state(state)
 
-    # 5. Push notification
     send_push(arbs, evs)
 
-    # 6. Generate dashboard
     key_status = ROTATOR.status()
     html = generate_html(
         arbs, evs, raw_bc_copy, state, key_status,
@@ -1999,28 +1551,7 @@ def main():
     )
     with open(OUTPUT_HTML, "w", encoding="utf-8") as f:
         f.write(html)
-    log.info(f"Dashboard written: {OUTPUT_HTML} ({len(html) // 1024} KB)")
-
-    # 7. Summary
-    log.info("═" * 54)
-    log.info(f"  Sports scanned  : {len(sports_list)}")
-    log.info(f"  Events scanned  : {len(all_events)}")
-    log.info(f"  Genuine arbs    : {len(arbs)}")
-    if arbs:
-        t = arbs[0]
-        log.info(f"  Top arb         : {t['match']} "
-                 f"+{t['profit_pct']}% ({t['ways']}-way {t['market']})")
-    log.info(f"  EV bets         : {len(evs)}")
-    if evs:
-        t = evs[0]
-        log.info(f"  Top EV          : {t['match']} "
-                 f"+{t['edge_pct']}% @ {t['book']}")
-    log.info(f"  BC events       : {len(raw_bc_copy)} "
-             f"[{BC_DEBUG.get('status','?')}]")
-    log.info(f"  API quota left  : {ROTATOR.total_remaining()}")
-    log.info(f"  Keys active     : {len(ROTATOR.keys)}")
-    log.info("╚══════════════════════════════════════════════════╝")
-
+    log.info(f"Dashboard generated: {OUTPUT_HTML} ({len(html) // 1024} KB)")
 
 if __name__ == "__main__":
     main()
