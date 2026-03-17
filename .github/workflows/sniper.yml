@@ -1,4 +1,4 @@
-name: ⚡ Arb Sniper v7.1 — Auto Scan
+name: ⚡ Arb Sniper v8.0 — Enterprise Node
 
 on:
   schedule:
@@ -22,7 +22,7 @@ env:
 
 jobs:
   scan:
-    name: 🎯 Run Elite Quant Engine v7.1
+    name: 🎯 Run Elite Quant Engine v8.0
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -56,14 +56,14 @@ jobs:
             api-state-${{ runner.os }}-
 
       # ── 5. Run the Scanner ───────────────────────────────────
-      - name: ⚡ Run Arb Sniper v7.1
+      - name: ⚡ Run Arb Sniper v8.0
         env:
-          DASHBOARD_PASS: ${{ secrets.DASHBOARD_PASS }}
+          # 🔥 DASHBOARD_PASS removed. System now uses Firebase Auth.
           ODDS_API_KEYS: ${{ secrets.ODDS_API_KEYS }}
           SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}
         run: |
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "  ARB SNIPER v7.1 — Scanning global sports markets..."
+          echo "  ARB SNIPER v8.0 — Scanning global sports markets..."
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           python arb_sniper.py
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -85,8 +85,8 @@ jobs:
       # ── 7. Commit & Push ─────────────────────────────────────
       - name: 📤 Commit dashboard to main
         run: |
-          git config --global user.name  "Arb Sniper Bot"
-          git config --global user.email "arb-sniper@github-actions.bot"
+          git config --global user.name  "Arb Sniper Node"
+          git config --global user.email "node@furiousfighter.com"
 
           # Stage the generated files
           git add index.html api_state.json || true
@@ -100,8 +100,8 @@ jobs:
           # Generate IST timestamp for commit message
           IST_TIME=$(TZ='Asia/Kolkata' date '+%d %b %Y %I:%M %p IST')
           
-          # Simplified commit message
-          COMMIT_MSG="⚡ Arb Sniper v7.1 | ${IST_TIME} | UI Updated"
+          # Upgraded commit message
+          COMMIT_MSG="⚡ Arb Node v8.0 | ${IST_TIME} | Ledger Updated"
           echo "Commit message: ${COMMIT_MSG}"
 
           # 1. Commit the files FIRST
@@ -129,7 +129,7 @@ jobs:
       - name: 📊 Job Summary
         if: always()
         run: |
-          echo "## ⚡ Arb Sniper v7.1 Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## ⚡ Arb Node v8.0 Run Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
@@ -142,7 +142,7 @@ jobs:
           if [ -f index.html ]; then
             SIZE=$(wc -c < index.html)
             echo "| **Dashboard Size** | ${SIZE} bytes |" >> $GITHUB_STEP_SUMMARY
-            echo "| **Status** | ✅ Dashboard generated successfully |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Status** | ✅ Node processed successfully |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| **Status** | ❌ Dashboard generation failed |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Status** | ❌ Node execution failed |" >> $GITHUB_STEP_SUMMARY
           fi
