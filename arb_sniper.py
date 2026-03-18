@@ -696,20 +696,44 @@ function triggerPaymentGateway() {{
     document.getElementById("subQrCode").src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${{encodeURIComponent(upiLink)}}`;
     document.getElementById("subDeepLink").href = upiLink;
 
-    pollInterval = setInterval(async () => {{
-        try {{
-            const res = await fetch(`${{FIREBASE_URL}}/users/${{currentUser}}.json`, {{ cache: "no-store" }});
-            const data = await res.json();
-            if (data && data.sub_expiry && data.sub_expiry > new Date().getTime()) {{
+    pollInterval = setInterval(async () => {
+        try {
+            // 1. Check if the exact payment amount arrived in the Vault
+            const response = await fetch(`${FIREBASE_URL}/payments/${safeAmountKey}.json`, { cache: "no-store" });
+            const data = await response.json();
+
+            // 2. If Android App confirmed it, execute the unlock protocol
+            if (data && data.status === "CONFIRMED") {
                 clearInterval(pollInterval);
+
+                // 3. Burn the payment record instantly (Double-Spend Protection)
+                await fetch(`${FIREBASE_URL}/payments/${safeAmountKey}.json`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ status: "USED" })
+                });
+                
+                if (data.utr) {
+                    await fetch(`${FIREBASE_URL}/utr_records/${data.utr}.json`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ status: "USED" })
+                    });
+                }
+
+                // 4. Provision the user account with 30 Days of access
+                const newExpiry = new Date().getTime() + (30 * 24 * 60 * 60 * 1000); 
+                await fetch(`${FIREBASE_URL}/users/${currentUser}.json`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ sub_expiry: newExpiry })
+                });
+
+                // 5. Unlock the Node UI
+                alert("TRANSACTION SECURED: License provisioned for 30 days.");
                 document.getElementById('lock').style.display = 'none';
                 document.getElementById('app').style.display = 'block';
                 initApp();
-            }}
-        }} catch(e){{}}
-    }}, 3000);
-}}
-
+            }
+        } catch(e) { /* Silent background network poll */ }
+    }, 3000);
 function logout() {{ localStorage.removeItem('arb_session'); location.reload(); }}
 function swTab(id,btn){{ document.querySelectorAll('.tc').forEach(t=>t.classList.remove('act')); document.querySelectorAll('.tab').forEach(t=>t.classList.remove('act')); document.getElementById('tc-'+id).classList.add('act'); btn.classList.add('act'); }}
 function onBank(){{ BANK=parseFloat(document.getElementById('bankroll').value)||10000; localStorage.setItem('arb_bank',String(BANK)); initApp(); }}
