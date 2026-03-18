@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-===============================================================================
-                    ARB SNIPER v8.0 — ENTERPRISE NODE EDITION
-  Two-Step BC.Game API | India Books | localStorage Bankroll | Clear Markets  
-  Dynamic Sport Discovery | All Markets | Fixed Arb Engine | Auto-Billing     
-  SHA-256 Encrypted Authentication | High-End Analytics Dashboard
-===============================================================================
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    ARB SNIPER v9.0 — ZERO-TRUST ANALYTICS                    ║
+║  Zero-Trust Auth | Advanced Market Analytics | BC.Game | API Telemetry       ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
 import os
@@ -25,44 +23,45 @@ from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from difflib import SequenceMatcher
 
+# ── AUTO-INSTALL cloudscraper if missing ─────────────────────────────────────
 if importlib.util.find_spec("cloudscraper") is None:
     print("Installing cloudscraper...")
     subprocess.check_call([sys.executable, "-m", "pip", "install", "cloudscraper", "-q"])
 
-import cloudscraper as _cloudscraper
+import cloudscraper
 
+# ─────────────────────────────────────────────────────────────────────────────
+# LOGGING
+# ─────────────────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("ArbSniper")
 warnings.filterwarnings("ignore", message="Unverified HTTPS request")
 
-# =============================================================================
+# ─────────────────────────────────────────────────────────────────────────────
 # CONSTANTS & CONFIGURATIONS
-# =============================================================================
+# ─────────────────────────────────────────────────────────────────────────────
 ODDS_BASE      = "https://api.the-odds-api.com/v4"
 NTFY_URL       = "https://ntfy.sh/nikunj_arb_alerts_2026"
 STATE_FILE     = "api_state.json"
 OUTPUT_HTML    = "index.html"
-SCRAPERAPI_KEY = os.environ.get("SCRAPERAPI_KEY", "").strip()
 
-# -- MONETIZATION & GATEWAY CONFIG --
+# ── MONETIZATION & GATEWAY CONFIG ─────────────────────────────────────────────
 YOUR_UPI_ID  = "Furiousfighter06-1@okhdfcbank"
 YOUR_NAME    = "Furious Fighter"
 FIREBASE_URL = "https://payment-engine-e3bff-default-rtdb.asia-southeast1.firebasedatabase.app"
 SUB_PRICE    = 500  
 
-# -- ARBITRAGE THRESHOLDS --
+# ── ARBITRAGE THRESHOLDS ──────────────────────────────────────────────────────
 MIN_ARB_PROFIT = 0.05   
 MAX_ARB_PROFIT = 15.0   
 MIN_EV_EDGE    = 0.005  
 KELLY_FRACTION = 0.30   
 DEFAULT_BANK   = 10000  
 
-# -- BC.GAME ENDPOINTS --
+# ── BC.GAME ENDPOINTS ─────────────────────────────────────────────────────────
 BCGAME_BASE    = "https://api-k-c7818b61-623.sptpub.com/api/v4/prematch/brand/2103509236163162112/en"
-BCGAME_DISC    = f"{BCGAME_BASE}/0"       
-BCGAME_MAX_CAT = 30                        
 
-# -- BOOKMAKERS --
+# ── BOOKMAKERS — INDIA-ACCESSIBLE ONLY ───────────────────────────────────────
 ALLOWED_BOOKS = {
     "pinnacle", "stake", "bc_game", "onexbet", "parimatch", 
     "dafabet", "betway", "bet365", "marathonbet", "betfair", "matchbook",
@@ -78,27 +77,36 @@ ALWAYS_INCLUDE_SPORTS = {
     "basketball_nba", "basketball_euroleague",
     "icehockey_nhl", "mma_mixed_martial_arts",
     "cricket_ipl", "cricket_test_match", "cricket_odi",
-    "tennis_atp_french_open", "tennis_wta_french_open",
-    "americanfootball_nfl",
+    "tennis_atp", "tennis_wta", "americanfootball_nfl",
 }
 
-# =============================================================================
-# KEY ROTATION MANAGER
-# =============================================================================
+# ═════════════════════════════════════════════════════════════════════════════
+# KEY ROTATION MANAGER (WATERFALL FIX)
+# ═════════════════════════════════════════════════════════════════════════════
 class KeyRotator:
     def __init__(self):
         raw = os.environ.get("ODDS_API_KEYS", "")
         self.keys = [k.strip() for k in raw.split(",") if k.strip()]
         if not self.keys:
-            log.warning("ODDS_API_KEYS env var not set!")
+            log.warning("ODDS_API_KEYS env var not set! Add it to GitHub Secrets.")
         self._lock  = threading.Lock()
         self._quota = {k: 500 for k in self.keys}
         self._used  = {k: 0   for k in self.keys}
 
+    def load_memory(self, saved_quotas: dict):
+        with self._lock:
+            for k in self.keys:
+                if k in saved_quotas:
+                    self._quota[k] = saved_quotas[k]
+
     def get(self) -> str:
         with self._lock:
             if not self.keys: return "MISSING_KEY"
-            return max(self.keys, key=lambda k: self._quota.get(k, 0))
+            # WATERFALL LOGIC: Stick to one key until it dies
+            for k in self.keys:
+                if self._quota.get(k, 0) > 2:
+                    return k
+            return "MISSING_KEY"
 
     def update(self, key: str, remaining: int, used: int = 0):
         with self._lock:
@@ -115,23 +123,32 @@ class KeyRotator:
     def total_used(self) -> int:
         with self._lock: return sum(self._used.values())
 
+    def dump_quotas(self) -> dict:
+        with self._lock: return self._quota
+
     def status(self) -> list:
         with self._lock:
+            active_key = None
+            for k in self.keys:
+                if self._quota.get(k, 0) > 2:
+                    active_key = k
+                    break
+            
             return [
                 {
                     "key":       f"{k[:4]}...{k[-4:]}",
                     "remaining": self._quota.get(k, 0),
                     "used":      self._used.get(k, 0),
-                    "active":    k == max(self.keys, key=lambda x: self._quota.get(x, 0)) if self.keys else False
+                    "active":    k == active_key
                 }
                 for k in self.keys
             ]
 
 ROTATOR = KeyRotator()
 
-# =============================================================================
-# STATE MANAGEMENT
-# =============================================================================
+# ═════════════════════════════════════════════════════════════════════════════
+# STATE MANAGEMENT (MEMORY FIX)
+# ═════════════════════════════════════════════════════════════════════════════
 def load_state() -> dict:
     defaults = {
         "remaining_requests":   500,
@@ -141,6 +158,7 @@ def load_state() -> dict:
         "last_arb_count":       0,
         "last_ev_count":        0,
         "sports_scanned":       0,
+        "key_quotas":           {} 
     }
     if os.path.exists(STATE_FILE):
         try:
@@ -155,9 +173,9 @@ def save_state(state: dict):
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
 
-# =============================================================================
+# ═════════════════════════════════════════════════════════════════════════════
 # DYNAMIC SPORT DISCOVERY
-# =============================================================================
+# ═════════════════════════════════════════════════════════════════════════════
 def fetch_all_sports() -> list:
     key = ROTATOR.get()
     if key == "MISSING_KEY": return sorted(ALWAYS_INCLUDE_SPORTS)
@@ -170,13 +188,12 @@ def fetch_all_sports() -> list:
     except Exception:
         return sorted(ALWAYS_INCLUDE_SPORTS)
 
-# =============================================================================
-# ODDS API FETCHING
-# =============================================================================
+# ═════════════════════════════════════════════════════════════════════════════
+# ODDS API — CONCURRENT FETCHER
+# ═════════════════════════════════════════════════════════════════════════════
 def _fetch_market(market: str) -> list:
     key = ROTATOR.get()
-    if key == "MISSING_KEY": return []
-    if ROTATOR._quota.get(key, 0) <= 0: return []
+    if key == "MISSING_KEY" or ROTATOR._quota.get(key, 0) <= 0: return []
 
     url    = f"{ODDS_BASE}/sports/upcoming/odds"
     params = {
@@ -241,14 +258,96 @@ def fetch_all_odds(state: dict, sports_list: list) -> list:
     state["sports_scanned"]       = len({ev.get("sport_key","") for ev in all_events})
     return all_events
 
-# =============================================================================
-# QUANT MATH ENGINE & SCANNING
-# =============================================================================
+# ═════════════════════════════════════════════════════════════════════════════
+# BC.GAME SCRAPER (CLOUDSCRAPER FIX)
+# ═════════════════════════════════════════════════════════════════════════════
+def fetch_bcgame_events() -> list:
+    scraper = cloudscraper.create_scraper(
+        browser={"browser": "chrome", "platform": "windows", "mobile": False}
+    )
+    headers = {
+        'Accept': 'application/json, text/plain, */*',
+        'Origin': 'https://bc.game',
+        'Referer': 'https://bc.game/'
+    }
+    try:
+        r = scraper.get(f"{BCGAME_BASE}/0", headers=headers, timeout=20)
+        if r.status_code != 200: return []
+        manifest = r.json()
+        
+        top_ids  = manifest.get("top_events_versions",  [])
+        rest_ids = manifest.get("rest_events_versions", [])
+        all_ids  = top_ids + rest_ids
+        if not all_ids: return []
+
+        all_sports = {}; all_tourns = {}; all_events = {}
+        for chunk_id in all_ids[:5]: # Limit to 5 chunks for speed
+            chunk_res = scraper.get(f"{BCGAME_BASE}/{chunk_id}", headers=headers, timeout=10)
+            if chunk_res.status_code != 200: continue
+            chunk = chunk_res.json()
+            if not chunk: continue
+            
+            all_sports.update(chunk.get("sports", {}))
+            all_tourns.update(chunk.get("tournaments", {}))
+            all_events.update(chunk.get("events", {}))
+
+        converted = []
+        for ev_id, ev in all_events.items():
+            desc = ev.get("desc", {})
+            if desc.get("type", "match") not in ("match", "game", ""): continue
+            
+            comps = desc.get("competitors", [])
+            if len(comps) < 2: continue
+            home, away = comps[0].get("name",""), comps[1].get("name","")
+            
+            markets = ev.get("markets", {})
+            h2h = []
+            if "11" in markets:
+                for line_key, sels in markets["11"].items():
+                    if line_key not in ("", "0"): continue
+                    prices = [float(s.get("k",0)) for s in sels.values() if float(s.get("k",0)) > 1.01]
+                    if len(prices) == 2: h2h = [{"name":"Home","price":prices[0]}, {"name":"Away","price":prices[1]}]
+                    elif len(prices) == 3: h2h = [{"name":"Home","price":prices[0]}, {"name":"Draw","price":prices[1]}, {"name":"Away","price":prices[2]}]
+            
+            if not h2h: continue
+            
+            sport = all_sports.get(str(desc.get("sport", "")), {}).get("name", "Unknown")
+            ts = desc.get("scheduled", "")
+            try: start = datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
+            except: start = str(ts)
+
+            converted.append({
+                "id": f"bcgame_{ev_id}", "sport_title": sport, "home_team": home, "away_team": away,
+                "commence_time": start,
+                "bookmakers": [{"key": "bc_game", "title": "BC.Game", "markets": [{"key": "h2h", "outcomes": h2h}]}]
+            })
+        return converted
+    except Exception as e:
+        log.error(f"BC.Game fetch failed: {e}")
+        return []
+
+def similarity(a: str, b: str) -> float:
+    return SequenceMatcher(None, a.lower().strip(), b.lower().strip()).ratio()
+
+def merge_bcgame(odds_events: list, bc_events: list) -> list:
+    for bc_ev in bc_events:
+        bh, ba = bc_ev["home_team"], bc_ev["away_team"]
+        best_ev, best_score = None, 0.0
+        for ev in odds_events:
+            s = (similarity(bh, ev.get("home_team", "")) + similarity(ba, ev.get("away_team", ""))) / 2
+            if s > 0.72 and s > best_score:
+                best_score, best_ev = s, ev
+        if best_score > 0.72 and best_ev:
+            best_ev["bookmakers"].extend(bc_ev["bookmakers"])
+        else:
+            odds_events.append(bc_ev)
+    return odds_events
+
+# ═════════════════════════════════════════════════════════════════════════════
+# QUANT MATH ENGINE & SCANNER
+# ═════════════════════════════════════════════════════════════════════════════
 def remove_vig(outcomes: list) -> dict:
-    raw = {}
-    for o in outcomes:
-        try: raw[o["name"]] = 1.0 / float(o["price"])
-        except Exception: pass
+    raw = {o["name"]: 1.0 / float(o["price"]) for o in outcomes if float(o.get("price",0)) > 1.0}
     total = sum(raw.values())
     if total <= 0: return {}
     return {k: v / total for k, v in raw.items()}
@@ -258,129 +357,80 @@ def kelly_stake(edge: float, odds: float, bank: float) -> float:
     if b <= 0: return 0.0
     p  = 1.0 / (odds / (1.0 + edge))
     kf = (b * p - (1.0 - p)) / b
-    if kf <= 0: return 0.0
-    return round(KELLY_FRACTION * kf * bank, 2)
-
-def round10(x: float) -> float:
-    return round(round(x / 10) * 10, 2)
+    return round(KELLY_FRACTION * kf * bank, 2) if kf > 0 else 0.0
 
 def calc_stakes(odds_list: list, total: float = 1000.0) -> list:
     impl = sum(1.0 / o for o in odds_list)
     if impl >= 1.0: return [0.0] * len(odds_list)
     return [(1.0 / o) / impl * total for o in odds_list]
 
-def _best_price_per_book(bookmakers: list, market_key: str) -> dict:
-    best: dict = {}
-    for bm in bookmakers:
-        for mkt in bm.get("markets", []):
-            if mkt.get("key") != market_key: continue
-            for o in mkt.get("outcomes", []):
-                raw_name = str(o.get("name", ""))
-                pt       = o.get("point")
-                try: price = float(o.get("price", 0))
-                except Exception: continue
-                if price <= 1.01: continue
-
-                if pt is not None:
-                    try: name = f"{raw_name}_{abs(float(pt))}"
-                    except Exception: name = raw_name
-                else:
-                    name = raw_name
-
-                bk  = bm.get("key", "?")
-                ttl = bm.get("title", "?")
-                if name not in best: best[name] = {}
-                if bk not in best[name] or price > best[name][bk][0]:
-                    best[name][bk] = (price, ttl)
-    return best
-
-def _build_arb_record(combo: list, mkey: str, sport: str, match: str, com: str):
-    prices = [x[1] for x in combo]
-    impl   = sum(1.0 / p for p in prices)
-    if impl >= 1.0: return None
-    pct = (1.0 / impl - 1.0) * 100
-    if pct < MIN_ARB_PROFIT or pct > MAX_ARB_PROFIT: return None
-    stakes = calc_stakes(prices)
-    return {
-        "ways":       len(combo),
-        "market":     mkey.upper(),
-        "sport":      sport,
-        "match":      match,
-        "commence":   com,
-        "profit_pct": round(pct, 3),
-        "profit_amt": round((1.0 / impl - 1.0) * 1000, 2),
-        "outcomes": [{
-            "name":          x[0],
-            "odds":          round(x[1], 3),
-            "book":          x[2],
-            "book_key":      x[3],
-            "stake":         round(s, 2),
-            "stake_rounded": round10(s),
-        } for x, s in zip(combo, stakes)],
-    }
-
 def scan_arbitrage(events: list) -> list:
-    seen = set()
     arbs = []
     for ev in events:
-        home  = ev.get("home_team", "?")
-        away  = ev.get("away_team", "?")
-        sport = ev.get("sport_title", "Unknown")
-        com   = ev.get("commence_time", "")
-        match = f"{home} vs {away}"
-
+        match = f"{ev.get('home_team')} vs {ev.get('away_team')}"
         for mkey in MARKETS:
-            best = _best_price_per_book(ev.get("bookmakers", []), mkey)
-            if not best: continue
-
-            # H2H Logic
-            if mkey == "h2h":
-                names = list(best.keys())
-                if len(names) == 2:
-                    n1, n2 = names[0], names[1]
-                    for bk_a, (p_a, t_a) in sorted(best[n1].items(), key=lambda x: -x[1][0]):
-                        for bk_b, (p_b, t_b) in sorted(best[n2].items(), key=lambda x: -x[1][0]):
-                            if bk_a == bk_b: continue
-                            rec = _build_arb_record([(n1, p_a, t_a, bk_a), (n2, p_b, t_b, bk_b)], "h2h", sport, match, com)
-                            if rec:
-                                arbs.append(rec); break
-                elif len(names) == 3:
-                    n1, n2, n3 = names[0], names[1], names[2]
-                    for bk_a, (p_a, t_a) in sorted(best[n1].items(), key=lambda x: -x[1][0]):
-                        for bk_b, (p_b, t_b) in sorted(best[n2].items(), key=lambda x: -x[1][0]):
-                            for bk_c, (p_c, t_c) in sorted(best[n3].items(), key=lambda x: -x[1][0]):
-                                if len({bk_a, bk_b, bk_c}) < 2: continue
-                                rec = _build_arb_record([(n1, p_a, t_a, bk_a), (n2, p_b, t_b, bk_b), (n3, p_c, t_c, bk_c)], "h2h", sport, match, com)
-                                if rec: arbs.append(rec)
-            # Totals Logic
-            elif mkey == "totals":
-                points = {}
-                for name, bk_prices in best.items():
-                    parts = name.split("_")
-                    if len(parts) < 2: continue
-                    points.setdefault("_".join(parts[1:]), {}).setdefault(parts[0], {}).update(bk_prices)
-                for pt, sides in points.items():
-                    if "Over" not in sides or "Under" not in sides: continue
-                    for bk_o, (p_o, t_o) in sorted(sides["Over"].items(), key=lambda x: -x[1][0]):
-                        for bk_u, (p_u, t_u) in sorted(sides["Under"].items(), key=lambda x: -x[1][0]):
-                            if bk_o == bk_u: continue
-                            rec = _build_arb_record([(f"Over {pt}", p_o, t_o, bk_o), (f"Under {pt}", p_u, t_u, bk_u)], "totals", sport, match, com)
-                            if rec:
-                                arbs.append(rec); break
+            best = {}
+            for bm in ev.get("bookmakers", []):
+                for mkt in bm.get("markets", []):
+                    if mkt.get("key") != mkey: continue
+                    for o in mkt.get("outcomes", []):
+                        raw_name, pt = str(o.get("name", "")), o.get("point")
+                        name = f"{raw_name}_{abs(float(pt))}" if pt is not None else raw_name
+                        price = float(o.get("price", 0))
+                        if price > 1.01 and (name not in best or price > best[name][0]):
+                            best[name] = (price, bm.get("title", "?"), bm.get("key", "?"))
+            
+            names = list(best.keys())
+            if len(names) < 2: continue
+            
+            has_draw = any('draw' in n.lower() for n in names)
+            
+            if len(names) == 2 and not has_draw:
+                p1, p2 = best[names[0]][0], best[names[1]][0]
+                impl = (1/p1) + (1/p2)
+                if impl < 1.0:
+                    pct = (1/impl - 1) * 100
+                    if MIN_ARB_PROFIT <= pct <= MAX_ARB_PROFIT:
+                        stakes = calc_stakes([p1, p2])
+                        arbs.append({
+                            "ways": 2, "market": mkey.upper(), "sport": ev.get("sport_title", ""),
+                            "match": match, "commence": ev.get("commence_time", ""), "profit_pct": round(pct, 3),
+                            "profit_amt": round((1/impl - 1)*1000, 2),
+                            "outcomes": [
+                                {"name": names[0], "odds": p1, "book_key": best[names[0]][2], "stake": stakes[0]},
+                                {"name": names[1], "odds": p2, "book_key": best[names[1]][2], "stake": stakes[1]}
+                            ]
+                        })
+            elif len(names) == 3:
+                p1, p2, p3 = best[names[0]][0], best[names[1]][0], best[names[2]][0]
+                impl = (1/p1) + (1/p2) + (1/p3)
+                if impl < 1.0:
+                    pct = (1/impl - 1) * 100
+                    if MIN_ARB_PROFIT <= pct <= MAX_ARB_PROFIT:
+                        stakes = calc_stakes([p1, p2, p3])
+                        arbs.append({
+                            "ways": 3, "market": mkey.upper(), "sport": ev.get("sport_title", ""),
+                            "match": match, "commence": ev.get("commence_time", ""), "profit_pct": round(pct, 3),
+                            "profit_amt": round((1/impl - 1)*1000, 2),
+                            "outcomes": [
+                                {"name": names[0], "odds": p1, "book_key": best[names[0]][2], "stake": stakes[0]},
+                                {"name": names[1], "odds": p2, "book_key": best[names[1]][2], "stake": stakes[1]},
+                                {"name": names[2], "odds": p3, "book_key": best[names[2]][2], "stake": stakes[2]}
+                            ]
+                        })
     arbs.sort(key=lambda x: x["profit_pct"], reverse=True)
     return arbs[:300]
 
 def scan_ev_bets(events: list) -> list:
     bets = []
     for ev in events:
-        home, away = ev.get("home_team", "?"), ev.get("away_team", "?")
-        sport, com = ev.get("sport_title", "Unknown"), ev.get("commence_time", "")
+        match = f"{ev.get('home_team')} vs {ev.get('away_team')}"
         for mkey in MARKETS:
             pin_out = None
             for bm in ev.get("bookmakers", []):
                 if bm.get("key") == "pinnacle":
-                    for m in bm.get("markets", []):
-                        if m.get("key") == mkey: pin_out = m.get("outcomes", [])
+                    pin_out = next((m.get("outcomes", []) for m in bm.get("markets", []) if m.get("key") == mkey), None)
+            
             if not pin_out or len(pin_out) < 2: continue
             true_probs = remove_vig(pin_out)
             if not true_probs: continue
@@ -391,36 +441,49 @@ def scan_ev_bets(events: list) -> list:
                     if m.get("key") != mkey: continue
                     for o in m.get("outcomes", []):
                         name = o.get("name", "")
-                        if name not in true_probs: continue
-                        try: price = float(o["price"])
-                        except Exception: continue
-                        if price <= 1.0: continue
-
-                        tp, to = true_probs[name], 1.0 / true_probs[name]
-                        edge = (price - to) / to
-                        if edge >= MIN_EV_EDGE:
-                            ks = kelly_stake(edge, price, DEFAULT_BANK)
-                            bets.append({
-                                "market": mkey.upper(), "sport": sport, "match": f"{home} vs {away}",
-                                "commence": com, "outcome": name, "book": bm.get("title", "?"),
-                                "book_key": bm.get("key", "?"), "offered_odds": round(price, 3),
-                                "true_odds": round(to, 3), "true_prob_pct": round(tp * 100, 2),
-                                "edge_pct": round(edge * 100, 3), "kelly_stake": ks,
-                                "kelly_stake_rounded": round10(ks),
-                            })
+                        price = float(o.get("price", 0))
+                        if name in true_probs and price > 1.01:
+                            tp = true_probs[name]
+                            to = 1.0 / tp
+                            edge = (price - to) / to
+                            if edge >= MIN_EV_EDGE:
+                                ks = kelly_stake(edge, price, DEFAULT_BANK)
+                                bets.append({
+                                    "market": mkey.upper(), "sport": ev.get("sport_title", ""),
+                                    "match": match, "commence": ev.get("commence_time", ""),
+                                    "outcome": name, "book_key": bm.get("key", "?"), "book": bm.get("title", "?"),
+                                    "offered_odds": round(price, 3), "true_odds": round(to, 3),
+                                    "true_prob_pct": round(tp * 100, 2), "edge_pct": round(edge * 100, 3),
+                                    "kelly_stake": ks
+                                })
     bets.sort(key=lambda x: x["edge_pct"], reverse=True)
     return bets[:500]
 
-# =============================================================================
-# HTML DASHBOARD GENERATOR — SECURE ENTERPRISE NODE
-# =============================================================================
-def generate_html(arbs: list, evs: list, state: dict, key_status: list, sports_count: int) -> str:
-    IST     = timezone(timedelta(hours=5, minutes=30))
-    ist_now = datetime.now(IST).strftime("%d %b %Y, %I:%M:%S %p IST")
+# ═════════════════════════════════════════════════════════════════════════════
+# PUSH NOTIFICATION
+# ═════════════════════════════════════════════════════════════════════════════
+def send_push(arbs: list, evs: list):
+    if not arbs and not evs: return
+    if arbs:
+        t = arbs[0]
+        msg = f"ARB: {t['match']} | +{t['profit_pct']}% | {t['ways']}-way {t['market']} | {len(evs)} EVs"
+    else:
+        t = evs[0]
+        msg = f"EV: {t['match']} | +{t['edge_pct']}% edge | {t['book']} | {len(evs)} total"
+    try:
+        requests.post(NTFY_URL, data=msg.encode("utf-8"), headers={"Title": "Arb Sniper Alert", "Tags": "zap,moneybag"}, timeout=10)
+    except: pass
+
+# ═════════════════════════════════════════════════════════════════════════════
+# HTML DASHBOARD GENERATOR — V9.0 ZERO-TRUST ANALYTICS
+# ═════════════════════════════════════════════════════════════════════════════
+def generate_html(arbs: list, evs: list, raw_bc: list, state: dict, key_status: list, sports_count: int) -> str:
+    ist_now = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M:%S %p IST")
     total_q = sum(k["remaining"] for k in key_status)
 
     arbs_j  = json.dumps(arbs, ensure_ascii=False)
     evs_j   = json.dumps(evs, ensure_ascii=False)
+    bc_j    = json.dumps(raw_bc, ensure_ascii=False)
     keys_j  = json.dumps(key_status, ensure_ascii=False)
 
     return f"""<!DOCTYPE html>
@@ -428,9 +491,8 @@ def generate_html(arbs: list, evs: list, state: dict, key_status: list, sports_c
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
-<title>Enterprise Analytics Node</title>
+<title>Arb Sniper v9.0 ⚡ Analytics</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}}
@@ -442,442 +504,328 @@ def generate_html(arbs: list, evs: list, state: dict, key_status: list, sports_c
   --txt:#e8e8f0;--txt2:#9898aa;--txt3:#5a5a6a;
   --mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;--disp:'Syne',sans-serif;
 }}
-html,body{{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--txt)}}
+html,body{{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font-family:var(--sans);}}
 ::-webkit-scrollbar{{width:3px;height:3px}}
 ::-webkit-scrollbar-thumb{{background:var(--bg4);border-radius:2px}}
 
-/* ── AUTH & PAYMENT PORTAL ──────────────────────────────────── */
-#lock{{
-  position:fixed;inset:0;z-index:9999;background:var(--bg);
-  display:flex;align-items:center;justify-content:center;
-  background:radial-gradient(ellipse 80% 60% at 50% 40%,rgba(34,211,238,0.06) 0%,transparent 65%);
-}}
-.lbox{{
-  width:90%;max-width:380px;background:var(--bg2);border:1px solid var(--border2);
-  border-radius:16px;padding:36px 32px;
-  display:flex;flex-direction:column;align-items:center;gap:18px;
-  box-shadow:0 0 60px rgba(34,211,238,0.06),0 24px 80px rgba(0,0,0,0.6);
-}}
-.lock-icon{{
-  width:52px;height:52px;border-radius:14px;
-  background:linear-gradient(135deg,rgba(34,211,238,.15),rgba(167,139,250,.15));
-  border:1px solid rgba(34,211,238,.25);display:flex;align-items:center;justify-content:center;
-  font-size:22px;color:var(--cyan);
-}}
-.lock-title{{font-family:var(--disp);font-size:18px;font-weight:800;letter-spacing:2px;color:var(--txt);text-transform:uppercase;}}
-.lock-sub{{font-size:11px;color:var(--txt3);letter-spacing:1px;text-transform:uppercase; margin-bottom:10px;}}
+/* ── SECURE ZERO-TRUST PORTAL ──────────────────────────────────── */
+#lock{{ position:fixed;inset:0;z-index:9999;background:var(--bg); display:flex;align-items:center;justify-content:center; }}
+.lbox{{ width:90%;max-width:360px;background:var(--bg2);border:1px solid var(--border2); border-radius:20px;padding:36px 32px; display:flex;flex-direction:column;align-items:center;gap:18px; box-shadow:0 0 60px rgba(34,211,238,0.06); }}
+.lock-title{{font-family:var(--disp);font-size:20px;font-weight:800;letter-spacing:3px;color:var(--txt)}}
+.lock-sub{{font-size:10px;color:var(--txt3);letter-spacing:2px;text-transform:uppercase}}
+#userIdInput{{ width:100%;padding:13px 16px;font-size:16px;text-align:center;letter-spacing:2px; background:var(--bg3);border:1px solid var(--border2);border-radius:10px; color:var(--txt);font-family:var(--mono);outline:none; }}
+#userIdInput:focus{{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(34,211,238,.12)}}
+#lbtn{{ width:100%;padding:13px;font-size:12px;font-weight:700;letter-spacing:2px; cursor:pointer;border:none;font-family:var(--disp); background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#000; border-radius:10px; }}
+#lerr{{font-size:11px;color:var(--red);display:none;text-align:center;}}
 
-.ainput{{
-  width:100%;padding:13px 16px;font-size:14px;letter-spacing:1px;
-  background:var(--bg3);border:1px solid var(--border2);border-radius:8px;
-  color:var(--txt);font-family:var(--mono);outline:none;
-  transition:border-color .2s; margin-bottom:8px;
-}}
-.ainput:focus{{border-color:var(--cyan);}}
-.abtn{{
-  width:100%;padding:13px;font-size:12px;font-weight:700;letter-spacing:1.5px;
-  cursor:pointer;border:none;font-family:var(--disp);
-  background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#000;
-  border-radius:8px;transition:opacity .2s; margin-top:10px;
-}}
-.abtn:hover{{opacity:.88;}}
-.abtn-sec{{
-  background:transparent; border:1px solid var(--border2); color:var(--txt2);
-  margin-top:0;
-}}
-.abtn-sec:hover{{border-color:var(--cyan); color:var(--cyan);}}
-
-#lerr{{font-size:11px;color:var(--red);display:none;letter-spacing:.5px;text-align:center;font-weight:600;}}
-.auth-toggle{{font-size:11px;color:var(--txt3);cursor:pointer;text-decoration:underline;margin-top:10px;}}
-.auth-toggle:hover{{color:var(--cyan);}}
-
-/* ── APP LAYOUT ──────────────────────────────────── */
-#app{{display:none;width:100%;height:100vh;overflow-y:auto;background:var(--bg)}}
-.topbar{{
-  position:sticky;top:0;z-index:100;height:52px;padding:0 20px;
-  background:rgba(12,12,14,.9);backdrop-filter:blur(20px);
-  border-bottom:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-between;
-}}
-.logo{{font-family:var(--disp);font-size:15px;font-weight:800;letter-spacing:1px;color:var(--cyan);}}
-.topbar-r{{display:flex;align-items:center;gap:10px}}
-.lpill{{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.22);}}
-.ldot{{width:6px;height:6px;border-radius:50%;background:var(--green);}}
-.ltext{{font-size:10px;color:var(--green);font-weight:700;letter-spacing:1.5px;font-family:var(--mono)}}
-.ibtn{{background:none;border:none;cursor:pointer;color:var(--txt3);font-size:14px;padding:4px;transition:all .2s}}
-.ibtn:hover{{color:var(--red);}}
-
-.bkbar{{background:var(--bg1);border-bottom:1px solid var(--border);padding:9px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}}
-.bklabel{{font-size:11px;color:var(--txt3);font-weight:600;letter-spacing:1px;text-transform:uppercase;}}
-.bkinput{{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--cyan);font-family:var(--mono);font-size:14px;font-weight:700;padding:7px 12px;outline:none;width:150px;}}
-
-.tabs{{background:var(--bg1);border-bottom:1px solid var(--border);display:flex;gap:2px;padding:0 20px;overflow-x:auto;scrollbar-width:none;}}
+/* ── APP & TABS ──────────────────────────────────── */
+#app{{display:none;width:100%;height:100vh;overflow-y:auto;}}
+.topbar{{ position:sticky;top:0;z-index:100;height:52px;padding:0 20px; background:rgba(12,12,14,.9);backdrop-filter:blur(20px); border-bottom:1px solid var(--border); display:flex;align-items:center;justify-content:space-between; }}
+.logo{{ font-family:var(--disp);font-size:15px;font-weight:800;letter-spacing:1px; background:linear-gradient(135deg,var(--cyan),var(--purple)); -webkit-background-clip:text;-webkit-text-fill-color:transparent; }}
+.tabs{{ background:var(--bg1);border-bottom:1px solid var(--border); display:flex;gap:2px;padding:0 20px;overflow-x:auto;scrollbar-width:none; }}
 .tabs::-webkit-scrollbar{{display:none}}
-.tab{{padding:11px 13px;font-size:11px;font-weight:600;cursor:pointer;color:var(--txt3);background:none;border:none;display:flex;align-items:center;gap:6px;border-bottom:2px solid transparent;font-family:var(--sans);}}
+.tab{{ padding:11px 13px;font-size:11px;font-weight:600;cursor:pointer; color:var(--txt3);background:none;border:none;white-space:nowrap; display:flex;align-items:center;gap:6px; border-bottom:2px solid transparent;transition:all .2s; }}
 .tab.act{{color:var(--cyan);border-bottom-color:var(--cyan)}}
-.tbadge{{font-size:9px;padding:1px 6px;border-radius:8px;font-weight:800;background:var(--bg4);color:var(--txt2);font-family:var(--mono);}}
-.tab.act .tbadge{{background:rgba(34,211,238,.15);color:var(--cyan)}}
 
-.tc{{display:none;padding:14px 20px 60px;}}
+.tc{{display:none;padding:20px;}}
 .tc.act{{display:block}}
 .grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px}}
 
-/* ── CARDS & TABLES ────────────────────────────────── */
-.card{{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;}}
-.cbar{{height:2px;background:linear-gradient(90deg,var(--cyan),var(--purple))}}
-.cbar.ev{{background:linear-gradient(90deg,var(--purple),var(--cyan))}}
-.cinn{{padding:14px;}}
+/* ── CARDS ────────────────────────────────── */
+.card{{ background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px; }}
 .ch{{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:9px}}
-.cbdg{{font-size:9px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;padding:3px 7px;border-radius:5px;font-family:var(--mono);background:rgba(34,211,238,.1);color:var(--cyan);border:1px solid rgba(34,211,238,.2);}}
-.cpft{{font-size:18px;font-weight:800;color:var(--green);font-family:var(--mono)}}
+.cbdg{{ font-size:9px;font-weight:800;letter-spacing:1.5px;padding:3px 7px;border-radius:5px;font-family:var(--mono); background:rgba(34,211,238,.1);color:var(--cyan);border:1px solid rgba(34,211,238,.2); }}
+.cpft{{font-size:20px;font-weight:800;color:var(--green);font-family:var(--mono)}}
 .cmatch{{font-size:13px;font-weight:600;color:var(--txt);margin-bottom:6px;}}
-.cmeta{{font-size:10px;color:var(--txt3);margin-bottom:10px;display:flex;gap:10px;}}
-.ctbl{{width:100%;border-collapse:collapse;font-size:11px;font-family:var(--mono)}}
-.ctbl th{{color:var(--txt3);text-align:left;padding:0 6px 7px;border-bottom:1px solid var(--border);font-weight:500;font-size:9px;text-transform:uppercase;font-family:var(--sans);}}
-.ctbl td{{padding:6px;border-bottom:1px solid rgba(42,42,53,.8)}}
-.btag{{background:var(--bg4);border:1px solid var(--border);border-radius:4px;padding:2px 5px;font-size:9px;font-weight:700;color:var(--txt2)}}
-.oval{{color:var(--yellow);font-weight:700}}
-.stkm{{font-size:13px;font-weight:700;color:var(--txt)}}
+.ctbl{{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:10px;font-family:var(--mono)}}
+.ctbl th{{ color:var(--txt3);text-align:left;padding:0 6px 7px;border-bottom:1px solid var(--border); font-size:9px;letter-spacing:1.5px;text-transform:uppercase; }}
+.ctbl td{{padding:6px 6px;border-bottom:1px solid rgba(42,42,53,.8)}}
 
-/* ── PAYMENT & ANALYTICS UI ────────────────────────────────── */
-.receipt-box{{background:#111;padding:18px;border-radius:6px;margin-bottom:20px;text-align:left;font-size:14px;border:1px solid #2a2a2a; width: 100%;}}
-.receipt-row{{display:flex;justify-content:space-between;margin-bottom:10px;color:#ddd;}}
-.direct-pay-btn{{display:block;background-color:#0056b3;color:white;text-decoration:none;padding:14px 20px;border-radius:6px;font-size:14px;font-weight:600;text-align:center;margin-bottom:10px;}}
-.loader{{border:3px solid #333;border-top:3px solid #4CAF50;border-radius:50%;width:24px;height:24px;animation:spin 1s linear infinite;}}
-@keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
-
-/* ── ANALYTICS GRID ────────────────────────────────── */
-.a-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px;}}
-.a-stat{{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px;}}
-.a-label{{font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:8px;}}
-.a-val{{font-size:24px;font-weight:800;color:var(--txt);font-family:var(--mono);}}
-.a-sub{{font-size:11px;color:var(--txt2);margin-top:6px;}}
-
+/* ── ANALYTICS UI ────────────────────────── */
+.stat-box{{background:linear-gradient(145deg, var(--bg3), var(--bg2)); border:1px solid var(--border); padding:20px; border-radius:12px; text-align:center;}}
+.stat-val{{font-size:32px; font-weight:800; font-family:var(--mono); color:var(--green); margin:10px 0;}}
+.stat-lbl{{font-size:11px; color:var(--txt2); text-transform:uppercase; letter-spacing:1px;}}
+.bar-row{{display:flex; align-items:center; margin-bottom:10px; gap:10px; font-size:11px;}}
+.bar-lbl{{width:80px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;}}
+.bar-wrap{{flex:1; height:8px; background:var(--bg4); border-radius:4px; overflow:hidden;}}
+.bar-fill{{height:100%; background:var(--cyan);}}
+.bar-val{{width:40px; text-align:right; font-family:var(--mono); color:var(--txt);}}
 </style>
 </head>
 <body>
 
 <div id="lock">
-  
   <div class="lbox" id="login-box">
-    <div class="lock-icon"><i class="fas fa-shield-halved"></i></div>
-    <div class="lock-title">SECURE LOGIN</div>
-    <div class="lock-sub">Encrypted Node Access</div>
-    
-    <input id="lUser" class="ainput" type="text" placeholder="Username" autocomplete="off"/>
-    <input id="lPass" class="ainput" type="password" placeholder="Password" autocomplete="off"/>
-    
-    <button id="btnLogin" class="abtn" onclick="loginUser()">AUTHENTICATE</button>
-    <div class="auth-toggle" onclick="toggleAuthMode('register')">Create new enterprise account</div>
-    <div id="lerr-login" class="lerr" style="color:var(--red); font-size:11px; margin-top:8px; display:none;"></div>
+    <div class="lock-title">SNIPER V9.0</div>
+    <div class="lock-sub">Zero-Trust Node Connection</div>
+    <input id="userIdInput" type="text" placeholder="Enter License ID" autocomplete="off"/>
+    <button id="lbtn" onclick="authenticateUser()">CONNECT SECURE NODE</button>
+    <div id="lerr"></div>
   </div>
 
-  <div class="lbox" id="register-box" style="display: none;">
-    <div class="lock-icon"><i class="fas fa-user-plus"></i></div>
-    <div class="lock-title">NODE REGISTRATION</div>
-    <div class="lock-sub">Generate Cryptographic Profile</div>
-    
-    <input id="rUser" class="ainput" type="text" placeholder="Desired Username" autocomplete="off"/>
-    <input id="rPass" class="ainput" type="password" placeholder="Secure Password" autocomplete="off"/>
-    
-    <button id="btnReg" class="abtn" onclick="registerUser()">PROVISION ACCOUNT</button>
-    <div class="auth-toggle" onclick="toggleAuthMode('login')">Return to existing login</div>
-    <div id="lerr-reg" class="lerr" style="color:var(--red); font-size:11px; margin-top:8px; display:none;"></div>
-  </div>
-
-  <div class="lbox" id="pay-box" style="display: none; padding: 24px;">
+  <div class="lbox" id="pay-box" style="display: none;">
     <div class="lock-title" style="font-size: 16px;">LICENSE REQUIRED</div>
-    <div class="lock-sub" style="margin-bottom: 15px;">Automated Provisioning</div>
-    
-    <div class="receipt-box">
-        <div class="receipt-row"><span>License:</span><span>₹{SUB_PRICE}.00</span></div>
-        <div class="receipt-row" style="color:#888;font-size:13px;"><span>Network Fee:</span><span>₹<span id="subFee">0.00</span></span></div>
-        <div class="receipt-row" style="color:#4CAF50;font-weight:bold;margin-top:10px;padding-top:10px;border-top:1px dashed #444;"><span>Required:</span><span style="font-family: monospace; font-size: 16px;">₹<span id="subTotal">0.00</span></span></div>
+    <div style="width: 100%; background:var(--bg3); padding:15px; border-radius:8px; margin-bottom: 15px;">
+        <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:10px"><span>License:</span><span>₹{SUB_PRICE}.00</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--txt3);"><span>Network Fee:</span><span>₹<span id="subFee">0.00</span></span></div>
+        <div style="display:flex;justify-content:space-between;font-size:16px;color:var(--green);font-weight:bold;margin-top:10px;border-top:1px dashed var(--border);padding-top:10px"><span>Total:</span><span>₹<span id="subTotal">0.00</span></span></div>
     </div>
-
-    <div style="padding: 10px; margin-bottom: 10px; background:#fff; border-radius:8px;">
-        <img id="subQrCode" src="" alt="Payment QR" style="width: 180px; height: 180px; display: block; margin:0 auto;">
-    </div>
-    
-    <a id="subDeepLink" href="#" class="direct-pay-btn" style="width: 100%;">Pay Directly via UPI</a>
-    <button class="abtn abtn-sec" onclick="cancelPayment()">RETURN TO LOGIN</button>
-    
-    <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 15px;">
-        <div class="loader" style="width: 14px; height: 14px; border-width: 2px;"></div>
-        <span style="font-size: 11px; color: var(--txt3);">Awaiting network confirmation...</span>
-    </div>
+    <img id="subQrCode" src="" alt="Payment QR" style="width:180px;height:180px;border-radius:8px;background:#fff;padding:5px;">
+    <a id="subDeepLink" href="#" style="display:block;background:var(--cyan);color:#000;padding:12px;width:100%;text-align:center;border-radius:8px;text-decoration:none;font-weight:bold;margin-top:10px;">Pay via UPI App</a>
+    <div style="font-size:11px;color:var(--txt3);margin-top:10px;"><i class="fas fa-circle-notch fa-spin"></i> Awaiting Backend Confirmation...</div>
   </div>
 </div>
 
 <div id="app">
   <div class="topbar">
-    <div class="logo"><i class="fas fa-crosshairs"></i> ARB SNIPER v8.0</div>
-    <div class="topbar-r">
-      <div class="lpill"><div class="ldot"></div><span class="ltext">LIVE</span></div>
-      <span class="ttxt">{ist_now}</span>
-      <button class="ibtn" onclick="logout()" title="Secure Logout"><i class="fas fa-right-from-bracket"></i></button>
+    <div class="logo"><i class="fas fa-crosshairs"></i> V9.0 ANALYTICS</div>
+    <div style="display:flex;gap:10px;align-items:center;font-size:11px;color:var(--txt3);">
+      <span><i class="fas fa-clock"></i> {ist_now}</span>
+      <button onclick="logout()" style="background:none;border:none;color:var(--red);cursor:pointer;"><i class="fas fa-right-from-bracket"></i></button>
     </div>
   </div>
 
-  <div class="bkbar">
-    <span class="bklabel"><i class="fas fa-wallet"></i>&nbsp;Bankroll</span>
-    <input type="number" id="bankroll" class="bkinput" value="{DEFAULT_BANK}" oninput="onBank()"/>
+  <div style="padding:10px 20px; background:var(--bg1); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px;">
+    <span style="font-size:11px;color:var(--txt2);text-transform:uppercase;">Bankroll (₹)</span>
+    <input type="number" id="bankroll" value="{DEFAULT_BANK}" style="background:var(--bg3);border:1px solid var(--border);color:var(--cyan);padding:5px 10px;border-radius:6px;width:120px;font-family:var(--mono);" oninput="onBank()"/>
   </div>
 
   <div class="tabs">
-    <button class="tab act" id="tb-arb" onclick="swTab('arb',this)">Arbitrage <span class="tbadge" id="c-arb">0</span></button>
-    <button class="tab" id="tb-ev" onclick="swTab('ev',this)">Value Bets <span class="tbadge" id="c-ev">0</span></button>
-    <button class="tab" id="tb-analytics" onclick="swTab('analytics',this)"><i class="fas fa-chart-pie"></i> Analytics & Billing</button>
+    <button class="tab act" onclick="swTab('arb',this)"><i class="fas fa-percent"></i> Arbitrage <span class="tbadge" id="c-arb">0</span></button>
+    <button class="tab" onclick="swTab('ev',this)"><i class="fas fa-chart-line"></i> +EV Bets <span class="tbadge" id="c-ev">0</span></button>
+    <button class="tab" onclick="swTab('ana',this)"><i class="fas fa-chart-pie"></i> Analytics</button>
+    <button class="tab" onclick="swTab('bc',this)"><i class="fas fa-gamepad"></i> BC.Game</button>
+    <button class="tab" onclick="swTab('api',this)"><i class="fas fa-server"></i> API Status</button>
   </div>
 
   <div id="tc-arb" class="tc act"><div class="grid" id="g-arb"></div></div>
+
   <div id="tc-ev" class="tc"><div class="grid" id="g-ev"></div></div>
-  
-  <div id="tc-analytics" class="tc">
-    <h3 style="color:var(--txt2); text-transform:uppercase; font-size:13px; margin-bottom:20px; letter-spacing:1px;">System Analytics Node</h3>
-    <div class="a-grid">
-        <div class="a-stat">
-            <div class="a-label">License Status</div>
-            <div class="a-val" style="color:var(--green);" id="an-status">ACTIVE</div>
-            <div class="a-sub" id="an-user">User: Loading...</div>
+
+  <div id="tc-ana" class="tc">
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:15px; margin-bottom:20px;">
+      <div class="stat-box"><div class="stat-lbl">Total Arb Profit Available</div><div class="stat-val" id="ana-tot-profit">₹0</div><div style="font-size:10px;color:var(--txt3)">Assuming ₹10k staked per arb</div></div>
+      <div class="stat-box"><div class="stat-lbl">Market Avg EV Edge</div><div class="stat-val" id="ana-avg-edge" style="color:var(--purple)">0%</div></div>
+      <div class="stat-box"><div class="stat-lbl">Most Profitable Sport</div><div class="stat-val" id="ana-top-sport" style="color:var(--cyan);font-size:22px;">—</div></div>
+    </div>
+    
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:15px;">
+        <div class="card">
+            <h3 style="font-size:14px;margin-bottom:15px;"><i class="fas fa-building"></i> Top Bookmakers (+EV Count)</h3>
+            <div id="ana-books"></div>
         </div>
-        <div class="a-stat">
-            <div class="a-label">Days Remaining</div>
-            <div class="a-val" id="an-days">0</div>
-            <div class="a-sub" id="an-expiry">Expires: Loading...</div>
+        <div class="card">
+            <h3 style="font-size:14px;margin-bottom:15px;"><i class="fas fa-futbol"></i> Opportunities by Sport</h3>
+            <div id="ana-sports"></div>
         </div>
-        <div class="a-stat">
-            <div class="a-label">Total Arbs Found</div>
-            <div class="a-val" style="color:var(--cyan);">{state.get('last_arb_count',0)}</div>
-            <div class="a-sub">Current Market Sweep</div>
-        </div>
-        <div class="a-stat">
-            <div class="a-label">API Quota Utilization</div>
-            <div class="a-val" style="color:var(--yellow);">{total_q}</div>
-            <div class="a-sub">Network Calls Remaining</div>
-        </div>
+    </div>
+  </div>
+
+  <div id="tc-bc" class="tc"><div class="grid" id="g-bc"></div></div>
+
+  <div id="tc-api" class="tc">
+    <div class="card" style="max-width:600px;">
+      <h3 style="margin-bottom:15px;font-size:14px;"><i class="fas fa-key"></i> System Telemetry</h3>
+      <table class="ctbl">
+        <thead><tr><th>#</th><th>Key</th><th>Remaining</th><th>Used</th></tr></thead>
+        <tbody id="ktbody"></tbody>
+      </table>
     </div>
   </div>
 
 </div>
 
 <script>
-const ARBS={arbs_j}; const EVS={evs_j};
+const ARBS={arbs_j}; const EVS={evs_j}; const BC={bc_j}; const KEYS={keys_j};
 let BANK=parseFloat(localStorage.getItem('arb_bank'))||{DEFAULT_BANK};
 
-// -- SYSTEM AUTHENTICATION & BILLING --
-const YOUR_UPI_ID = "{YOUR_UPI_ID}";
-const YOUR_NAME = "{YOUR_NAME}";
+// ── ZERO-TRUST AUTHENTICATION ──
 const FIREBASE_URL = "{FIREBASE_URL}";
 const SUB_PRICE = {SUB_PRICE};
-
-let currentUser = "";
-let autoCheckInterval;
+let currentUser = localStorage.getItem('arb_session') || "";
+let pollInterval;
 let safeAmountKey = "";
 
-// Cryptographic Hashing
-function hashSec(str) {{
-    return CryptoJS.SHA256(str).toString(CryptoJS.enc.Hex);
+if(currentUser) verifySubscription(false);
+
+async function authenticateUser() {{
+    const input = document.getElementById('userIdInput').value.trim().toLowerCase();
+    if(!input) return;
+    currentUser = input;
+    localStorage.setItem('arb_session', currentUser);
+    verifySubscription(true);
 }}
 
-function showError(box, msg) {{
-    const e = document.getElementById('lerr-' + box);
-    e.innerText = "FAILED: " + msg;
-    e.style.display = 'block';
-}}
-
-function toggleAuthMode(mode) {{
-    document.getElementById('login-box').style.display = mode === 'login' ? 'flex' : 'none';
-    document.getElementById('register-box').style.display = mode === 'register' ? 'flex' : 'none';
-    document.getElementById('pay-box').style.display = 'none';
-    document.getElementById('lerr-login').style.display = 'none';
-    document.getElementById('lerr-reg').style.display = 'none';
-}}
-
-async function registerUser() {{
-    const u = document.getElementById('rUser').value.trim().toLowerCase();
-    const p = document.getElementById('rPass').value.trim();
-    if(!u || !p) return showError('reg', "Credentials required.");
-    
-    document.getElementById('btnReg').innerText = "PROCESSING...";
+async function verifySubscription(showLoading) {{
+    const errDiv = document.getElementById('lerr');
+    if(showLoading) document.getElementById('lbtn').innerHTML = '<i class="fas fa-spinner fa-spin"></i> VERIFYING...';
     
     try {{
-        const res = await fetch(`${{FIREBASE_URL}}/users/${{u}}.json`);
+        const res = await fetch(`${{FIREBASE_URL}}/users/${{currentUser}}.json`, {{ cache: "no-store" }});
         const data = await res.json();
-        
-        if (data && data.pass_hash) {{
-            showError('reg', "Username already registered.");
-            document.getElementById('btnReg').innerText = "PROVISION ACCOUNT";
-            return;
-        }}
-        
-        // Save encrypted hash and default expiry (0)
-        await fetch(`${{FIREBASE_URL}}/users/${{u}}.json`, {{
-            method: 'PUT',
-            body: JSON.stringify({{ pass_hash: hashSec(p), sub_expiry: 0 }})
-        }});
-        
-        currentUser = u;
-        triggerPaymentGateway();
-        
-    }} catch (err) {{
-        showError('reg', "Network connection error.");
-    }}
-}}
+        const now = new Date().getTime();
 
-async function loginUser() {{
-    const u = document.getElementById('lUser').value.trim().toLowerCase();
-    const p = document.getElementById('lPass').value.trim();
-    if(!u || !p) return showError('login', "Credentials required.");
-    
-    document.getElementById('btnLogin').innerText = "AUTHENTICATING...";
-    
-    try {{
-        const res = await fetch(`${{FIREBASE_URL}}/users/${{u}}.json`);
-        const data = await res.json();
-        
-        if (!data || !data.pass_hash) {{
-            showError('login', "Account not found.");
-            document.getElementById('btnLogin').innerText = "AUTHENTICATE";
-            return;
+        if (data && data.sub_expiry && data.sub_expiry > now) {{
+            document.getElementById('lock').style.display = 'none';
+            document.getElementById('app').style.display = 'block';
+            initApp(); 
+        }} else {{
+            triggerPaymentGateway();
         }}
-        
-        if (data.pass_hash !== hashSec(p)) {{
-            showError('login', "Invalid security credential.");
-            document.getElementById('btnLogin').innerText = "AUTHENTICATE";
-            return;
-        }}
-        
-        currentUser = u;
-        localStorage.setItem('arb_session', currentUser);
-        verifySubscription(data.sub_expiry);
-        
-    }} catch (err) {{
-        showError('login', "Network connection error.");
-    }}
-}}
-
-function verifySubscription(expiryTimestamp) {{
-    const now = new Date().getTime();
-    if (expiryTimestamp && expiryTimestamp > now) {{
-        populateAnalytics(expiryTimestamp);
-        document.getElementById('lock').style.display = 'none';
-        document.getElementById('app').style.display = 'block';
-        init(); 
-    }} else {{
-        triggerPaymentGateway();
+    }} catch (e) {{
+        errDiv.innerText = "Network Error."; errDiv.style.display = 'block';
+        document.getElementById('lbtn').innerHTML = 'CONNECT SECURE NODE';
     }}
 }}
 
 function triggerPaymentGateway() {{
     document.getElementById('login-box').style.display = 'none';
-    document.getElementById('register-box').style.display = 'none';
     document.getElementById('pay-box').style.display = 'flex';
 
     const randomCents = Math.floor(Math.random() * 99) + 1; 
     const feeAmount = randomCents / 100; 
     const finalAmount = SUB_PRICE + feeAmount; 
-    
     const targetAmountStr = finalAmount.toFixed(2); 
+    
     safeAmountKey = targetAmountStr.replace(".", "_"); 
 
     document.getElementById("subFee").innerText = feeAmount.toFixed(2);
     document.getElementById("subTotal").innerText = targetAmountStr;
 
-    const upiLink = `upi://pay?pa=${{YOUR_UPI_ID}}&pn=${{encodeURIComponent(YOUR_NAME)}}&am=${{targetAmountStr}}&cu=INR`;
+    const upiLink = `upi://pay?pa=${{'{YOUR_UPI_ID}'}}&pn=${{encodeURIComponent('{YOUR_NAME}')}}&am=${{targetAmountStr}}&cu=INR`;
     document.getElementById("subQrCode").src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${{encodeURIComponent(upiLink)}}`;
     document.getElementById("subDeepLink").href = upiLink;
 
-    autoCheckInterval = setInterval(checkSubPayment, 3000);
+    pollInterval = setInterval(async () => {{
+        try {{
+            const res = await fetch(`${{FIREBASE_URL}}/users/${{currentUser}}.json`, {{ cache: "no-store" }});
+            const data = await res.json();
+            if (data && data.sub_expiry && data.sub_expiry > new Date().getTime()) {{
+                clearInterval(pollInterval);
+                document.getElementById('lock').style.display = 'none';
+                document.getElementById('app').style.display = 'block';
+                initApp();
+            }}
+        }} catch(e){{}}
+    }}, 3000);
 }}
 
-function cancelPayment() {{
-    clearInterval(autoCheckInterval);
-    toggleAuthMode('login');
+function logout() {{ localStorage.removeItem('arb_session'); location.reload(); }}
+function swTab(id,btn){{ document.querySelectorAll('.tc').forEach(t=>t.classList.remove('act')); document.querySelectorAll('.tab').forEach(t=>t.classList.remove('act')); document.getElementById('tc-'+id).classList.add('act'); btn.classList.add('act'); }}
+function onBank(){{ BANK=parseFloat(document.getElementById('bankroll').value)||10000; localStorage.setItem('arb_bank',String(BANK)); initApp(); }}
+
+function initApp(){{
+    document.getElementById('c-arb').textContent=ARBS.length;
+    document.getElementById('c-ev').textContent=EVS.length;
+    renderArbs(); renderEVs(); renderBC(); renderAnalytics(); renderAPI();
 }}
 
-async function checkSubPayment() {{
-    try {{
-        const response = await fetch(`${{FIREBASE_URL}}/payments/${{safeAmountKey}}.json`, {{ cache: "no-store" }});
-        const data = await response.json();
-
-        if (data && data.status === "CONFIRMED") {{
-            clearInterval(autoCheckInterval);
-
-            await fetch(`${{FIREBASE_URL}}/payments/${{safeAmountKey}}.json`, {{ method: 'PATCH', body: JSON.stringify({{ status: "USED" }}) }});
-            if (data.utr) await fetch(`${{FIREBASE_URL}}/utr_records/${{data.utr}}.json`, {{ method: 'PATCH', body: JSON.stringify({{ status: "USED" }}) }});
-
-            const newExpiry = new Date().getTime() + (30 * 24 * 60 * 60 * 1000); 
-            await fetch(`${{FIREBASE_URL}}/users/${{currentUser}}.json`, {{
-                method: 'PATCH',
-                body: JSON.stringify({{ sub_expiry: newExpiry }})
-            }});
-
-            alert("SUCCESS: License provisioned for 30 days.");
-            populateAnalytics(newExpiry);
-            document.getElementById('lock').style.display = 'none';
-            document.getElementById('app').style.display = 'block';
-            init();
-        }}
-    }} catch (error) {{ }}
+function renderArbs(){{
+    const g=document.getElementById('g-arb');
+    if(!ARBS.length) {{ g.innerHTML='<div style="color:var(--txt3);padding:20px;">No Arbs Found</div>'; return; }}
+    g.innerHTML = ARBS.map(a=>{{
+        const profit = ((a.profit_pct/100)*BANK).toFixed(2);
+        const rows = a.outcomes.map(o=>`<tr><td>${{o.book_key.toUpperCase().slice(0,4)}} ${{(o.name).slice(0,10)}}</td><td style="color:var(--yellow);font-weight:bold;">${{o.odds}}</td><td style="text-align:right">₹${{Math.round((o.stake/1000)*BANK)}}</td></tr>`).join('');
+        return `<div class="card"><div class="ch"><span class="cbdg">${{a.ways}}-WAY ARB</span><span class="cpft">+${{a.profit_pct}}%</span></div><div class="cmatch">${{a.match}}</div><div style="font-size:10px;color:var(--txt3);margin-bottom:10px;">${{a.sport}}</div><table class="ctbl">${{rows}}</table><div style="font-size:11px;color:var(--txt2);margin-top:10px;text-align:right;">Est. Profit: <span style="color:var(--green)">₹${{profit}}</span></div></div>`;
+    }}).join('');
 }}
 
-function populateAnalytics(expiryTs) {{
-    document.getElementById('an-user').innerText = "User: " + currentUser;
-    const daysLeft = Math.ceil((expiryTs - new Date().getTime()) / (1000 * 60 * 60 * 24));
-    document.getElementById('an-days').innerText = daysLeft;
-    document.getElementById('an-expiry').innerText = "Expires: " + new Date(expiryTs).toLocaleDateString();
+function renderEVs(){{
+    const g=document.getElementById('g-ev');
+    if(!EVS.length) {{ g.innerHTML='<div style="color:var(--txt3);padding:20px;">No EVs Found</div>'; return; }}
+    g.innerHTML = EVS.map(e=>{{
+        const kStake = Math.round(e.kelly_stake/10000*BANK);
+        return `<div class="card" style="border-top:3px solid var(--purple)"><div class="ch"><span class="cbdg" style="color:var(--purple);background:rgba(167,139,250,0.1)">+EV BET</span><span class="cpft" style="color:var(--purple)">+${{e.edge_pct}}%</span></div><div class="cmatch">${{e.match}}</div><div style="font-size:10px;color:var(--txt3);margin-bottom:10px;">${{e.sport}}</div><table class="ctbl"><tr><td>Book</td><td>${{e.book_key.toUpperCase()}}</td></tr><tr><td>Outcome</td><td>${{e.outcome}}</td></tr><tr><td>Odds</td><td style="color:var(--yellow)">${{e.offered_odds}}</td></tr><tr><td>True</td><td>${{e.true_odds}}</td></tr></table><div style="font-size:11px;color:var(--txt2);margin-top:10px;text-align:right;">Kelly Stake: <span style="color:var(--cyan)">₹${{kStake}}</span></div></div>`;
+    }}).join('');
 }}
 
-function logout() {{
-    localStorage.removeItem('arb_session');
-    location.reload();
+function renderBC(){{
+    const g=document.getElementById('g-bc');
+    if(!BC.length) {{ g.innerHTML='<div style="color:var(--txt3);padding:20px;">No BC Data</div>'; return; }}
+    g.innerHTML = BC.slice(0,50).map(b=>`<div class="card"><div class="ch"><span class="cbdg" style="color:var(--yellow);background:rgba(251,191,36,0.1)">BC.GAME</span></div><div class="cmatch">${{b.home_team}} vs ${{b.away_team}}</div><div style="font-size:10px;color:var(--txt3);margin-bottom:10px;">${{b.sport_title}}</div><table class="ctbl">${{b.bookmakers[0].markets[0].outcomes.map(o=>`<tr><td>${{o.name}}</td><td style="color:var(--yellow);text-align:right;">${{o.price}}</td></tr>`).join('')}}</table></div>`).join('');
 }}
 
-// APP INIT & RENDER
-const bs=k=>k.toUpperCase().slice(0,4);
-const scaleStk=(rawStk,b)=>Math.round((rawStk/1000)*b/10)*10;
-function swTab(id,b){{document.querySelectorAll('.tc').forEach(t=>t.classList.remove('act'));document.querySelectorAll('.tab').forEach(t=>t.classList.remove('act'));document.getElementById('tc-'+id).classList.add('act');if(b)b.classList.add('act');}}
-function onBank(){{ BANK=parseFloat(document.getElementById('bankroll').value)||10000; localStorage.setItem('arb_bank',String(BANK)); rArb(ARBS); }}
-
-function init(){{
-  document.getElementById('c-arb').textContent=ARBS.length;
-  document.getElementById('c-ev').textContent=EVS.length;
-  rArb(ARBS); rEV(EVS);
+function renderAPI(){{
+    document.getElementById('ktbody').innerHTML=KEYS.map((k,i)=>`<tr><td>${{i+1}}</td><td style="color:var(--cyan);font-family:monospace">${{k.key}}</td><td style="color:${{k.remaining>100?'var(--green)':'var(--red)'}}">${{k.remaining}}</td><td>${{k.used}}</td><td>${{k.active ? '🟢' : '⚫'}}</td></tr>`).join('');
 }}
 
-function rArb(data){{
-  const g=document.getElementById('g-arb');
-  if(!data.length) return g.innerHTML='<div style="color:var(--txt3);padding:20px;">No records found.</div>';
-  g.innerHTML=data.map(a=>{{
-    const rows=a.outcomes.map(o=>`<tr><td><span class="btag">${{bs(o.book_key)}}</span> ${{o.name}}</td><td><span class="oval">${{o.odds}}</span></td><td><span class="stkm">₹${{scaleStk(o.stake,BANK)}}</span></td></tr>`).join('');
-    return `<div class="card"><div class="cbar"></div><div class="cinn"><div class="ch"><span class="cbdg">${{a.ways}}-WAY</span><span class="cpft">+${{a.profit_pct}}%</span></div><div class="cmatch">${{a.match}}</div><table class="ctbl"><thead><tr><th>Outcome</th><th>Odds</th><th>Stake</th></tr></thead><tbody>${{rows}}</tbody></table></div></div>`;
-  }}).join('');
-}}
+// ── HIGH-END ANALYTICS ENGINE ──
+function renderAnalytics(){{
+    let totP = 0;
+    ARBS.forEach(a => totP += ((a.profit_pct/100) * 10000)); 
+    document.getElementById('ana-tot-profit').innerText = `₹${{totP.toFixed(0)}}`;
 
-function rEV(data){{
-  const g=document.getElementById('g-ev');
-  if(!data.length) return g.innerHTML='<div style="color:var(--txt3);padding:20px;">No records found.</div>';
-  g.innerHTML=data.map(v=>`<div class="card"><div class="cbar ev"></div><div class="cinn"><div class="ch"><span class="cbdg ev">+EV</span><span class="cpft ev" style="color:var(--purple)">+${{v.edge_pct}}%</span></div><div class="cmatch">${{v.match}}</div><table class="ctbl"><tr><td>Outcome</td><td>${{v.outcome}}</td></tr><tr><td>Book</td><td>${{v.book}}</td></tr><tr><td>Edge</td><td>${{v.edge_pct}}%</td></tr></table></div></div>`).join('');
+    let avgE = 0;
+    if(EVS.length) {{
+        let s = 0; EVS.forEach(e => s += e.edge_pct);
+        avgE = s/EVS.length;
+    }}
+    document.getElementById('ana-avg-edge').innerText = `+${{avgE.toFixed(2)}}%`;
+
+    let bCounts = {{}};
+    EVS.forEach(e => bCounts[e.book_key] = (bCounts[e.book_key]||0)+1);
+    let bArr = Object.entries(bCounts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    let maxB = bArr.length ? bArr[0][1] : 1;
+    document.getElementById('ana-books').innerHTML = bArr.map(b=>`
+        <div class="bar-row">
+            <div class="bar-lbl">${{b[0].toUpperCase()}}</div>
+            <div class="bar-wrap"><div class="bar-fill" style="width:${{(b[1]/maxB)*100}}%"></div></div>
+            <div class="bar-val">${{b[1]}}</div>
+        </div>
+    `).join('');
+
+    let sCounts = {{}};
+    [...ARBS, ...EVS].forEach(x => sCounts[x.sport] = (sCounts[x.sport]||0)+1);
+    let sArr = Object.entries(sCounts).sort((a,b)=>b[1]-a[1]);
+    if(sArr.length) document.getElementById('ana-top-sport').innerText = sArr[0][0].replace(/_/g,' ').substring(0,15);
+    
+    let maxS = sArr.length ? sArr[0][1] : 1;
+    document.getElementById('ana-sports').innerHTML = sArr.slice(0,5).map(s=>`
+        <div class="bar-row">
+            <div class="bar-lbl">${{s[0].replace('soccer_','').replace('basketball_','')}}</div>
+            <div class="bar-wrap"><div class="bar-fill" style="background:var(--purple);width:${{(s[1]/maxS)*100}}%"></div></div>
+            <div class="bar-val">${{s[1]}}</div>
+        </div>
+    `).join('');
 }}
 </script>
-</body></html>"""
+</body>
+</html>"""
+    return html
 
+# ═════════════════════════════════════════════════════════════════════════════
+# MAIN ORCHESTRATOR
+# ═════════════════════════════════════════════════════════════════════════════
 def main():
-    log.info("ARB SNIPER v8.0 INIT")
+    log.info("╔══════════════════════════════════════════════════╗")
+    log.info("║         ARB SNIPER v9.0 — ZERO-TRUST NODE        ║")
+    log.info("╚══════════════════════════════════════════════════╝")
+
     state = load_state()
+    ROTATOR.load_memory(state.get("key_quotas", {}))
+
     sports_list = fetch_all_sports()
     odds_events = fetch_all_odds(state, sports_list)
-    arbs = scan_arbitrage(odds_events)
-    evs  = scan_ev_bets(odds_events)
 
-    state["last_arb_count"] = len(arbs)
+    bc_events   = fetch_bcgame_events()
+    raw_bc_copy = list(bc_events)
+    all_events  = merge_bcgame(odds_events, bc_events)
+
+    state["key_quotas"] = ROTATOR.dump_quotas()
     save_state(state)
 
-    html = generate_html(arbs, evs, state, ROTATOR.status(), len(sports_list))
+    arbs = scan_arbitrage(all_events)
+    evs  = scan_ev_bets(all_events)
+
+    send_push(arbs, evs)
+
+    key_status = ROTATOR.status()
+    html = generate_html(arbs, evs, raw_bc_copy, state, key_status, len(sports_list))
+    
     with open(OUTPUT_HTML, "w", encoding="utf-8") as f:
         f.write(html)
-    log.info(f"Secure Node Generated: {OUTPUT_HTML}")
+        
+    log.info(f"Dashboard generated: {OUTPUT_HTML} ({len(html) // 1024} KB)")
 
 if __name__ == "__main__":
     main()
