@@ -56,5 +56,6 @@
   "stats": {},
   "arbs_found": 0,
   "evs_found": 0,
-  "last_error": null
+  "last_error": null,
+  "quota_exhausted": true
 }

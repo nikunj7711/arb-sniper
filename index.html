@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
-<title>Arb Sniper v10.0 ⚡ Master</title>
+<title>Arb Sniper v11.0 ⚡ Master</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
 <style>
@@ -83,7 +83,7 @@ input[type=range]{accent-color:var(--cyan);width:80px;cursor:pointer}
 
 <div id="lock">
   <div class="lbox" id="login-box">
-    <div class="lock-title">SNIPER V10.0</div>
+    <div class="lock-title">SNIPER V11.0</div>
     <div class="lock-sub">Zero-Trust Node Connection</div>
     <input id="userIdInput" type="text" placeholder="Enter License ID" autocomplete="off"/>
     <button id="lbtn" onclick="authenticateUser()">CONNECT SECURE NODE</button>
@@ -105,9 +105,9 @@ input[type=range]{accent-color:var(--cyan);width:80px;cursor:pointer}
 
 <div id="app">
   <div class="topbar">
-    <div class="logo"><i class="fas fa-crosshairs"></i> V10.0 MASTER</div>
+    <div class="logo"><i class="fas fa-crosshairs"></i> V11.0 MASTER</div>
     <div style="display:flex;gap:10px;align-items:center;font-size:11px;color:var(--txt3);">
-      <span><i class="fas fa-clock"></i> 18 Mar 2026, 10:24:11 AM IST</span>
+      <span><i class="fas fa-clock"></i> 18 Mar 2026, 10:30:31 AM IST</span>
       <button onclick="logout()" style="background:none;border:none;color:var(--red);cursor:pointer;"><i class="fas fa-right-from-bracket"></i></button>
     </div>
   </div>
@@ -149,7 +149,7 @@ input[type=range]{accent-color:var(--cyan);width:80px;cursor:pointer}
 
   <div id="tc-ana" class="tc">
     <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:15px; margin-bottom:20px;">
-      <div class="stat-box"><div class="stat-lbl">Total Arb Profit Available</div><div class="stat-val" id="ana-tot-profit">₹0</div><div style="font-size:10px;color:var(--txt3)">Assuming ₹10k staked per arb</div></div>
+      <div class="stat-box"><div class="stat-lbl">Total Arb Profit Available</div><div class="stat-val" id="ana-tot-profit">₹0</div><div style="font-size:10px;color:var(--txt3)">Assuming current bankroll staked per arb</div></div>
       <div class="stat-box"><div class="stat-lbl">Market Avg EV Edge</div><div class="stat-val" id="ana-avg-edge" style="color:var(--purple)">0%</div></div>
       <div class="stat-box"><div class="stat-lbl">Most Profitable Sport</div><div class="stat-val" id="ana-top-sport" style="color:var(--cyan);font-size:22px;">—</div></div>
     </div>
@@ -204,7 +204,7 @@ input[type=range]{accent-color:var(--cyan);width:80px;cursor:pointer}
 </div>
 
 <script>
-const ARBS=[]; const EVS=[]; const BC=[]; const KEYS=[{"key": "ab0f...7def", "remaining": 0, "used": 0, "active": false}, {"key": "78f2...008f", "remaining": 0, "used": 0, "active": false}, {"key": "ab05...8017", "remaining": 0, "used": 0, "active": false}, {"key": "eafb...d167", "remaining": 0, "used": 0, "active": false}, {"key": "f274...5c7c", "remaining": 0, "used": 0, "active": false}, {"key": "681c...147d", "remaining": 0, "used": 0, "active": false}, {"key": "7418...c0f3", "remaining": 0, "used": 500, "active": false}, {"key": "5575...df4f", "remaining": 0, "used": 500, "active": false}, {"key": "1ff8...a4dd", "remaining": 0, "used": 500, "active": false}, {"key": "5ec7...32ca", "remaining": 0, "used": 500, "active": false}, {"key": "2c5c...fe83", "remaining": 0, "used": 500, "active": false}, {"key": "87e4...0f0d", "remaining": 0, "used": 500, "active": false}, {"key": "c252...c9fc", "remaining": 0, "used": 500, "active": false}, {"key": "fbff...90d1", "remaining": 0, "used": 500, "active": false}, {"key": "7963...0d13", "remaining": 0, "used": 500, "active": false}, {"key": "3cf7...8522", "remaining": 0, "used": 500, "active": false}, {"key": "5aa8...fa46", "remaining": 0, "used": 500, "active": false}, {"key": "0574...4365", "remaining": 0, "used": 500, "active": false}, {"key": "45af...15d0", "remaining": 0, "used": 500, "active": false}, {"key": "c5c5...e127", "remaining": 0, "used": 500, "active": false}, {"key": "4130...e50b", "remaining": 0, "used": 535, "active": false}, {"key": "dd73...db34", "remaining": 0, "used": 497, "active": false}, {"key": "5df6...6bdf", "remaining": 0, "used": 510, "active": false}, {"key": "0c68...e8a2", "remaining": 0, "used": 500, "active": false}, {"key": "2c49...f3b0", "remaining": 0, "used": 500, "active": false}, {"key": "0a51...fc96", "remaining": 0, "used": 498, "active": false}, {"key": "087f...f22e", "remaining": 0, "used": 497, "active": false}, {"key": "1727...81db", "remaining": 0, "used": 497, "active": false}, {"key": "baa5...474c", "remaining": 0, "used": 518, "active": false}, {"key": "a58d...75ce", "remaining": 0, "used": 498, "active": false}, {"key": "7513...a79e", "remaining": 0, "used": 504, "active": false}, {"key": "b148...95d4", "remaining": 0, "used": 510, "active": false}, {"key": "f633...fc2c", "remaining": 0, "used": 502, "active": false}, {"key": "4ed1...93cf", "remaining": 0, "used": 499, "active": false}, {"key": "d29c...ac67", "remaining": 0, "used": 500, "active": false}, {"key": "97f5...0b1d", "remaining": 0, "used": 497, "active": false}, {"key": "26f8...9f6e", "remaining": 0, "used": 499, "active": false}, {"key": "2596...e1c4", "remaining": 0, "used": 498, "active": false}];
+const ARBS=[]; const EVS=[]; const BC=[]; const KEYS=[{"key": "ab0f...7def", "remaining": 0, "used": 0, "active": false}, {"key": "78f2...008f", "remaining": 0, "used": 0, "active": false}, {"key": "ab05...8017", "remaining": 0, "used": 0, "active": false}, {"key": "eafb...d167", "remaining": 0, "used": 0, "active": false}, {"key": "f274...5c7c", "remaining": 0, "used": 0, "active": false}, {"key": "681c...147d", "remaining": 0, "used": 0, "active": false}, {"key": "7418...c0f3", "remaining": 0, "used": 0, "active": false}, {"key": "5575...df4f", "remaining": 0, "used": 0, "active": false}, {"key": "1ff8...a4dd", "remaining": 0, "used": 0, "active": false}, {"key": "5ec7...32ca", "remaining": 0, "used": 0, "active": false}, {"key": "2c5c...fe83", "remaining": 0, "used": 0, "active": false}, {"key": "87e4...0f0d", "remaining": 0, "used": 0, "active": false}, {"key": "c252...c9fc", "remaining": 0, "used": 0, "active": false}, {"key": "fbff...90d1", "remaining": 0, "used": 0, "active": false}, {"key": "7963...0d13", "remaining": 0, "used": 0, "active": false}, {"key": "3cf7...8522", "remaining": 0, "used": 0, "active": false}, {"key": "5aa8...fa46", "remaining": 0, "used": 0, "active": false}, {"key": "0574...4365", "remaining": 0, "used": 0, "active": false}, {"key": "45af...15d0", "remaining": 0, "used": 0, "active": false}, {"key": "c5c5...e127", "remaining": 0, "used": 0, "active": false}, {"key": "4130...e50b", "remaining": 0, "used": 0, "active": false}, {"key": "dd73...db34", "remaining": 0, "used": 0, "active": false}, {"key": "5df6...6bdf", "remaining": 0, "used": 0, "active": false}, {"key": "0c68...e8a2", "remaining": 0, "used": 0, "active": false}, {"key": "2c49...f3b0", "remaining": 0, "used": 0, "active": false}, {"key": "0a51...fc96", "remaining": 0, "used": 0, "active": false}, {"key": "087f...f22e", "remaining": 0, "used": 0, "active": false}, {"key": "1727...81db", "remaining": 0, "used": 0, "active": false}, {"key": "baa5...474c", "remaining": 0, "used": 0, "active": false}, {"key": "a58d...75ce", "remaining": 0, "used": 0, "active": false}, {"key": "7513...a79e", "remaining": 0, "used": 0, "active": false}, {"key": "b148...95d4", "remaining": 0, "used": 0, "active": false}, {"key": "f633...fc2c", "remaining": 0, "used": 0, "active": false}, {"key": "4ed1...93cf", "remaining": 0, "used": 0, "active": false}, {"key": "d29c...ac67", "remaining": 0, "used": 0, "active": false}, {"key": "97f5...0b1d", "remaining": 0, "used": 0, "active": false}, {"key": "26f8...9f6e", "remaining": 0, "used": 0, "active": false}, {"key": "2596...e1c4", "remaining": 0, "used": 0, "active": false}];
 let BANK=parseFloat(localStorage.getItem('arb_bank'))||10000;
 let fArbs = [...ARBS], fEvs = [...EVS];
 
@@ -287,7 +287,7 @@ function triggerPaymentGateway() {
 
 function logout() { localStorage.removeItem('arb_session'); location.reload(); }
 function swTab(id,btn){ document.querySelectorAll('.tc').forEach(t=>t.classList.remove('act')); document.querySelectorAll('.tab').forEach(t=>t.classList.remove('act')); document.getElementById('tc-'+id).classList.add('act'); btn.classList.add('act'); }
-function onBank(){ BANK=parseFloat(document.getElementById('bankroll').value)||10000; localStorage.setItem('arb_bank',String(BANK)); renderArbs(fArbs); renderEVs(fEvs); }
+function onBank(){ BANK=parseFloat(document.getElementById('bankroll').value)||10000; localStorage.setItem('arb_bank',String(BANK)); renderArbs(fArbs); renderEVs(fEvs); renderAnalytics(); }
 
 function initApp(){
     const aS=[...new Set(ARBS.map(a=>a.sport))].sort();
@@ -343,7 +343,7 @@ function renderAPI(){
 }
 
 function renderAnalytics(){
-    let totP = 0; ARBS.forEach(a => totP += ((a.profit_pct/100) * 10000)); 
+    let totP = 0; ARBS.forEach(a => totP += ((a.profit_pct/100) * BANK)); 
     document.getElementById('ana-tot-profit').innerText = `₹${totP.toFixed(0)}`;
 
     let avgE = 0;
