@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                   ARB SNIPER v10.0 — THE ULTIMATE MASTER BUILD               ║
-║  Zero-Trust Auth | Advanced Analytics | Calc | Smart Filters | Multi-Key Fix ║
+║                   ARB SNIPER v11.0 — SCRAPLING ENGINE EDITION                ║
+║  Zero-Trust Auth | Advanced Analytics | Scrapling Bypasser | Master Calc     ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
@@ -24,12 +24,12 @@ from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from difflib import SequenceMatcher
 
-# ── AUTO-INSTALL cloudscraper if missing ─────────────────────────────────────
-if importlib.util.find_spec("cloudscraper") is None:
-    print("Installing cloudscraper...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "cloudscraper", "-q"])
+# ── AUTO-INSTALL scrapling if missing ─────────────────────────────────────────
+if importlib.util.find_spec("scrapling") is None:
+    print("Installing Scrapling and its fetcher dependencies...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "scrapling[fetchers]", "-q"])
 
-import cloudscraper
+from scrapling.fetchers import FetcherSession
 
 # ─────────────────────────────────────────────────────────────────────────────
 # LOGGING
@@ -45,7 +45,6 @@ ODDS_BASE      = "https://api.the-odds-api.com/v4"
 NTFY_URL       = "https://ntfy.sh/nikunj_arb_alerts_2026"
 STATE_FILE     = "api_state.json"
 OUTPUT_HTML    = "index.html"
-SCRAPERAPI_KEY = os.environ.get("SCRAPERAPI_KEY", "").strip()
 
 # ── MONETIZATION & GATEWAY CONFIG ─────────────────────────────────────────────
 YOUR_UPI_ID  = "Furiousfighter06-1@okhdfcbank"
@@ -83,7 +82,7 @@ ALWAYS_INCLUDE_SPORTS = {
 }
 
 # ═════════════════════════════════════════════════════════════════════════════
-# KEY ROTATION MANAGER (WATERFALL FIX)
+# KEY ROTATION MANAGER (WATERFALL LOGIC)
 # ═════════════════════════════════════════════════════════════════════════════
 class KeyRotator:
     def __init__(self):
@@ -263,80 +262,69 @@ def fetch_all_odds(state: dict, sports_list: list) -> list:
     return all_events
 
 # ═════════════════════════════════════════════════════════════════════════════
-# BC.GAME SCRAPER (CLOUDSCRAPER + SCRAPERAPI FALLBACK)
+# BC.GAME SCRAPER (POWERED BY SCRAPLING 🕷️)
 # ═════════════════════════════════════════════════════════════════════════════
 def fetch_bcgame_events() -> list:
-    scraper = cloudscraper.create_scraper(
-        browser={"browser": "chrome", "platform": "windows", "mobile": False}
-    )
-    headers = {
-        'Accept': 'application/json, text/plain, */*',
-        'Origin': 'https://bc.game',
-        'Referer': 'https://bc.game/'
-    }
-    
-    def _fetch_data(url):
-        try:
-            r = scraper.get(url, headers=headers, timeout=20)
-            if r.status_code == 200: return r.json()
-        except: pass
-        
-        # Fallback to ScraperAPI if Cloudscraper fails (Cloudflare block)
-        if SCRAPERAPI_KEY:
-            try:
-                api_url = f"https://api.scraperapi.com/?api_key={SCRAPERAPI_KEY}&url={urllib.parse.quote(url, safe='')}&keep_headers=true"
-                r = requests.get(api_url, headers=headers, timeout=30)
-                if r.status_code == 200: return r.json()
-            except: pass
-        return None
-
-    manifest = _fetch_data(f"{BCGAME_BASE}/0")
-    if not manifest: return []
-        
-    top_ids  = manifest.get("top_events_versions",  [])
-    rest_ids = manifest.get("rest_events_versions", [])
-    all_ids  = top_ids + rest_ids
-    if not all_ids: return []
-
-    all_sports = {}; all_tourns = {}; all_events = {}
-    for chunk_id in all_ids[:5]: # Limit to 5 chunks for speed
-        chunk = _fetch_data(f"{BCGAME_BASE}/{chunk_id}")
-        if not chunk: continue
-        
-        all_sports.update(chunk.get("sports", {}))
-        all_tourns.update(chunk.get("tournaments", {}))
-        all_events.update(chunk.get("events", {}))
-
     converted = []
-    for ev_id, ev in all_events.items():
-        desc = ev.get("desc", {})
-        if desc.get("type", "match") not in ("match", "game", ""): continue
-        
-        comps = desc.get("competitors", [])
-        if len(comps) < 2: continue
-        home, away = comps[0].get("name",""), comps[1].get("name","")
-        
-        markets = ev.get("markets", {})
-        h2h = []
-        if "11" in markets:
-            for line_key, sels in markets["11"].items():
-                if line_key not in ("", "0"): continue
-                prices = [float(s.get("k",0)) for s in sels.values() if float(s.get("k",0)) > 1.01]
-                if len(prices) == 2: h2h = [{"name":"Home","price":prices[0]}, {"name":"Away","price":prices[1]}]
-                elif len(prices) == 3: h2h = [{"name":"Home","price":prices[0]}, {"name":"Draw","price":prices[1]}, {"name":"Away","price":prices[2]}]
-        
-        if not h2h: continue
-        
-        sport = all_sports.get(str(desc.get("sport", "")), {}).get("name", "Unknown")
-        ts = desc.get("scheduled", "")
-        try: start = datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
-        except: start = str(ts)
+    try:
+        # Use Scrapling's FetcherSession to impersonate Chrome's TLS fingerprint perfectly
+        with FetcherSession(impersonate='chrome') as session:
+            r = session.get(f"{BCGAME_BASE}/0", stealthy_headers=True)
+            try:
+                manifest = json.loads(r.text)
+            except Exception:
+                return [] # Cloudflare block or bad response
 
-        converted.append({
-            "id": f"bcgame_{ev_id}", "sport_title": sport, "home_team": home, "away_team": away,
-            "commence_time": start,
-            "bookmakers": [{"key": "bc_game", "title": "BC.Game", "markets": [{"key": "h2h", "outcomes": h2h}]}]
-        })
+            top_ids  = manifest.get("top_events_versions",  [])
+            rest_ids = manifest.get("rest_events_versions", [])
+            all_ids  = top_ids + rest_ids
+            if not all_ids: return []
+
+            all_sports = {}; all_tourns = {}; all_events = {}
+            for chunk_id in all_ids[:5]: # Limit to 5 chunks for speed
+                chunk_res = session.get(f"{BCGAME_BASE}/{chunk_id}", stealthy_headers=True)
+                try:
+                    chunk = json.loads(chunk_res.text)
+                except Exception:
+                    continue
+                
+                if not chunk: continue
+                all_sports.update(chunk.get("sports", {}))
+                all_tourns.update(chunk.get("tournaments", {}))
+                all_events.update(chunk.get("events", {}))
+
+            for ev_id, ev in all_events.items():
+                desc = ev.get("desc", {})
+                if desc.get("type", "match") not in ("match", "game", ""): continue
+                
+                comps = desc.get("competitors", [])
+                if len(comps) < 2: continue
+                home, away = comps[0].get("name",""), comps[1].get("name","")
+                
+                markets = ev.get("markets", {})
+                h2h = []
+                if "11" in markets:
+                    for line_key, sels in markets["11"].items():
+                        if line_key not in ("", "0"): continue
+                        prices = [float(s.get("k",0)) for s in sels.values() if float(s.get("k",0)) > 1.01]
+                        if len(prices) == 2: h2h = [{"name":"Home","price":prices[0]}, {"name":"Away","price":prices[1]}]
+                        elif len(prices) == 3: h2h = [{"name":"Home","price":prices[0]}, {"name":"Draw","price":prices[1]}, {"name":"Away","price":prices[2]}]
+                
+                if not h2h: continue
+                
+                sport = all_sports.get(str(desc.get("sport", "")), {}).get("name", "Unknown")
+                ts = desc.get("scheduled", "")
+                try: start = datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
+                except: start = str(ts)
+
+                converted.append({
+                    "id": f"bcgame_{ev_id}", "sport_title": sport, "home_team": home, "away_team": away,
+                    "commence_time": start,
+                    "bookmakers": [{"key": "bc_game", "title": "BC.Game", "markets": [{"key": "h2h", "outcomes": h2h}]}]
+                })
+        log.info(f"Scrapling engine bypassed Cloudflare! Fetched {len(converted)} BC.Game events.")
+    except Exception as e:
+        log.error(f"BC.Game fetch failed via Scrapling: {e}")
     return converted
 
 def similarity(a: str, b: str) -> float:
@@ -393,7 +381,6 @@ def scan_arbitrage(events: list) -> list:
                         if price > 1.01 and (name not in best or price > best[name][0]):
                             best[name] = (price, bm.get("title", "?"), bm.get("key", "?"))
             
-            # Group outcomes to handle overlapping spreads/totals
             outcomes_list = list(best.items())
             if len(outcomes_list) < 2: continue
             
@@ -405,17 +392,7 @@ def scan_arbitrage(events: list) -> list:
                     combos = list(itertools.combinations(outcomes_list, 3))
                 else:
                     combos = []
-            elif mkey == "totals":
-                # Pair up exact Over/Under matches
-                points = {}
-                for item in outcomes_list:
-                    parts = item[0].split("_")
-                    if len(parts) >= 2:
-                        pt = "_".join(parts[1:])
-                        points.setdefault(pt, []).append(item)
-                combos = [c for c in points.values() if len(c) == 2]
-            elif mkey == "spreads":
-                # Pair up Spread lines
+            elif mkey == "totals" or mkey == "spreads":
                 points = {}
                 for item in outcomes_list:
                     parts = item[0].split("_")
@@ -502,7 +479,7 @@ def send_push(arbs: list, evs: list):
     except: pass
 
 # ═════════════════════════════════════════════════════════════════════════════
-# HTML DASHBOARD GENERATOR — V10.0 (CALCULATOR + FILTERS RESTORED)
+# HTML DASHBOARD GENERATOR — V11.0
 # ═════════════════════════════════════════════════════════════════════════════
 def generate_html(arbs: list, evs: list, raw_bc: list, state: dict, key_status: list, sports_count: int) -> str:
     ist_now = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M:%S %p IST")
@@ -518,7 +495,7 @@ def generate_html(arbs: list, evs: list, raw_bc: list, state: dict, key_status: 
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
-<title>Arb Sniper v10.0 ⚡ Master</title>
+<title>Arb Sniper v11.0 ⚡ Master</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
 <style>
@@ -598,7 +575,7 @@ input[type=range]{{accent-color:var(--cyan);width:80px;cursor:pointer}}
 
 <div id="lock">
   <div class="lbox" id="login-box">
-    <div class="lock-title">SNIPER V10.0</div>
+    <div class="lock-title">SNIPER V11.0</div>
     <div class="lock-sub">Zero-Trust Node Connection</div>
     <input id="userIdInput" type="text" placeholder="Enter License ID" autocomplete="off"/>
     <button id="lbtn" onclick="authenticateUser()">CONNECT SECURE NODE</button>
@@ -620,7 +597,7 @@ input[type=range]{{accent-color:var(--cyan);width:80px;cursor:pointer}}
 
 <div id="app">
   <div class="topbar">
-    <div class="logo"><i class="fas fa-crosshairs"></i> V10.0 MASTER</div>
+    <div class="logo"><i class="fas fa-crosshairs"></i> V11.0 MASTER</div>
     <div style="display:flex;gap:10px;align-items:center;font-size:11px;color:var(--txt3);">
       <span><i class="fas fa-clock"></i> {ist_now}</span>
       <button onclick="logout()" style="background:none;border:none;color:var(--red);cursor:pointer;"><i class="fas fa-right-from-bracket"></i></button>
@@ -664,7 +641,7 @@ input[type=range]{{accent-color:var(--cyan);width:80px;cursor:pointer}}
 
   <div id="tc-ana" class="tc">
     <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:15px; margin-bottom:20px;">
-      <div class="stat-box"><div class="stat-lbl">Total Arb Profit Available</div><div class="stat-val" id="ana-tot-profit">₹0</div><div style="font-size:10px;color:var(--txt3)">Assuming ₹10k staked per arb</div></div>
+      <div class="stat-box"><div class="stat-lbl">Total Arb Profit Available</div><div class="stat-val" id="ana-tot-profit">₹0</div><div style="font-size:10px;color:var(--txt3)">Assuming current bankroll staked per arb</div></div>
       <div class="stat-box"><div class="stat-lbl">Market Avg EV Edge</div><div class="stat-val" id="ana-avg-edge" style="color:var(--purple)">0%</div></div>
       <div class="stat-box"><div class="stat-lbl">Most Profitable Sport</div><div class="stat-val" id="ana-top-sport" style="color:var(--cyan);font-size:22px;">—</div></div>
     </div>
@@ -802,7 +779,7 @@ function triggerPaymentGateway() {{
 
 function logout() {{ localStorage.removeItem('arb_session'); location.reload(); }}
 function swTab(id,btn){{ document.querySelectorAll('.tc').forEach(t=>t.classList.remove('act')); document.querySelectorAll('.tab').forEach(t=>t.classList.remove('act')); document.getElementById('tc-'+id).classList.add('act'); btn.classList.add('act'); }}
-function onBank(){{ BANK=parseFloat(document.getElementById('bankroll').value)||10000; localStorage.setItem('arb_bank',String(BANK)); renderArbs(fArbs); renderEVs(fEvs); }}
+function onBank(){{ BANK=parseFloat(document.getElementById('bankroll').value)||10000; localStorage.setItem('arb_bank',String(BANK)); renderArbs(fArbs); renderEVs(fEvs); renderAnalytics(); }}
 
 function initApp(){{
     const aS=[...new Set(ARBS.map(a=>a.sport))].sort();
@@ -858,7 +835,7 @@ function renderAPI(){{
 }}
 
 function renderAnalytics(){{
-    let totP = 0; ARBS.forEach(a => totP += ((a.profit_pct/100) * 10000)); 
+    let totP = 0; ARBS.forEach(a => totP += ((a.profit_pct/100) * BANK)); 
     document.getElementById('ana-tot-profit').innerText = `₹${{totP.toFixed(0)}}`;
 
     let avgE = 0;
@@ -904,7 +881,7 @@ function runCalc(w){{
 # ═════════════════════════════════════════════════════════════════════════════
 def main():
     log.info("╔══════════════════════════════════════════════════╗")
-    log.info("║         ARB SNIPER v10.0 — MASTER BUILD          ║")
+    log.info("║         ARB SNIPER v11.0 — SCRAPLING NODE        ║")
     log.info("╚══════════════════════════════════════════════════╝")
 
     state = load_state()
