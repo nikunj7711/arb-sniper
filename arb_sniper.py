@@ -143,26 +143,42 @@ ALWAYS_INCLUDE_SPORTS = {
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# KEY ROTATION MANAGER
-# Thread-safe: always picks the key with the most remaining quota.
-# With 19 keys you have up to 19 × 500 = 9,500 API calls available per day.
+# KEY ROTATION MANAGER — SEQUENTIAL MODE
+# Drains one key fully before touching the next.
+# With 38 keys × 500 credits = 19,000/month.
+# 3 calls/run × 48 runs/day × 30 days = 4,320/month → 4+ months per key set.
 # ═════════════════════════════════════════════════════════════════════════════
 class KeyRotator:
+    LOW_THRESHOLD = 5   # switch to next key when this few credits remain
+
     def __init__(self):
         raw = os.environ.get("ODDS_API_KEYS", "")
-        self.keys = [k.strip() for k in raw.split(",") if k.strip()]
+        self.keys   = [k.strip() for k in raw.split(",") if k.strip()]
         if not self.keys:
             log.warning("ODDS_API_KEYS env var not set!")
-        self._lock  = threading.Lock()
-        self._quota = {k: 500 for k in self.keys}
-        self._used  = {k: 0   for k in self.keys}
+        self._lock   = threading.Lock()
+        self._quota  = {k: 500 for k in self.keys}
+        self._used   = {k: 0   for k in self.keys}
+        self._active = 0   # index into self.keys — sequential drain
         log.info(f"KeyRotator: {len(self.keys)} keys | "
-                 f"{self.total_remaining()} total quota")
+                 f"{self.total_remaining()} total quota | sequential mode")
 
     def get(self) -> str:
+        """Return current active key, advancing only when it runs low."""
         with self._lock:
             if not self.keys:
                 return "MISSING_KEY"
+            for _ in range(len(self.keys)):
+                k = self.keys[self._active]
+                if self._quota.get(k, 0) > self.LOW_THRESHOLD:
+                    return k
+                # Current key is low — advance to next
+                nxt = (self._active + 1) % len(self.keys)
+                log.info(f"Key ...{k[-6:]} low "
+                         f"({self._quota.get(k,0)} left) → "
+                         f"switching to ...{self.keys[nxt][-6:]}")
+                self._active = nxt
+            # All keys low — return whichever has most remaining
             return max(self.keys, key=lambda k: self._quota.get(k, 0))
 
     def update(self, key: str, remaining: int, used: int = 0):
@@ -173,7 +189,9 @@ class KeyRotator:
     def mark_exhausted(self, key: str):
         with self._lock:
             self._quota[key] = 0
-            log.warning(f"Key ...{key[-6:]} marked exhausted.")
+            log.warning(f"Key ...{key[-6:]} exhausted.")
+            if self.keys and self.keys[self._active] == key:
+                self._active = (self._active + 1) % len(self.keys)
 
     def total_remaining(self) -> int:
         with self._lock:
