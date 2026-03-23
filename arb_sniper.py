@@ -165,13 +165,6 @@ class KeyRotator:
                 return "MISSING_KEY"
             return max(self.keys, key=lambda k: self._quota.get(k, 0))
 
-    # Add this new method:
-    def active_key_label(self) -> str:
-        k = self.get()
-        if k == "MISSING_KEY":
-            return "NONE"
-        return f"{k[:4]}...{k[-4:]}"
-
     def update(self, key: str, remaining: int, used: int = 0):
         with self._lock:
             self._quota[key] = max(0, remaining)
