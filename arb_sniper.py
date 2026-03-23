@@ -183,6 +183,17 @@ class KeyRotator:
         with self._lock:
             return sum(self._used.values())
 
+    def active_key_label(self) -> str:
+        with self._lock:
+            if not self.keys:
+                return "none"
+            k = self.keys[self._active]
+            return f"{k[:4]}...{k[-4:]}"
+
+    def keys_touched(self) -> int:
+        with self._lock:
+            return sum(1 for k in self.keys if self._used.get(k, 0) > 0)
+
     def status(self) -> list:
         with self._lock:
             return [
@@ -190,8 +201,9 @@ class KeyRotator:
                     "key":       f"{k[:4]}...{k[-4:]}",
                     "remaining": self._quota.get(k, 0),
                     "used":      self._used.get(k, 0),
+                    "active":    (i == self._active),
                 }
-                for k in self.keys
+                for i, k in enumerate(self.keys)
             ]
 
 
